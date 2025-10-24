@@ -316,6 +316,28 @@ GET /api/projects
 Response: ["default", "website-1", "website-2"]
 ```
 
+### Get Top Properties
+
+```bash
+GET /api/properties?start=2024-01-01&end=2024-01-31&limit=20
+
+Response:
+[
+  {
+    "key": "button_id",
+    "value": "signup",
+    "count": 1250,
+    "event_types": 3
+  },
+  {
+    "key": "plan",
+    "value": "premium",
+    "count": 890,
+    "event_types": 5
+  }
+]
+```
+
 ### Health Check
 
 ```bash

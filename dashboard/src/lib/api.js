@@ -81,6 +81,34 @@ export async function fetchProjects() {
 }
 
 /**
+ * Fetch top event properties
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {number} limit - Limit for top results (default 20)
+ * @param {Object} filters - Optional filters {source, country, browser, event, project}
+ * @returns {Promise<Array>} Top properties
+ */
+export async function fetchTopProperties(startDate, endDate, limit = 20, filters = {}) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start', startDate);
+    if (endDate) params.append('end', endDate);
+    if (limit) params.append('limit', limit.toString());
+
+    // Add filters
+    if (filters.source) params.append('source', filters.source);
+    if (filters.country) params.append('country', filters.country);
+    if (filters.browser) params.append('browser', filters.browser);
+    if (filters.event) params.append('event', filters.event);
+    if (filters.project) params.append('project', filters.project);
+
+    const response = await fetch(`${API_BASE_URL}/properties?${params}`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch top properties: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
  * Track a new event
  * @param {Object} event - Event data
  * @returns {Promise<Object>} Response

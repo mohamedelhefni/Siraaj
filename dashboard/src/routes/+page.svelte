@@ -1,7 +1,7 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { format, subDays, startOfMonth, startOfYear, subMonths } from 'date-fns';
-	import { fetchStats, fetchOnlineUsers, fetchProjects } from '$lib/api';
+	import { fetchStats, fetchOnlineUsers, fetchProjects, fetchTopProperties } from '$lib/api';
 	import { RefreshCw, X, TrendingUp, TrendingDown, Minus } from 'lucide-svelte';
 	import {
 		Card,
@@ -15,6 +15,7 @@
 	import StatsCard from '$lib/components/StatsCard.svelte';
 	import TimelineChart from '$lib/components/TimelineChart.svelte';
 	import TopItemsList from '$lib/components/TopItemsList.svelte';
+	import PropertiesPanel from '$lib/components/PropertiesPanel.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 
 	let stats = $state({
@@ -41,6 +42,7 @@
 	});
 
 	let projects = $state([]);
+	let topProperties = $state([]);
 
 	let loading = $state(true);
 	let error = $state(null);
@@ -71,7 +73,9 @@
 		browser: null,
 		event: null,
 		project: null,
-		metric: null // For filtering by clicked metric card
+		metric: null, // For filtering by clicked metric card
+		propertyKey: null,
+		propertyValue: null
 	});
 
 	// Default to last 7 days
@@ -148,12 +152,13 @@
 		if (activeFilters.browser) params.set('browser', activeFilters.browser);
 		if (activeFilters.event) params.set('event', activeFilters.event);
 		if (activeFilters.metric) params.set('metric', activeFilters.metric);
+		if (activeFilters.propertyKey) params.set('propKey', activeFilters.propertyKey);
+		if (activeFilters.propertyValue) params.set('propValue', activeFilters.propertyValue);
 		if (refreshIntervalTime !== 30000) params.set('interval', refreshIntervalTime.toString());
 
 		const newURL = `${window.location.pathname}?${params.toString()}`;
 		window.history.replaceState({}, '', newURL);
 	}
-
 	function loadFromURLParams() {
 		if (typeof window === 'undefined') return;
 
@@ -175,6 +180,8 @@
 		if (params.has('browser')) activeFilters.browser = params.get('browser');
 		if (params.has('event')) activeFilters.event = params.get('event');
 		if (params.has('metric')) activeFilters.metric = params.get('metric');
+		if (params.has('propKey')) activeFilters.propertyKey = params.get('propKey');
+		if (params.has('propValue')) activeFilters.propertyValue = params.get('propValue');
 		if (params.has('interval')) {
 			refreshIntervalTime = parseInt(params.get('interval'));
 		}
@@ -184,12 +191,14 @@
 		loading = true;
 		error = null;
 		try {
-			const [statsData, onlineUsersData] = await Promise.all([
+			const [statsData, onlineUsersData, propertiesData] = await Promise.all([
 				fetchStats(startDate, endDate, 50, activeFilters),
-				fetchOnlineUsers(5)
+				fetchOnlineUsers(5),
+				fetchTopProperties(startDate, endDate, 20, activeFilters)
 			]);
 			stats = statsData;
 			onlineData = onlineUsersData;
+			topProperties = propertiesData || [];
 			lastRefresh = new Date();
 			updateURLParams();
 		} catch (err) {
@@ -242,7 +251,9 @@
 			browser: null,
 			event: null,
 			project: null,
-			metric: null
+			metric: null,
+			propertyKey: null,
+			propertyValue: null
 		};
 		updateURLParams();
 		loadStats();
@@ -304,6 +315,14 @@
 	// Check if a metric is selected
 	function isMetricSelected(metricType) {
 		return activeFilters.metric === metricType;
+	}
+
+	// Handle property filter
+	function addPropertyFilter(prop) {
+		activeFilters.propertyKey = prop.key;
+		activeFilters.propertyValue = prop.value;
+		updateURLParams();
+		loadStats();
 	}
 </script>
 
@@ -450,6 +469,20 @@
 				<Badge variant="secondary" class="gap-1">
 					Metric: {activeFilters.metric}
 					<button onclick={() => removeFilter('metric')} class="hover:text-destructive ml-1">
+						<X class="h-3 w-3" />
+					</button>
+				</Badge>
+			{/if}
+			{#if activeFilters.propertyKey && activeFilters.propertyValue}
+				<Badge variant="secondary" class="gap-1">
+					Property: {activeFilters.propertyKey}={activeFilters.propertyValue}
+					<button
+						onclick={() => {
+							removeFilter('propertyKey');
+							removeFilter('propertyValue');
+						}}
+						class="hover:text-destructive ml-1"
+					>
 						<X class="h-3 w-3" />
 					</button>
 				</Badge>
@@ -722,5 +755,24 @@
 				</CardContent>
 			</Card>
 		</div>
+
+		<!-- Custom Properties Panel -->
+		<Card>
+			<CardHeader>
+				<CardTitle>Custom Event Properties</CardTitle>
+				<CardDescription>
+					Top property key-value pairs from tracked events
+					{#if topProperties.length > 0}
+						· {topProperties.length} unique properties
+					{/if}
+				</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<PropertiesPanel 
+					properties={topProperties}
+					onPropertyClick={addPropertyFilter}
+				/>
+			</CardContent>
+		</Card>
 	{/if}
 </div>

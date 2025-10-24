@@ -14,6 +14,7 @@ type EventRepository interface {
 	CreateBatch(events []domain.Event) error
 	GetEvents(startDate, endDate time.Time, limit, offset int) (map[string]interface{}, error)
 	GetStats(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error)
+	GetTopProperties(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error)
 	GetOnlineUsers(timeWindow int) (map[string]interface{}, error)
 	GetProjects() ([]string, error)
 }
@@ -539,6 +540,78 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	}
 
 	return stats, nil
+}
+
+func (r *eventRepository) GetTopProperties(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	// Build WHERE clause based on filters
+	whereClause := "timestamp BETWEEN ? AND ?"
+	args := []interface{}{startDate, endDate}
+
+	if projectID, ok := filters["project"]; ok && projectID != "" {
+		whereClause += " AND project_id = ?"
+		args = append(args, projectID)
+	}
+	if source, ok := filters["source"]; ok && source != "" {
+		whereClause += " AND referrer = ?"
+		args = append(args, source)
+	}
+	if country, ok := filters["country"]; ok && country != "" {
+		whereClause += " AND country = ?"
+		args = append(args, country)
+	}
+	if browser, ok := filters["browser"]; ok && browser != "" {
+		whereClause += " AND browser = ?"
+		args = append(args, browser)
+	}
+	if eventName, ok := filters["event"]; ok && eventName != "" {
+		whereClause += " AND event_name = ?"
+		args = append(args, eventName)
+	}
+
+	// Only get events that have valid JSON properties
+	whereClause += " AND properties IS NOT NULL AND TRY_CAST(properties AS JSON) IS NOT NULL AND json_valid(properties)"
+
+	// Query to get all property key-value pairs with their counts using json_each as lateral join
+	query := fmt.Sprintf(`
+		SELECT 
+			je.key as prop_key,
+			CAST(je.value AS VARCHAR) as prop_value,
+			COUNT(*) as count,
+			COUNT(DISTINCT e.event_name) as event_types
+		FROM events e, json_each(CAST(e.properties AS JSON)) je
+		WHERE %s
+		GROUP BY je.key, CAST(je.value AS VARCHAR)
+		ORDER BY count DESC
+		LIMIT ?
+	`, whereClause)
+
+	queryArgs := append(args, limit)
+	rows, err := r.db.Query(query, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	properties := []map[string]interface{}{}
+	for rows.Next() {
+		var key, value string
+		var count, eventTypes int
+		if err := rows.Scan(&key, &value, &count, &eventTypes); err != nil {
+			continue
+		}
+		properties = append(properties, map[string]interface{}{
+			"key":         key,
+			"value":       value,
+			"count":       count,
+			"event_types": eventTypes,
+		})
+	}
+
+	return properties, nil
 }
 
 func (r *eventRepository) GetOnlineUsers(timeWindow int) (map[string]interface{}, error) {

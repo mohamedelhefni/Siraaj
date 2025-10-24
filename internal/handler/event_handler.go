@@ -210,6 +210,64 @@ func (h *EventHandler) GetProjects(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(projects)
 }
 
+func (h *EventHandler) GetTopProperties(w http.ResponseWriter, r *http.Request) {
+	// Default to last 7 days
+	now := time.Now()
+	endDate := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999999999, now.Location())
+	startDate := endDate.AddDate(0, 0, -7)
+	startDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, startDate.Location())
+
+	// Parse date range from query params
+	if start := r.URL.Query().Get("start"); start != "" {
+		if t, err := time.Parse("2006-01-02", start); err == nil {
+			startDate = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+		}
+	}
+	if end := r.URL.Query().Get("end"); end != "" {
+		if t, err := time.Parse("2006-01-02", end); err == nil {
+			endDate = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
+		}
+	}
+
+	// Parse limit parameter
+	limit := 20
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil && l == 1 {
+			if limit > 100 {
+				limit = 100 // Cap at 100
+			}
+		}
+	}
+
+	// Parse filters
+	filters := make(map[string]string)
+	if project := r.URL.Query().Get("project"); project != "" {
+		filters["project"] = project
+	}
+	if source := r.URL.Query().Get("source"); source != "" {
+		filters["source"] = source
+	}
+	if country := r.URL.Query().Get("country"); country != "" {
+		filters["country"] = country
+	}
+	if browser := r.URL.Query().Get("browser"); browser != "" {
+		filters["browser"] = browser
+	}
+	if event := r.URL.Query().Get("event"); event != "" {
+		filters["event"] = event
+	}
+
+	properties, err := h.service.GetTopProperties(startDate, endDate, limit, filters)
+	if err != nil {
+		log.Printf("Error getting top properties: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(properties)
+}
+
 func (h *EventHandler) Health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{

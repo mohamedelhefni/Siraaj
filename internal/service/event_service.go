@@ -12,6 +12,7 @@ type EventService interface {
 	TrackEventBatch(events []domain.Event) error
 	GetEvents(startDate, endDate time.Time, limit, offset int) (map[string]interface{}, error)
 	GetStats(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error)
+	GetTopProperties(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error)
 	GetOnlineUsers(timeWindow int) (map[string]interface{}, error)
 	GetProjects() ([]string, error)
 }
@@ -47,6 +48,10 @@ func (s *eventService) GetEvents(startDate, endDate time.Time, limit, offset int
 
 func (s *eventService) GetStats(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error) {
 	return s.repo.GetStats(startDate, endDate, limit, filters)
+}
+
+func (s *eventService) GetTopProperties(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error) {
+	return s.repo.GetTopProperties(startDate, endDate, limit, filters)
 }
 
 func (s *eventService) GetOnlineUsers(timeWindow int) (map[string]interface{}, error) {
