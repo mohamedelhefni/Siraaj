@@ -1,0 +1,81 @@
+# Config file for [Air](https://github.com/air-verse/air) in TOML format
+# Working directory
+root = "."
+tmp_dir = "tmp"
+
+[build]
+# Pre-build commands - ensure dashboard is built
+pre_cmd = []
+# Build command for the Siraaj analytics server
+cmd = "go build -ldflags='-s -w' -o ./tmp/siraaj ."
+# Post-build cleanup
+post_cmd = []
+# Binary file yields from `cmd`
+bin = "tmp/siraaj"
+# Environment variables for development
+full_bin = "DB_PATH=./data/analytics.db PORT=8080 DEBUG=true ./tmp/siraaj"
+# Watch these filename extensions
+include_ext = ["go", "tpl", "tmpl", "html", "sql"]
+# Ignore these directories - exclude dashboard, data, and build artifacts
+exclude_dir = ["assets", "tmp", "vendor", "dashboard", "data", "ui", "geolocation"]
+# Watch these specific directories for Go code
+include_dir = ["internal", "sdk"]
+# Watch these files
+include_file = []
+# Exclude files
+exclude_file = ["*.db", "*.db-shm", "*.db-wal", "*.log"]
+# Exclude test files and generated files
+exclude_regex = ["_test\\.go", "\\.db$", "\\.db-.*$", "\\.log$"]
+# Exclude unchanged files
+exclude_unchanged = true
+# Follow symlink for directories
+follow_symlink = true
+# Log file location
+log = "air.log"
+# Use fsnotify for better performance
+poll = false
+# Poll interval
+poll_interval = 500 # ms
+# Build delay to avoid too frequent rebuilds
+delay = 1000 # ms
+# Stop running old binary when build errors occur
+stop_on_error = true
+# Send Interrupt signal before killing process
+send_interrupt = true
+# Delay after sending Interrupt signal
+kill_delay = 1000 # ms
+# Rerun binary after changes
+rerun = true
+# Delay after each execution
+rerun_delay = 500
+
+[log]
+# Show log time for better debugging
+time = true
+# Show all logs for development
+main_only = false
+# Don't silence logs in development
+silent = false
+
+[color]
+# Color scheme for different components
+main = "magenta"
+watcher = "cyan"
+build = "yellow"
+runner = "green"
+
+[misc]
+# Clean tmp directory on exit
+clean_on_exit = true
+
+[screen]
+# Clear screen on rebuild for cleaner output
+clear_on_rebuild = true
+# Keep scroll position
+keep_scroll = true
+
+[proxy]
+# Disable proxy since Siraaj serves both API and dashboard
+enabled = false
+proxy_port = 8090
+app_port = 8080

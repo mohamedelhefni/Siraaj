@@ -3,7 +3,7 @@
 	import * as d3 from 'd3';
 	import * as topojson from 'topojson-client';
 
-	let { data = [] } = $props();
+	let { data = [], onclick = null } = $props();
 	let svgElement = $state();
 	let mapContainer = $state();
 
@@ -35,14 +35,10 @@
 
 		// Create color scale based on data
 		const maxCount = d3.max(data, (d) => d.count) || 1;
-		const colorScale = d3
-			.scaleSequential(d3.interpolateBlues)
-			.domain([0, maxCount]);
+		const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, maxCount]);
 
 		// Create a map of country data for quick lookup
-		const countryDataMap = new Map(
-			data.map((d) => [d.country.toLowerCase(), d.count])
-		);
+		const countryDataMap = new Map(data.map((d) => [d.country.toLowerCase(), d.count]));
 
 		try {
 			// Load world map data
@@ -106,6 +102,14 @@
 						.attr('stroke', '#fff');
 
 					tooltip.transition().duration(200).style('opacity', 0);
+				})
+				.on('click', function (event, d) {
+					const countryName = d.properties.name;
+					const count = countryDataMap.get(countryName?.toLowerCase());
+
+					if (count && onclick) {
+						onclick({ name: countryName, count });
+					}
 				})
 				.transition()
 				.duration(800)

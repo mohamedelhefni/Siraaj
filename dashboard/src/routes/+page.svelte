@@ -16,7 +16,7 @@
 	import TimelineChart from '$lib/components/TimelineChart.svelte';
 	import TopItemsList from '$lib/components/TopItemsList.svelte';
 	import PropertiesPanel from '$lib/components/PropertiesPanel.svelte';
-	import GeographicalMap from '$lib/components/GeographicalMap.svelte';
+	import CountriesPanel from '$lib/components/CountriesPanel.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 
 	let stats = $state({
@@ -46,6 +46,9 @@
 	let topProperties = $state([]);
 
 	let loading = $state(true);
+	let statsLoading = $state(false);
+	let propertiesLoading = $state(false);
+	let onlineUsersLoading = $state(false);
 	let error = $state(null);
 	let autoRefresh = $state(true);
 	let refreshInterval = $state(null);
@@ -189,17 +192,57 @@
 	}
 
 	async function loadStats() {
-		loading = true;
+		if (loading) {
+			// First time loading - show full page loader
+			loading = true;
+		} else {
+			// Subsequent loads - show component-level loaders
+			statsLoading = true;
+			propertiesLoading = true;
+			onlineUsersLoading = true;
+		}
+
 		error = null;
+
 		try {
-			const [statsData, onlineUsersData, propertiesData] = await Promise.all([
-				fetchStats(startDate, endDate, 50, activeFilters),
-				fetchOnlineUsers(5),
-				fetchTopProperties(startDate, endDate, 20, activeFilters)
-			]);
-			stats = statsData;
-			onlineData = onlineUsersData;
-			topProperties = propertiesData || [];
+			// Load stats
+			const statsPromise = fetchStats(startDate, endDate, 50, activeFilters)
+				.then((data) => {
+					stats = data;
+					statsLoading = false;
+					return data;
+				})
+				.catch((err) => {
+					statsLoading = false;
+					throw err;
+				});
+
+			// Load online users
+			const onlinePromise = fetchOnlineUsers(5)
+				.then((data) => {
+					onlineData = data;
+					onlineUsersLoading = false;
+					return data;
+				})
+				.catch((err) => {
+					onlineUsersLoading = false;
+					throw err;
+				});
+
+			// Load properties
+			const propertiesPromise = fetchTopProperties(startDate, endDate, 20, activeFilters)
+				.then((data) => {
+					topProperties = data || [];
+					propertiesLoading = false;
+					return data;
+				})
+				.catch((err) => {
+					propertiesLoading = false;
+					throw err;
+				});
+
+			await Promise.all([statsPromise, onlinePromise, propertiesPromise]);
+
 			lastRefresh = new Date();
 			updateURLParams();
 		} catch (err) {
@@ -658,29 +701,22 @@
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
-				<TimelineChart
-					data={stats.timeline || []}
-					format={stats.timeline_format || 'day'}
-					metric={activeFilters.metric || 'events'}
-				/>
-			</CardContent>
-		</Card>
-
-		<!-- Geographical Data Map -->
-		<Card>
-			<CardHeader>
-				<CardTitle>Geographical Distribution</CardTitle>
-				<CardDescription>
-					Visitor distribution across countries
-					{#if stats.top_countries && stats.top_countries.length > 0}
-						· {stats.top_countries.length} countries
-					{/if}
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
-				<GeographicalMap
-					data={stats.top_countries?.map((c) => ({ country: c.name, count: c.count })) || []}
-				/>
+				{#if statsLoading}
+					<div class="text-muted-foreground flex h-[300px] items-center justify-center">
+						<div class="flex flex-col items-center gap-2">
+							<div
+								class="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
+							></div>
+							<p class="text-sm">Loading timeline...</p>
+						</div>
+					</div>
+				{:else}
+					<TimelineChart
+						data={stats.timeline || []}
+						format={stats.timeline_format || 'day'}
+						metric={activeFilters.metric || 'events'}
+					/>
+				{/if}
 			</CardContent>
 		</Card>
 
@@ -692,27 +728,42 @@
 					<CardDescription>Most tracked events</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<TopItemsList
-						items={stats.top_events || []}
-						labelKey="name"
-						valueKey="count"
-						showMoreTitle="All Events ({(stats.top_events || []).length} total)"
-						onclick={(item) => addFilter('event', item.name)}
-					/>
+					{#if statsLoading}
+						<div class="text-muted-foreground flex min-h-[150px] items-center justify-center">
+							<div class="flex flex-col items-center gap-2">
+								<div
+									class="border-primary h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
+								></div>
+								<p class="text-xs">Loading...</p>
+							</div>
+						</div>
+					{:else}
+						<TopItemsList
+							items={stats.top_events || []}
+							labelKey="name"
+							valueKey="count"
+							maxItems={5}
+							showMoreTitle="All Events ({(stats.top_events || []).length} total)"
+							onclick={(item) => addFilter('event', item.name)}
+						/>
+					{/if}
 				</CardContent>
 			</Card>
-
 			<Card>
 				<CardHeader>
-					<CardTitle>Top Pages</CardTitle>
-					<CardDescription>Most visited pages</CardDescription>
+					<CardTitle>Top Countries</CardTitle>
+					<CardDescription>
+						Geographic distribution
+						{#if stats.top_countries && stats.top_countries.length > 0}
+							· {stats.top_countries.length} countries
+						{/if}
+					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<TopItemsList
-						items={stats.top_pages || []}
-						labelKey="url"
-						valueKey="count"
-						showMoreTitle="All Pages ({(stats.top_pages || []).length} total)"
+					<CountriesPanel
+						countries={stats.top_countries || []}
+						onclick={(item) => addFilter('country', item.name)}
+						loading={statsLoading}
 					/>
 				</CardContent>
 			</Card>
@@ -726,33 +777,53 @@
 					<CardDescription>Browser distribution</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<TopItemsList
-						items={stats.browsers || []}
-						labelKey="name"
-						valueKey="count"
-						maxItems={5}
-						type="browser"
-						showMoreTitle="All Browsers ({(stats.browsers || []).length} total)"
-						onclick={(item) => addFilter('browser', item.name)}
-					/>
+					{#if statsLoading}
+						<div class="text-muted-foreground flex min-h-[150px] items-center justify-center">
+							<div class="flex flex-col items-center gap-2">
+								<div
+									class="border-primary h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
+								></div>
+								<p class="text-xs">Loading...</p>
+							</div>
+						</div>
+					{:else}
+						<TopItemsList
+							items={stats.browsers || []}
+							labelKey="name"
+							valueKey="count"
+							maxItems={5}
+							type="browser"
+							showMoreTitle="All Browsers ({(stats.browsers || []).length} total)"
+							onclick={(item) => addFilter('browser', item.name)}
+						/>
+					{/if}
 				</CardContent>
 			</Card>
 
 			<Card>
 				<CardHeader>
-					<CardTitle>Top Countries</CardTitle>
-					<CardDescription>Geographic distribution</CardDescription>
+					<CardTitle>Top Pages</CardTitle>
+					<CardDescription>Most visited pages</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<TopItemsList
-						items={stats.top_countries || []}
-						labelKey="name"
-						valueKey="count"
-						maxItems={5}
-						type="country"
-						showMoreTitle="All Countries ({(stats.top_countries || []).length} total)"
-						onclick={(item) => addFilter('country', item.name)}
-					/>
+					{#if statsLoading}
+						<div class="text-muted-foreground flex min-h-[150px] items-center justify-center">
+							<div class="flex flex-col items-center gap-2">
+								<div
+									class="border-primary h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
+								></div>
+								<p class="text-xs">Loading...</p>
+							</div>
+						</div>
+					{:else}
+						<TopItemsList
+							items={stats.top_pages || []}
+							labelKey="url"
+							maxItems={5}
+							valueKey="count"
+							showMoreTitle="All Pages ({(stats.top_pages || []).length} total)"
+						/>
+					{/if}
 				</CardContent>
 			</Card>
 
@@ -762,15 +833,26 @@
 					<CardDescription>Traffic sources</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<TopItemsList
-						items={stats.top_sources || []}
-						labelKey="name"
-						valueKey="count"
-						maxItems={5}
-						type="source"
-						showMoreTitle="All Sources ({(stats.top_sources || []).length} total)"
-						onclick={(item) => addFilter('source', item.name)}
-					/>
+					{#if statsLoading}
+						<div class="text-muted-foreground flex min-h-[150px] items-center justify-center">
+							<div class="flex flex-col items-center gap-2">
+								<div
+									class="border-primary h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
+								></div>
+								<p class="text-xs">Loading...</p>
+							</div>
+						</div>
+					{:else}
+						<TopItemsList
+							items={stats.top_sources || []}
+							labelKey="name"
+							valueKey="count"
+							maxItems={5}
+							type="source"
+							showMoreTitle="All Sources ({(stats.top_sources || []).length} total)"
+							onclick={(item) => addFilter('source', item.name)}
+						/>
+					{/if}
 				</CardContent>
 			</Card>
 		</div>
@@ -787,7 +869,18 @@
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
-				<PropertiesPanel properties={topProperties} onPropertyClick={addPropertyFilter} />
+				{#if propertiesLoading}
+					<div class="text-muted-foreground flex min-h-[200px] items-center justify-center">
+						<div class="flex flex-col items-center gap-2">
+							<div
+								class="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
+							></div>
+							<p class="text-sm">Loading properties...</p>
+						</div>
+					</div>
+				{:else}
+					<PropertiesPanel properties={topProperties} onPropertyClick={addPropertyFilter} />
+				{/if}
 			</CardContent>
 		</Card>
 	{/if}
