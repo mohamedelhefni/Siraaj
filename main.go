@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -90,7 +91,13 @@ func main() {
 	}
 
 	// Initialize database
-	db, err := initDatabase("analytics.db")
+	// Get db path from env
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "data/analytics.db"
+	}
+
+	db, err := initDatabase(dbPath)
 	if err != nil {
 		log.Fatal(err)
 	}

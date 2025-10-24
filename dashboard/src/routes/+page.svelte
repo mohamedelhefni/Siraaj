@@ -289,7 +289,7 @@
 		return 'text-gray-600';
 	}
 
-	// Handle metric card clicks for filtering
+	// Handle metric card clicks for filtering timeline
 	function handleMetricClick(metricType) {
 		if (activeFilters.metric === metricType) {
 			// Toggle off if already selected
@@ -298,7 +298,7 @@
 			activeFilters.metric = metricType;
 		}
 		updateURLParams();
-		// No need to reload stats, just update the chart focus
+		loadStats(); // Reload data with metric filter
 	}
 
 	// Check if a metric is selected
@@ -572,10 +572,9 @@
 			</Card>
 
 			<Card
-				class="cursor-pointer transition-all hover:shadow-md {isMetricSelected('bounce_rate')
+				class=" transition-all hover:shadow-md {isMetricSelected('bounce_rate')
 					? 'ring-primary ring-2'
 					: ''}"
-				onclick={() => handleMetricClick('bounce_rate')}
 			>
 				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
 					<CardTitle class="text-sm font-medium">Bounce Rate</CardTitle>
@@ -601,28 +600,35 @@
 		<Card>
 			<CardHeader>
 				<CardTitle>
-					Events Over Time
-					{#if activeFilters.metric}
-						<span class="text-primary text-base font-normal">
-							(Filtered by {activeFilters.metric.replace('_', ' ')})
-						</span>
+					{#if activeFilters.metric === 'users'}
+						Unique Visitors Over Time
+					{:else if activeFilters.metric === 'visits'}
+						Total Visits Over Time
+					{:else if activeFilters.metric === 'page_views'}
+						Page Views Over Time
+					{:else}
+						Events Over Time
 					{/if}
 				</CardTitle>
 				<CardDescription>
 					{#if stats.timeline_format === 'hour'}
-						Hourly event tracking
+						Hourly tracking
 					{:else if stats.timeline_format === 'month'}
-						Monthly event tracking
+						Monthly tracking
 					{:else}
-						Daily event tracking
+						Daily tracking
 					{/if}
 					{#if activeFilters.metric}
-						· Click the metric card again to remove filter
+						· Click the metric card again to show all events
 					{/if}
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
-				<TimelineChart data={stats.timeline || []} format={stats.timeline_format || 'day'} />
+				<TimelineChart
+					data={stats.timeline || []}
+					format={stats.timeline_format || 'day'}
+					metric={activeFilters.metric || 'events'}
+				/>
 			</CardContent>
 		</Card>
 
@@ -650,9 +656,9 @@
 					<CardDescription>Most visited pages</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<TopItemsList 
-						items={stats.top_pages || []} 
-						labelKey="url" 
+					<TopItemsList
+						items={stats.top_pages || []}
+						labelKey="url"
 						valueKey="count"
 						showMoreTitle="All Pages ({(stats.top_pages || []).length} total)"
 					/>

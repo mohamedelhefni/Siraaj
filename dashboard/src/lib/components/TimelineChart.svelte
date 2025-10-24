@@ -2,11 +2,19 @@
 	import { onMount } from 'svelte';
 	import { Chart, registerables } from 'chart.js';
 
-	let { data = [], format = 'day' } = $props();
+	let { data = [], format = 'day', metric = 'events' } = $props();
 	let canvas = $state();
 	let chart = $state();
 
 	Chart.register(...registerables);
+
+	// Get label based on metric type
+	const metricLabels = {
+		events: 'Events',
+		users: 'Unique Visitors',
+		visits: 'Total Visits',
+		page_views: 'Page Views'
+	};
 
 	// Format date labels based on granularity
 	function formatLabel(dateStr) {
@@ -42,7 +50,7 @@
 					labels: data.map((d) => formatLabel(d.date)),
 					datasets: [
 						{
-							label: 'Events',
+							label: metricLabels[metric] || 'Events',
 							data: data.map((d) => d.count),
 							borderColor: 'rgb(99, 102, 241)',
 							backgroundColor: 'rgba(99, 102, 241, 0.1)',
@@ -54,6 +62,17 @@
 				options: {
 					responsive: true,
 					maintainAspectRatio: false,
+					animation: {
+						duration: 750,
+						easing: 'easeInOutQuart'
+					},
+					transitions: {
+						active: {
+							animation: {
+								duration: 400
+							}
+						}
+					},
 					plugins: {
 						legend: {
 							display: false
@@ -121,7 +140,8 @@
 		if (chart && data) {
 			chart.data.labels = data.map((d) => formatLabel(d.date));
 			chart.data.datasets[0].data = data.map((d) => d.count);
-			chart.update();
+			chart.data.datasets[0].label = metricLabels[metric] || 'Events';
+			chart.update('active');
 		}
 	});
 </script>

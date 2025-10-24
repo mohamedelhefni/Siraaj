@@ -119,6 +119,9 @@ func (h *EventHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	if event := r.URL.Query().Get("event"); event != "" {
 		filters["event"] = event
 	}
+	if metric := r.URL.Query().Get("metric"); metric != "" {
+		filters["metric"] = metric
+	}
 
 	stats, err := h.service.GetStats(startDate, endDate, limit, filters)
 	if err != nil {

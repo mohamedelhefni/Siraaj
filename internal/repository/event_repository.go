@@ -276,42 +276,56 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	var timelineQuery string
 	var timeFormat string
 
+	// Determine what metric to display in timeline
+	metric, _ := filters["metric"]
+	var selectClause string
+	switch metric {
+	case "users":
+		selectClause = "COUNT(DISTINCT user_id) as count"
+	case "visits":
+		selectClause = "COUNT(DISTINCT session_id) as count"
+	case "page_views":
+		selectClause = "COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as count"
+	default: // "events" or empty
+		selectClause = "COUNT(*) as count"
+	}
+
 	// Determine granularity based on date range
 	if timelineDuration <= 24*time.Hour {
 		// For today or single day: show hourly data
 		timelineQuery = fmt.Sprintf(`
 			SELECT 
 				strftime(DATE_TRUNC('hour', timestamp), '%%Y-%%m-%%d %%H:00:00') as date, 
-				COUNT(*) as count
+				%s
 			FROM events 
 			WHERE %s
 			GROUP BY date 
 			ORDER BY date
-		`, whereClause)
+		`, selectClause, whereClause)
 		timeFormat = "hour"
 	} else if timelineDuration <= 90*24*time.Hour {
 		// For up to 3 months: show daily data
 		timelineQuery = fmt.Sprintf(`
 			SELECT 
 				strftime(DATE_TRUNC('day', timestamp), '%%Y-%%m-%%d') as date, 
-				COUNT(*) as count
+				%s
 			FROM events 
 			WHERE %s
 			GROUP BY date 
 			ORDER BY date
-		`, whereClause)
+		`, selectClause, whereClause)
 		timeFormat = "day"
 	} else {
 		// For more than 3 months: show monthly data
 		timelineQuery = fmt.Sprintf(`
 			SELECT 
 				strftime(DATE_TRUNC('month', timestamp), '%%Y-%%m-01') as date, 
-				COUNT(*) as count
+				%s
 			FROM events 
 			WHERE %s
 			GROUP BY date 
 			ORDER BY date
-		`, whereClause)
+		`, selectClause, whereClause)
 		timeFormat = "month"
 	}
 
