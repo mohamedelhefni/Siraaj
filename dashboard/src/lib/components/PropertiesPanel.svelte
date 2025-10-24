@@ -1,5 +1,5 @@
 <script>
-	import { Search, Filter, X } from 'lucide-svelte';
+	import { Search, Filter, X, ChevronDown } from 'lucide-svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import Modal from './Modal.svelte';
 
@@ -8,7 +8,9 @@
 	let searchTerm = $state('');
 	let selectedKey = $state(null);
 	let modalOpen = $state(false);
+	let showMoreModalOpen = $state(false);
 	let selectedProperty = $state(null);
+	let maxDisplayed = $state(5); // Show only 5 properties initially
 
 	// Filter properties based on search and selected key
 	const filteredProperties = $derived(
@@ -21,6 +23,10 @@
 			return matchesSearch && matchesKey;
 		})
 	);
+
+	// Properties to display (limited)
+	const displayedProperties = $derived(filteredProperties.slice(0, maxDisplayed));
+	const hasMore = $derived(filteredProperties.length > maxDisplayed);
 
 	// Get unique keys for filtering
 	const uniqueKeys = $derived([...new Set(properties.map((p) => p.key))].sort());
@@ -41,6 +47,10 @@
 
 	function clearKeyFilter() {
 		selectedKey = null;
+	}
+
+	function openShowMore() {
+		showMoreModalOpen = true;
 	}
 </script>
 
@@ -102,11 +112,14 @@
 			</p>
 		{:else}
 			<div class="text-muted-foreground mb-2 text-xs">
-				Showing {filteredProperties.length} propert{filteredProperties.length === 1 ? 'y' : 'ies'}
+				Showing {displayedProperties.length} of {filteredProperties.length} propert{filteredProperties.length ===
+				1
+					? 'y'
+					: 'ies'}
 				· Total events: {totalCount.toLocaleString()}
 			</div>
 
-			{#each filteredProperties as prop}
+			{#each displayedProperties as prop}
 				{@const percentage = totalCount > 0 ? ((prop.count / totalCount) * 100).toFixed(1) : 0}
 				<div
 					class="hover:bg-accent group relative flex items-center justify-between rounded-lg border p-3 transition-colors"
@@ -154,6 +167,18 @@
 					</div>
 				</div>
 			{/each}
+
+			<!-- Show More Button -->
+			{#if hasMore}
+				<button
+					type="button"
+					onclick={openShowMore}
+					class="hover:bg-accent text-muted-foreground flex w-full items-center justify-center gap-2 rounded-lg border border-dashed p-3 text-sm font-medium transition-colors"
+				>
+					<ChevronDown class="h-4 w-4" />
+					Show All ({filteredProperties.length} total)
+				</button>
+			{/if}
 		{/if}
 	</div>
 </div>
@@ -201,5 +226,68 @@
 				{/if}
 			</div>
 		{/if}
+	{/snippet}
+</Modal>
+
+<!-- Show More Modal -->
+<Modal bind:open={showMoreModalOpen} title="All Properties ({filteredProperties.length})">
+	{#snippet children()}
+		<div class="max-h-[60vh] space-y-2 overflow-y-auto">
+			{#each filteredProperties as prop}
+				{@const percentage = totalCount > 0 ? ((prop.count / totalCount) * 100).toFixed(1) : 0}
+				<div
+					class="hover:bg-accent group relative flex items-center justify-between rounded-lg border p-3 transition-colors"
+				>
+					<div class="min-w-0 flex-1">
+						<div class="mb-1 flex items-center gap-2">
+							<code
+								class="bg-muted text-muted-foreground truncate rounded px-2 py-0.5 text-xs font-medium"
+							>
+								{prop.key}
+							</code>
+							<span class="text-primary truncate text-sm font-medium" title={prop.value}>
+								{prop.value}
+							</span>
+						</div>
+						<div class="flex items-center gap-3 text-xs">
+							<span class="text-muted-foreground">
+								{prop.count?.toLocaleString()} events ({percentage}%)
+							</span>
+							{#if prop.event_types > 1}
+								<Badge variant="outline" class="text-xs">
+									{prop.event_types} event types
+								</Badge>
+							{/if}
+						</div>
+					</div>
+
+					<div class="ml-4 flex gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+						<button
+							type="button"
+							onclick={() => {
+								selectedProperty = prop;
+								showMoreModalOpen = false;
+								modalOpen = true;
+							}}
+							class="hover:bg-background rounded-md px-3 py-1 text-xs font-medium transition-colors"
+						>
+							Details
+						</button>
+						{#if onPropertyClick}
+							<button
+								type="button"
+								onclick={() => {
+									handlePropertyClick(prop);
+									showMoreModalOpen = false;
+								}}
+								class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1 text-xs font-medium transition-colors"
+							>
+								Filter
+							</button>
+						{/if}
+					</div>
+				</div>
+			{/each}
+		</div>
 	{/snippet}
 </Modal>

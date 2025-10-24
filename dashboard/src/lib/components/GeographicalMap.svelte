@@ -279,7 +279,7 @@
 		</div>
 	{:else}
 		<svg bind:this={svgElement} class="w-full"></svg>
-		
+
 		<!-- Zoom Controls -->
 		<div class="absolute right-4 top-4 flex flex-col gap-1 rounded-md bg-white shadow-md">
 			<button
