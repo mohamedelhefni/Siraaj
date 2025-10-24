@@ -215,7 +215,7 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int, filters ma
 	// Build WHERE clause based on filters
 	whereClause := "timestamp BETWEEN ? AND ?"
 	args := []interface{}{startDate, endDate}
-	
+
 	if projectID, ok := filters["project"]; ok && projectID != "" {
 		whereClause += " AND project_id = ?"
 		args = append(args, projectID)
@@ -246,19 +246,45 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int, filters ma
 	event_stats AS (
 		SELECT 
 			COUNT(*) as total_events,
-			COUNT(DISTINCT user_id) as unique_users
+			COUNT(DISTINCT user_id) as unique_users,
+			COUNT(DISTINCT session_id) as total_visits,
+			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views,
+			COUNT(DISTINCT CASE WHEN event_name = 'page_view' THEN session_id END) as sessions_with_views
 		FROM date_filtered
 	)
-	SELECT total_events, unique_users FROM event_stats;
+	SELECT total_events, unique_users, total_visits, page_views, sessions_with_views FROM event_stats;
 	`, whereClause)
 
-	var totalEvents, uniqueUsers int
-	err := a.db.QueryRow(aggregateQuery, args...).Scan(&totalEvents, &uniqueUsers)
+	var totalEvents, uniqueUsers, totalVisits, pageViews, sessionsWithViews int
+	err := a.db.QueryRow(aggregateQuery, args...).Scan(&totalEvents, &uniqueUsers, &totalVisits, &pageViews, &sessionsWithViews)
 	if err != nil {
 		return nil, err
 	}
 	stats["total_events"] = totalEvents
 	stats["unique_users"] = uniqueUsers
+	stats["total_visits"] = totalVisits
+	stats["page_views"] = pageViews
+
+	// Calculate bounce rate: sessions with only 1 page view / total sessions
+	var bounceRate float64
+	if totalVisits > 0 {
+		singlePageQuery := fmt.Sprintf(`
+			SELECT COUNT(DISTINCT session_id) 
+			FROM (
+				SELECT session_id, COUNT(*) as view_count
+				FROM events 
+				WHERE %s AND event_name = 'page_view'
+				GROUP BY session_id
+				HAVING view_count = 1
+			)
+		`, whereClause)
+		var singlePageSessions int
+		err = a.db.QueryRow(singlePageQuery, args...).Scan(&singlePageSessions)
+		if err == nil && sessionsWithViews > 0 {
+			bounceRate = float64(singlePageSessions) / float64(sessionsWithViews) * 100
+		}
+	}
+	stats["bounce_rate"] = bounceRate
 
 	// Top events with optimized query
 	query := fmt.Sprintf(`
@@ -270,7 +296,7 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int, filters ma
 		LIMIT ?
 	`, whereClause)
 	queryArgs := append(args, limit)
-	
+
 	rows, err := a.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
@@ -301,7 +327,7 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int, filters ma
 		GROUP BY date 
 		ORDER BY date
 	`, whereClause)
-	
+
 	rows, err = a.db.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -331,7 +357,7 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int, filters ma
 		ORDER BY count DESC 
 		LIMIT ?
 	`, whereClause)
-	
+
 	rows, err = a.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
@@ -361,7 +387,7 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int, filters ma
 		ORDER BY count DESC
 		LIMIT ?
 	`, whereClause)
-	
+
 	rows, err = a.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
@@ -391,7 +417,7 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int, filters ma
 		ORDER BY count DESC 
 		LIMIT ?
 	`, whereClause)
-	
+
 	rows, err = a.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
@@ -426,7 +452,7 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int, filters ma
 		ORDER BY count DESC 
 		LIMIT ?
 	`, whereClause)
-	
+
 	rows, err = a.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
@@ -446,6 +472,69 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int, filters ma
 		})
 	}
 	stats["top_sources"] = topSources
+
+	// Calculate trends by comparing with previous period
+	duration := endDate.Sub(startDate)
+	prevStartDate := startDate.Add(-duration)
+	prevEndDate := startDate
+
+	prevWhereClause := "timestamp BETWEEN ? AND ?"
+	prevArgs := []interface{}{prevStartDate, prevEndDate}
+
+	// Apply same filters to previous period
+	if projectID, ok := filters["project"]; ok && projectID != "" {
+		prevWhereClause += " AND project_id = ?"
+		prevArgs = append(prevArgs, projectID)
+	}
+	if source, ok := filters["source"]; ok && source != "" {
+		prevWhereClause += " AND referrer = ?"
+		prevArgs = append(prevArgs, source)
+	}
+	if country, ok := filters["country"]; ok && country != "" {
+		prevWhereClause += " AND country = ?"
+		prevArgs = append(prevArgs, country)
+	}
+	if browser, ok := filters["browser"]; ok && browser != "" {
+		prevWhereClause += " AND browser = ?"
+		prevArgs = append(prevArgs, browser)
+	}
+	if eventName, ok := filters["event"]; ok && eventName != "" {
+		prevWhereClause += " AND event_name = ?"
+		prevArgs = append(prevArgs, eventName)
+	}
+
+	prevQuery := fmt.Sprintf(`
+		SELECT 
+			COUNT(*) as total_events,
+			COUNT(DISTINCT user_id) as unique_users,
+			COUNT(DISTINCT session_id) as total_visits,
+			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views
+		FROM events 
+		WHERE %s
+	`, prevWhereClause)
+
+	var prevTotalEvents, prevUniqueUsers, prevTotalVisits, prevPageViews int
+	err = a.db.QueryRow(prevQuery, prevArgs...).Scan(&prevTotalEvents, &prevUniqueUsers, &prevTotalVisits, &prevPageViews)
+	if err == nil {
+		stats["prev_total_events"] = prevTotalEvents
+		stats["prev_unique_users"] = prevUniqueUsers
+		stats["prev_total_visits"] = prevTotalVisits
+		stats["prev_page_views"] = prevPageViews
+
+		// Calculate percentage changes
+		if prevTotalEvents > 0 {
+			stats["events_change"] = float64(totalEvents-prevTotalEvents) / float64(prevTotalEvents) * 100
+		}
+		if prevUniqueUsers > 0 {
+			stats["users_change"] = float64(uniqueUsers-prevUniqueUsers) / float64(prevUniqueUsers) * 100
+		}
+		if prevTotalVisits > 0 {
+			stats["visits_change"] = float64(totalVisits-prevTotalVisits) / float64(prevTotalVisits) * 100
+		}
+		if prevPageViews > 0 {
+			stats["page_views_change"] = float64(pageViews-prevPageViews) / float64(prevPageViews) * 100
+		}
+	}
 
 	return stats, nil
 }
@@ -537,7 +626,7 @@ func (a *Analytics) GetOnlineUsers(timeWindowMinutes int) (map[string]interface{
 // GetProjects returns list of distinct project IDs
 func (a *Analytics) GetProjects() ([]string, error) {
 	query := `SELECT DISTINCT project_id FROM events WHERE project_id IS NOT NULL AND project_id != '' ORDER BY project_id`
-	
+
 	rows, err := a.db.Query(query)
 	if err != nil {
 		return nil, err

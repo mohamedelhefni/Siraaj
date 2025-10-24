@@ -50,8 +50,10 @@
 			{@const browserIcon =
 				type === 'browser' ? browserIcons[getBrowserName(item[labelKey])] : null}
 
-			<div 
-				class="flex items-center justify-between space-x-2 {onclick ? 'cursor-pointer hover:bg-accent rounded-md p-1 -m-1 transition-colors' : ''}"
+			<div
+				class="flex items-center justify-between space-x-2 {onclick
+					? 'hover:bg-accent -m-1 cursor-pointer rounded-md p-1 transition-colors'
+					: ''}"
 				onclick={() => handleClick(item)}
 				onkeydown={(e) => e.key === 'Enter' && handleClick(item)}
 				role="button"

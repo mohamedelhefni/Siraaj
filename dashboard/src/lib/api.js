@@ -14,7 +14,7 @@ export async function fetchStats(startDate, endDate, limit = 50, filters = {}) {
     if (startDate) params.append('start', startDate);
     if (endDate) params.append('end', endDate);
     if (limit) params.append('limit', limit.toString());
-    
+
     // Add filters
     if (filters.source) params.append('source', filters.source);
     if (filters.country) params.append('country', filters.country);

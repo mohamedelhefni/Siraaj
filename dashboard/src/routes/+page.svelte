@@ -2,7 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { format, subDays } from 'date-fns';
 	import { fetchStats, fetchOnlineUsers, fetchProjects } from '$lib/api';
-	import { RefreshCw, X } from 'lucide-svelte';
+	import { RefreshCw, X, TrendingUp, TrendingDown, Minus } from 'lucide-svelte';
 	import {
 		Card,
 		CardContent,
@@ -20,6 +20,13 @@
 	let stats = $state({
 		total_events: 0,
 		unique_users: 0,
+		total_visits: 0,
+		page_views: 0,
+		bounce_rate: 0,
+		events_change: 0,
+		users_change: 0,
+		visits_change: 0,
+		page_views_change: 0,
 		top_events: [],
 		timeline: [],
 		top_pages: [],
@@ -55,6 +62,41 @@
 	let startDate = $state(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
 	let endDate = $state(format(new Date(), 'yyyy-MM-dd'));
 
+	// URL param helpers
+	function updateURLParams() {
+		if (typeof window === 'undefined') return;
+
+		const params = new URLSearchParams();
+		params.set('start', startDate);
+		params.set('end', endDate);
+		if (activeFilters.project) params.set('project', activeFilters.project);
+		if (activeFilters.source) params.set('source', activeFilters.source);
+		if (activeFilters.country) params.set('country', activeFilters.country);
+		if (activeFilters.browser) params.set('browser', activeFilters.browser);
+		if (activeFilters.event) params.set('event', activeFilters.event);
+		if (refreshIntervalTime !== 30000) params.set('interval', refreshIntervalTime.toString());
+
+		const newURL = `${window.location.pathname}?${params.toString()}`;
+		window.history.replaceState({}, '', newURL);
+	}
+
+	function loadFromURLParams() {
+		if (typeof window === 'undefined') return;
+
+		const params = new URLSearchParams(window.location.search);
+
+		if (params.has('start')) startDate = params.get('start');
+		if (params.has('end')) endDate = params.get('end');
+		if (params.has('project')) activeFilters.project = params.get('project');
+		if (params.has('source')) activeFilters.source = params.get('source');
+		if (params.has('country')) activeFilters.country = params.get('country');
+		if (params.has('browser')) activeFilters.browser = params.get('browser');
+		if (params.has('event')) activeFilters.event = params.get('event');
+		if (params.has('interval')) {
+			refreshIntervalTime = parseInt(params.get('interval'));
+		}
+	}
+
 	async function loadStats() {
 		loading = true;
 		error = null;
@@ -66,6 +108,7 @@
 			stats = statsData;
 			onlineData = onlineUsersData;
 			lastRefresh = new Date();
+			updateURLParams();
 		} catch (err) {
 			error = err.message;
 			console.error('Failed to load stats:', err);
@@ -94,15 +137,18 @@
 	function handleRefreshIntervalChange(event) {
 		refreshIntervalTime = parseInt(event.target.value);
 		setupAutoRefresh();
+		updateURLParams();
 	}
 
 	function addFilter(type, value) {
 		activeFilters[type] = value;
+		updateURLParams();
 		loadStats();
 	}
 
 	function removeFilter(type) {
 		activeFilters[type] = null;
+		updateURLParams();
 		loadStats();
 	}
 
@@ -118,6 +164,7 @@
 	}
 
 	onMount(() => {
+		loadFromURLParams();
 		loadProjects();
 		loadStats();
 		setupAutoRefresh();
@@ -140,7 +187,21 @@
 	function handleDateChange(event) {
 		startDate = event.detail.startDate;
 		endDate = event.detail.endDate;
+		updateURLParams();
 		loadStats();
+	}
+
+	// Helper to format trend
+	function getTrendIcon(change) {
+		if (change > 0) return TrendingUp;
+		if (change < 0) return TrendingDown;
+		return Minus;
+	}
+
+	function getTrendColor(change) {
+		if (change > 0) return 'text-green-600';
+		if (change < 0) return 'text-red-600';
+		return 'text-gray-600';
 	}
 </script>
 
@@ -153,11 +214,11 @@
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			<DateRangePicker {startDate} {endDate} on:change={handleDateChange} />
-			
+
 			<!-- Project Selector -->
 			{#if projects.length > 0}
 				<select
-					class="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+					class="border-input bg-background focus-visible:ring-ring flex h-9 rounded-md border px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1"
 					value={activeFilters.project || ''}
 					onchange={(e) => {
 						if (e.target.value) {
@@ -186,7 +247,7 @@
 					{autoRefresh ? 'Auto' : 'Manual'}
 				</Button>
 				<select
-					class="h-9 rounded-md border border-input bg-background px-2 py-1 text-xs"
+					class="border-input bg-background h-9 rounded-md border px-2 py-1 text-xs"
 					value={refreshIntervalTime}
 					onchange={handleRefreshIntervalChange}
 				>
@@ -197,7 +258,7 @@
 					<option value="0">Off</option>
 				</select>
 				{#if !loading}
-					<span class="text-muted-foreground text-xs whitespace-nowrap">
+					<span class="text-muted-foreground whitespace-nowrap text-xs">
 						{format(lastRefresh, 'HH:mm:ss')}
 					</span>
 				{/if}
@@ -206,13 +267,13 @@
 	</div>
 
 	<!-- Active Filters -->
-	{#if Object.values(activeFilters).some(v => v !== null)}
+	{#if Object.values(activeFilters).some((v) => v !== null)}
 		<div class="flex flex-wrap items-center gap-2">
-			<span class="text-sm text-muted-foreground">Active Filters:</span>
+			<span class="text-muted-foreground text-sm">Active Filters:</span>
 			{#if activeFilters.project}
 				<Badge variant="secondary" class="gap-1">
 					Project: {activeFilters.project}
-					<button onclick={() => removeFilter('project')} class="ml-1 hover:text-destructive">
+					<button onclick={() => removeFilter('project')} class="hover:text-destructive ml-1">
 						<X class="h-3 w-3" />
 					</button>
 				</Badge>
@@ -220,7 +281,7 @@
 			{#if activeFilters.source}
 				<Badge variant="secondary" class="gap-1">
 					Source: {activeFilters.source}
-					<button onclick={() => removeFilter('source')} class="ml-1 hover:text-destructive">
+					<button onclick={() => removeFilter('source')} class="hover:text-destructive ml-1">
 						<X class="h-3 w-3" />
 					</button>
 				</Badge>
@@ -228,7 +289,7 @@
 			{#if activeFilters.country}
 				<Badge variant="secondary" class="gap-1">
 					Country: {activeFilters.country}
-					<button onclick={() => removeFilter('country')} class="ml-1 hover:text-destructive">
+					<button onclick={() => removeFilter('country')} class="hover:text-destructive ml-1">
 						<X class="h-3 w-3" />
 					</button>
 				</Badge>
@@ -236,7 +297,7 @@
 			{#if activeFilters.browser}
 				<Badge variant="secondary" class="gap-1">
 					Browser: {activeFilters.browser}
-					<button onclick={() => removeFilter('browser')} class="ml-1 hover:text-destructive">
+					<button onclick={() => removeFilter('browser')} class="hover:text-destructive ml-1">
 						<X class="h-3 w-3" />
 					</button>
 				</Badge>
@@ -244,14 +305,12 @@
 			{#if activeFilters.event}
 				<Badge variant="secondary" class="gap-1">
 					Event: {activeFilters.event}
-					<button onclick={() => removeFilter('event')} class="ml-1 hover:text-destructive">
+					<button onclick={() => removeFilter('event')} class="hover:text-destructive ml-1">
 						<X class="h-3 w-3" />
 					</button>
 				</Badge>
 			{/if}
-			<Button variant="ghost" size="sm" onclick={clearAllFilters}>
-				Clear All
-			</Button>
+			<Button variant="ghost" size="sm" onclick={clearAllFilters}>Clear All</Button>
 		</div>
 	{/if}
 
@@ -273,37 +332,100 @@
 		</Card>
 	{:else}
 		<!-- Overview Stats -->
-		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-			<StatsCard
-				title="Total Events"
-				value={stats.total_events?.toLocaleString() || '0'}
-				icon="activity"
-				description="Total tracked events"
-			/>
-			<StatsCard
-				title="Unique Users"
-				value={stats.unique_users?.toLocaleString() || '0'}
-				icon="users"
-				description="Unique visitors"
-			/>
-			<StatsCard
-				title="Online Now"
-				value={onlineData.online_users?.toLocaleString() || '0'}
-				icon="eye"
-				description="Active in last 5 min"
-			/>
-			<StatsCard
-				title="Avg Events/User"
-				value={stats.unique_users > 0 ? (stats.total_events / stats.unique_users).toFixed(1) : '0'}
-				icon="trending-up"
-				description="Average engagement"
-			/>
-			<StatsCard
-				title="Countries"
-				value={stats.top_countries?.length || '0'}
-				icon="globe"
-				description="Geographic reach"
-			/>
+		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+			<Card>
+				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+					<CardTitle class="text-sm font-medium">Total Events</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<div class="text-2xl font-bold">{stats.total_events?.toLocaleString() || '0'}</div>
+					{#if stats.events_change !== undefined && stats.events_change !== 0}
+						{@const TrendIcon = getTrendIcon(stats.events_change)}
+						<p class="text-xs {getTrendColor(stats.events_change)} mt-1 flex items-center gap-1">
+							<TrendIcon class="h-3 w-3" />
+							{Math.abs(stats.events_change).toFixed(1)}% vs previous period
+						</p>
+					{:else}
+						<p class="text-muted-foreground mt-1 text-xs">All tracked events</p>
+					{/if}
+				</CardContent>
+			</Card>
+
+			<Card>
+				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+					<CardTitle class="text-sm font-medium">Unique Visitors</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<div class="text-2xl font-bold">{stats.unique_users?.toLocaleString() || '0'}</div>
+					{#if stats.users_change !== undefined && stats.users_change !== 0}
+						{@const TrendIcon = getTrendIcon(stats.users_change)}
+						<p class="text-xs {getTrendColor(stats.users_change)} mt-1 flex items-center gap-1">
+							<TrendIcon class="h-3 w-3" />
+							{Math.abs(stats.users_change).toFixed(1)}% vs previous period
+						</p>
+					{:else}
+						<p class="text-muted-foreground mt-1 text-xs">Unique users</p>
+					{/if}
+				</CardContent>
+			</Card>
+
+			<Card>
+				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+					<CardTitle class="text-sm font-medium">Total Visits</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<div class="text-2xl font-bold">{stats.total_visits?.toLocaleString() || '0'}</div>
+					{#if stats.visits_change !== undefined && stats.visits_change !== 0}
+						{@const TrendIcon = getTrendIcon(stats.visits_change)}
+						<p class="text-xs {getTrendColor(stats.visits_change)} mt-1 flex items-center gap-1">
+							<TrendIcon class="h-3 w-3" />
+							{Math.abs(stats.visits_change).toFixed(1)}% vs previous period
+						</p>
+					{:else}
+						<p class="text-muted-foreground mt-1 text-xs">Unique sessions</p>
+					{/if}
+				</CardContent>
+			</Card>
+
+			<Card>
+				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+					<CardTitle class="text-sm font-medium">Page Views</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<div class="text-2xl font-bold">{stats.page_views?.toLocaleString() || '0'}</div>
+					{#if stats.page_views_change !== undefined && stats.page_views_change !== 0}
+						{@const TrendIcon = getTrendIcon(stats.page_views_change)}
+						<p
+							class="text-xs {getTrendColor(stats.page_views_change)} mt-1 flex items-center gap-1"
+						>
+							<TrendIcon class="h-3 w-3" />
+							{Math.abs(stats.page_views_change).toFixed(1)}% vs previous period
+						</p>
+					{:else}
+						<p class="text-muted-foreground mt-1 text-xs">Total page views</p>
+					{/if}
+				</CardContent>
+			</Card>
+
+			<Card>
+				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+					<CardTitle class="text-sm font-medium">Bounce Rate</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<div class="text-2xl font-bold">{stats.bounce_rate?.toFixed(1) || '0'}%</div>
+					<p class="text-muted-foreground mt-1 text-xs">Single page sessions</p>
+				</CardContent>
+			</Card>
+
+			<Card>
+				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+					<CardTitle class="text-sm font-medium">Online Now</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<div class="text-2xl font-bold">{onlineData.online_users?.toLocaleString() || '0'}</div>
+					<p class="text-muted-foreground mt-1 text-xs">Active in last 5 min</p>
+				</CardContent>
+			</Card>
 		</div>
 
 		<!-- Timeline Chart -->
@@ -325,9 +447,9 @@
 					<CardDescription>Most tracked events</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<TopItemsList 
-						items={stats.top_events || []} 
-						labelKey="name" 
+					<TopItemsList
+						items={stats.top_events || []}
+						labelKey="name"
 						valueKey="count"
 						onclick={(item) => addFilter('event', item.name)}
 					/>
