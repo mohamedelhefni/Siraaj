@@ -10,6 +10,16 @@
 	// World map TopoJSON URL (using Natural Earth data)
 	const WORLD_MAP_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
+	// Helper function to normalize country names
+	function normalizeCountryName(name) {
+		if (!name) return name;
+		// Replace Israel with Palestine
+		if (name.toLowerCase() === 'israel') {
+			return 'Palestine';
+		}
+		return name;
+	}
+
 	async function drawMap() {
 		if (!svgElement || !mapContainer) return;
 
@@ -38,7 +48,10 @@
 		const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, maxCount]);
 
 		// Create a map of country data for quick lookup
-		const countryDataMap = new Map(data.map((d) => [d.country.toLowerCase(), d.count]));
+		// Normalize country names (replace Israel with Palestine)
+		const countryDataMap = new Map(
+			data.map((d) => [normalizeCountryName(d.country).toLowerCase(), d.count])
+		);
 
 		try {
 			// Load world map data
@@ -67,8 +80,9 @@
 				.join('path')
 				.attr('d', path)
 				.attr('fill', (d) => {
-					const countryName = d.properties.name?.toLowerCase();
-					const count = countryDataMap.get(countryName);
+					// Normalize country name (replace Israel with Palestine)
+					let countryName = normalizeCountryName(d.properties.name);
+					const count = countryDataMap.get(countryName?.toLowerCase());
 					return count ? colorScale(count) : '#e5e7eb';
 				})
 				.attr('stroke', '#fff')
@@ -76,7 +90,8 @@
 				.style('cursor', 'pointer')
 				.style('opacity', 0)
 				.on('mouseover', function (event, d) {
-					const countryName = d.properties.name;
+					// Normalize country name (replace Israel with Palestine)
+					const countryName = normalizeCountryName(d.properties.name);
 					const count = countryDataMap.get(countryName?.toLowerCase());
 
 					if (count) {
@@ -104,7 +119,8 @@
 					tooltip.transition().duration(200).style('opacity', 0);
 				})
 				.on('click', function (event, d) {
-					const countryName = d.properties.name;
+					// Normalize country name (replace Israel with Palestine)
+					const countryName = normalizeCountryName(d.properties.name);
 					const count = countryDataMap.get(countryName?.toLowerCase());
 
 					if (count && onclick) {
