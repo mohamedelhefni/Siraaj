@@ -19,10 +19,10 @@
 <Card>
 	<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
 		<CardTitle class="text-sm font-medium">{title}</CardTitle>
-		<IconComponent class="h-4 w-4 text-muted-foreground" />
+		<IconComponent class="text-muted-foreground h-4 w-4" />
 	</CardHeader>
 	<CardContent>
 		<div class="text-2xl font-bold">{value}</div>
-		<p class="text-xs text-muted-foreground mt-1">{description}</p>
+		<p class="text-muted-foreground mt-1 text-xs">{description}</p>
 	</CardContent>
 </Card>

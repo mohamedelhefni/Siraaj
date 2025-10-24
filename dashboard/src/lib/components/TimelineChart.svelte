@@ -72,7 +72,7 @@
 
 <div class="h-[300px]">
 	{#if data.length === 0}
-		<div class="flex items-center justify-center h-full text-muted-foreground">
+		<div class="text-muted-foreground flex h-full items-center justify-center">
 			<p>No data available for the selected period</p>
 		</div>
 	{:else}

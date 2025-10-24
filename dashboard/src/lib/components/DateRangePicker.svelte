@@ -44,16 +44,12 @@
 	}
 </script>
 
-<div class="flex items-center gap-2 flex-wrap">
-	<div class="flex items-center gap-2 border rounded-lg p-2">
-		<Calendar class="h-4 w-4 text-muted-foreground" />
-		<input
-			type="date"
-			bind:value={localStartDate}
-			class="text-sm border-none focus:outline-none"
-		/>
+<div class="flex flex-wrap items-center gap-2">
+	<div class="flex items-center gap-2 rounded-lg border p-2">
+		<Calendar class="text-muted-foreground h-4 w-4" />
+		<input type="date" bind:value={localStartDate} class="border-none text-sm focus:outline-none" />
 		<span class="text-muted-foreground">to</span>
-		<input type="date" bind:value={localEndDate} class="text-sm border-none focus:outline-none" />
+		<input type="date" bind:value={localEndDate} class="border-none text-sm focus:outline-none" />
 		<Button size="sm" onclick={handleApply}>Apply</Button>
 	</div>
 

@@ -56,14 +56,12 @@
 	}
 </script>
 
-<div class="container mx-auto p-6 space-y-6">
+<div class="container mx-auto space-y-6 p-6">
 	<!-- Header -->
 	<div class="flex items-center justify-between">
 		<div>
 			<h1 class="text-4xl font-bold tracking-tight">Analytics Dashboard</h1>
-			<p class="text-muted-foreground mt-2">
-				Real-time insights and analytics powered by DuckDB
-			</p>
+			<p class="text-muted-foreground mt-2">Real-time insights and analytics powered by DuckDB</p>
 		</div>
 		<DateRangePicker {startDate} {endDate} on:change={handleDateChange} />
 	</div>
@@ -71,8 +69,10 @@
 	{#if loading}
 		<div class="flex items-center justify-center py-20">
 			<div class="text-center">
-				<div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]"></div>
-				<p class="mt-4 text-muted-foreground">Loading analytics...</p>
+				<div
+					class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]"
+				></div>
+				<p class="text-muted-foreground mt-4">Loading analytics...</p>
 			</div>
 		</div>
 	{:else if error}
@@ -153,7 +153,12 @@
 					<CardDescription>Browser distribution</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<TopItemsList items={stats.browsers || []} labelKey="name" valueKey="count" maxItems={5} />
+					<TopItemsList
+						items={stats.browsers || []}
+						labelKey="name"
+						valueKey="count"
+						maxItems={5}
+					/>
 				</CardContent>
 			</Card>
 
@@ -163,7 +168,12 @@
 					<CardDescription>Geographic distribution</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<TopItemsList items={stats.top_countries || []} labelKey="name" valueKey="count" maxItems={5} />
+					<TopItemsList
+						items={stats.top_countries || []}
+						labelKey="name"
+						valueKey="count"
+						maxItems={5}
+					/>
 				</CardContent>
 			</Card>
 
@@ -173,7 +183,12 @@
 					<CardDescription>Traffic sources</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<TopItemsList items={stats.top_sources || []} labelKey="name" valueKey="count" maxItems={5} />
+					<TopItemsList
+						items={stats.top_sources || []}
+						labelKey="name"
+						valueKey="count"
+						maxItems={5}
+					/>
 				</CardContent>
 			</Card>
 		</div>
