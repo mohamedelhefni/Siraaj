@@ -14,6 +14,7 @@
 
   class Analytics {
     constructor(config = {}) {
+      console.log("project id is", config.projectId)
       this.config = {
         apiUrl: config.apiUrl || 'http://localhost:8080',
         projectId: config.projectId || 'default',
@@ -51,6 +52,7 @@
      * @param {object} properties - Additional properties
      */
     track(eventName, properties = {}) {
+      console.log("project id", this.config.projectId)
       const event = {
         event_name: eventName,
         user_id: this.userId,

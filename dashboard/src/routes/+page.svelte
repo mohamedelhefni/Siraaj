@@ -1,6 +1,6 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
-	import { format, subDays } from 'date-fns';
+	import { format, subDays, startOfMonth, startOfYear, subMonths } from 'date-fns';
 	import { fetchStats, fetchOnlineUsers, fetchProjects } from '$lib/api';
 	import { RefreshCw, X, TrendingUp, TrendingDown, Minus } from 'lucide-svelte';
 	import {
@@ -49,31 +49,105 @@
 	let refreshIntervalTime = $state(30000); // 30 seconds default
 	let lastRefresh = $state(new Date());
 
+	// Date range presets
+	let dateRangePreset = $state('last_7_days');
+	const dateRangePresets = [
+		{ value: 'today', label: 'Today' },
+		{ value: 'yesterday', label: 'Yesterday' },
+		{ value: 'last_7_days', label: 'Last 7 days' },
+		{ value: 'last_30_days', label: 'Last 30 days' },
+		{ value: 'this_month', label: 'This month' },
+		{ value: 'last_month', label: 'Last month' },
+		{ value: 'last_3_months', label: 'Last 3 months' },
+		{ value: 'last_6_months', label: 'Last 6 months' },
+		{ value: 'this_year', label: 'This year' },
+		{ value: 'custom', label: 'Custom range' }
+	];
+
 	// Filter states
 	let activeFilters = $state({
 		source: null,
 		country: null,
 		browser: null,
 		event: null,
-		project: null
+		project: null,
+		metric: null // For filtering by clicked metric card
 	});
 
 	// Default to last 7 days
 	let startDate = $state(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
 	let endDate = $state(format(new Date(), 'yyyy-MM-dd'));
+	let showCustomDateInputs = $state(false);
+
+	// Apply date range preset
+	function applyDateRangePreset(preset) {
+		const now = new Date();
+		const today = format(now, 'yyyy-MM-dd');
+
+		switch (preset) {
+			case 'today':
+				startDate = today;
+				endDate = today;
+				break;
+			case 'yesterday':
+				const yesterday = subDays(now, 1);
+				startDate = format(yesterday, 'yyyy-MM-dd');
+				endDate = format(yesterday, 'yyyy-MM-dd');
+				break;
+			case 'last_7_days':
+				startDate = format(subDays(now, 7), 'yyyy-MM-dd');
+				endDate = today;
+				break;
+			case 'last_30_days':
+				startDate = format(subDays(now, 30), 'yyyy-MM-dd');
+				endDate = today;
+				break;
+			case 'this_month':
+				startDate = format(startOfMonth(now), 'yyyy-MM-dd');
+				endDate = today;
+				break;
+			case 'last_month':
+				const lastMonthStart = startOfMonth(subMonths(now, 1));
+				const lastMonthEnd = subDays(startOfMonth(now), 1);
+				startDate = format(lastMonthStart, 'yyyy-MM-dd');
+				endDate = format(lastMonthEnd, 'yyyy-MM-dd');
+				break;
+			case 'last_3_months':
+				startDate = format(subMonths(now, 3), 'yyyy-MM-dd');
+				endDate = today;
+				break;
+			case 'last_6_months':
+				startDate = format(subMonths(now, 6), 'yyyy-MM-dd');
+				endDate = today;
+				break;
+			case 'this_year':
+				startDate = format(startOfYear(now), 'yyyy-MM-dd');
+				endDate = today;
+				break;
+			case 'custom':
+				showCustomDateInputs = true;
+				return;
+		}
+		showCustomDateInputs = false;
+		loadStats();
+	}
 
 	// URL param helpers
 	function updateURLParams() {
 		if (typeof window === 'undefined') return;
 
 		const params = new URLSearchParams();
-		params.set('start', startDate);
-		params.set('end', endDate);
+		params.set('range', dateRangePreset);
+		if (dateRangePreset === 'custom') {
+			params.set('start', startDate);
+			params.set('end', endDate);
+		}
 		if (activeFilters.project) params.set('project', activeFilters.project);
 		if (activeFilters.source) params.set('source', activeFilters.source);
 		if (activeFilters.country) params.set('country', activeFilters.country);
 		if (activeFilters.browser) params.set('browser', activeFilters.browser);
 		if (activeFilters.event) params.set('event', activeFilters.event);
+		if (activeFilters.metric) params.set('metric', activeFilters.metric);
 		if (refreshIntervalTime !== 30000) params.set('interval', refreshIntervalTime.toString());
 
 		const newURL = `${window.location.pathname}?${params.toString()}`;
@@ -85,13 +159,22 @@
 
 		const params = new URLSearchParams(window.location.search);
 
-		if (params.has('start')) startDate = params.get('start');
-		if (params.has('end')) endDate = params.get('end');
+		if (params.has('range')) {
+			dateRangePreset = params.get('range');
+			if (dateRangePreset === 'custom') {
+				if (params.has('start')) startDate = params.get('start');
+				if (params.has('end')) endDate = params.get('end');
+				showCustomDateInputs = true;
+			} else {
+				applyDateRangePreset(dateRangePreset);
+			}
+		}
 		if (params.has('project')) activeFilters.project = params.get('project');
 		if (params.has('source')) activeFilters.source = params.get('source');
 		if (params.has('country')) activeFilters.country = params.get('country');
 		if (params.has('browser')) activeFilters.browser = params.get('browser');
 		if (params.has('event')) activeFilters.event = params.get('event');
+		if (params.has('metric')) activeFilters.metric = params.get('metric');
 		if (params.has('interval')) {
 			refreshIntervalTime = parseInt(params.get('interval'));
 		}
@@ -158,8 +241,10 @@
 			country: null,
 			browser: null,
 			event: null,
-			project: null
+			project: null,
+			metric: null
 		};
+		updateURLParams();
 		loadStats();
 	}
 
@@ -203,6 +288,23 @@
 		if (change < 0) return 'text-red-600';
 		return 'text-gray-600';
 	}
+
+	// Handle metric card clicks for filtering
+	function handleMetricClick(metricType) {
+		if (activeFilters.metric === metricType) {
+			// Toggle off if already selected
+			activeFilters.metric = null;
+		} else {
+			activeFilters.metric = metricType;
+		}
+		updateURLParams();
+		// No need to reload stats, just update the chart focus
+	}
+
+	// Check if a metric is selected
+	function isMetricSelected(metricType) {
+		return activeFilters.metric === metricType;
+	}
 </script>
 
 <div class="container mx-auto space-y-6 p-6">
@@ -212,13 +314,49 @@
 			<h1 class="text-4xl font-bold tracking-tight">Siraaj Dashboard</h1>
 			<p class="text-muted-foreground mt-2">Real-time insights and analytics powered by DuckDB</p>
 		</div>
-		<div class="flex flex-wrap items-center gap-2">
-			<DateRangePicker {startDate} {endDate} on:change={handleDateChange} />
+	</div>
 
-			<!-- Project Selector -->
-			{#if projects.length > 0}
+	<!-- Controls Row -->
+	<div class="flex flex-wrap items-center gap-3">
+		<!-- Date Range Selector -->
+		<div class="flex items-center gap-2">
+			<label class="text-sm font-medium">Period:</label>
+			<select
+				class="border-input bg-background focus-visible:ring-ring flex h-9 rounded-md border px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1"
+				bind:value={dateRangePreset}
+				onchange={(e) => applyDateRangePreset(e.target.value)}
+			>
+				{#each dateRangePresets as preset}
+					<option value={preset.value}>{preset.label}</option>
+				{/each}
+			</select>
+		</div>
+
+		<!-- Custom Date Inputs (shown when custom is selected) -->
+		{#if showCustomDateInputs}
+			<div class="flex items-center gap-2 rounded-lg border p-2">
+				<input
+					type="date"
+					bind:value={startDate}
+					class="border-none text-sm focus:outline-none"
+					onchange={() => loadStats()}
+				/>
+				<span class="text-muted-foreground">to</span>
+				<input
+					type="date"
+					bind:value={endDate}
+					class="border-none text-sm focus:outline-none"
+					onchange={() => loadStats()}
+				/>
+			</div>
+		{/if}
+
+		<!-- Project Selector -->
+		{#if projects.length > 0}
+			<div class="flex items-center gap-2">
+				<label class="text-sm font-medium">Project:</label>
 				<select
-					class="border-input bg-background focus-visible:ring-ring flex h-9 rounded-md border px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1"
+					class="border-input bg-background focus-visible:ring-ring flex h-9 rounded-md border px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1"
 					value={activeFilters.project || ''}
 					onchange={(e) => {
 						if (e.target.value) {
@@ -233,36 +371,34 @@
 						<option value={project}>{project}</option>
 					{/each}
 				</select>
-			{/if}
-
-			<!-- Auto-refresh controls -->
-			<div class="flex items-center gap-2 rounded-lg border p-2">
-				<Button
-					variant={autoRefresh ? 'default' : 'outline'}
-					size="sm"
-					onclick={toggleAutoRefresh}
-					class="gap-2"
-				>
-					<RefreshCw class={autoRefresh ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-					{autoRefresh ? 'Auto' : 'Manual'}
-				</Button>
-				<select
-					class="border-input bg-background h-9 rounded-md border px-2 py-1 text-xs"
-					value={refreshIntervalTime}
-					onchange={handleRefreshIntervalChange}
-				>
-					<option value="10000">10s</option>
-					<option value="30000">30s</option>
-					<option value="60000">1min</option>
-					<option value="300000">5min</option>
-					<option value="0">Off</option>
-				</select>
-				{#if !loading}
-					<span class="text-muted-foreground whitespace-nowrap text-xs">
-						{format(lastRefresh, 'HH:mm:ss')}
-					</span>
-				{/if}
 			</div>
+		{/if}
+
+		<!-- Auto-refresh controls -->
+		<div class="ml-auto flex items-center gap-2">
+			<label class="text-sm font-medium">Auto-refresh:</label>
+			<select
+				class="border-input bg-background focus-visible:ring-ring flex h-9 rounded-md border px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1"
+				value={refreshIntervalTime}
+				onchange={handleRefreshIntervalChange}
+			>
+				<option value="0">Off</option>
+				<option value="10000">10s</option>
+				<option value="30000">30s</option>
+				<option value="60000">1min</option>
+				<option value="300000">5min</option>
+			</select>
+
+			<Button variant="outline" size="sm" onclick={() => loadStats()} class="gap-2">
+				<RefreshCw class="h-4 w-4" />
+				Refresh
+			</Button>
+
+			{#if !loading}
+				<span class="text-muted-foreground whitespace-nowrap text-xs">
+					Updated {format(lastRefresh, 'HH:mm:ss')}
+				</span>
+			{/if}
 		</div>
 	</div>
 
@@ -310,6 +446,14 @@
 					</button>
 				</Badge>
 			{/if}
+			{#if activeFilters.metric}
+				<Badge variant="secondary" class="gap-1">
+					Metric: {activeFilters.metric}
+					<button onclick={() => removeFilter('metric')} class="hover:text-destructive ml-1">
+						<X class="h-3 w-3" />
+					</button>
+				</Badge>
+			{/if}
 			<Button variant="ghost" size="sm" onclick={clearAllFilters}>Clear All</Button>
 		</div>
 	{/if}
@@ -333,7 +477,12 @@
 	{:else}
 		<!-- Overview Stats -->
 		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-			<Card>
+			<Card
+				class="cursor-pointer transition-all hover:shadow-md {isMetricSelected('events')
+					? 'ring-primary ring-2'
+					: ''}"
+				onclick={() => handleMetricClick('events')}
+			>
 				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
 					<CardTitle class="text-sm font-medium">Total Events</CardTitle>
 				</CardHeader>
@@ -351,7 +500,12 @@
 				</CardContent>
 			</Card>
 
-			<Card>
+			<Card
+				class="cursor-pointer transition-all hover:shadow-md {isMetricSelected('users')
+					? 'ring-primary ring-2'
+					: ''}"
+				onclick={() => handleMetricClick('users')}
+			>
 				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
 					<CardTitle class="text-sm font-medium">Unique Visitors</CardTitle>
 				</CardHeader>
@@ -369,7 +523,12 @@
 				</CardContent>
 			</Card>
 
-			<Card>
+			<Card
+				class="cursor-pointer transition-all hover:shadow-md {isMetricSelected('visits')
+					? 'ring-primary ring-2'
+					: ''}"
+				onclick={() => handleMetricClick('visits')}
+			>
 				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
 					<CardTitle class="text-sm font-medium">Total Visits</CardTitle>
 				</CardHeader>
@@ -387,7 +546,12 @@
 				</CardContent>
 			</Card>
 
-			<Card>
+			<Card
+				class="cursor-pointer transition-all hover:shadow-md {isMetricSelected('page_views')
+					? 'ring-primary ring-2'
+					: ''}"
+				onclick={() => handleMetricClick('page_views')}
+			>
 				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
 					<CardTitle class="text-sm font-medium">Page Views</CardTitle>
 				</CardHeader>
@@ -407,7 +571,12 @@
 				</CardContent>
 			</Card>
 
-			<Card>
+			<Card
+				class="cursor-pointer transition-all hover:shadow-md {isMetricSelected('bounce_rate')
+					? 'ring-primary ring-2'
+					: ''}"
+				onclick={() => handleMetricClick('bounce_rate')}
+			>
 				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
 					<CardTitle class="text-sm font-medium">Bounce Rate</CardTitle>
 				</CardHeader>
@@ -431,8 +600,20 @@
 		<!-- Timeline Chart -->
 		<Card>
 			<CardHeader>
-				<CardTitle>Events Over Time</CardTitle>
-				<CardDescription>Daily event tracking</CardDescription>
+				<CardTitle>
+					Events Over Time
+					{#if activeFilters.metric}
+						<span class="text-primary text-base font-normal">
+							(Filtered by {activeFilters.metric.replace('_', ' ')})
+						</span>
+					{/if}
+				</CardTitle>
+				<CardDescription>
+					Daily event tracking
+					{#if activeFilters.metric}
+						· Click the metric card again to remove filter
+					{/if}
+				</CardDescription>
 			</CardHeader>
 			<CardContent>
 				<TimelineChart data={stats.timeline || []} />
