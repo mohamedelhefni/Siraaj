@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Dashboard</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- TradingView Lightweight Charts -->
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Google Charts for GeoChart -->
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background: #fafafa;
+            color: #374151;
+        }
+
+        .metric-card {
+            transition: all 0.2s ease;
+            border: 1px solid #e5e7eb;
+        }
+
+        .metric-card:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .tab-button {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .tab-button.active {
+            background: #5850ec;
+            color: white;
+        }
+
+        .tab-button:not(.active) {
+            color: #6b7280;
+        }
+
+        .tab-button:not(.active):hover {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 240px;
+        }
+
+        .table-row:hover {
+            background-color: #f9fafb;
+        }
+
+        .top-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+        }
+
+        .breakdown-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        .breakdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: #e5e7eb;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #5850ec;
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        .date-picker {
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 14px;
+            background: white;
+        }
+
+        .date-picker:focus {
+            outline: none;
+            border-color: #5850ec;
+            box-shadow: 0 0 0 3px rgba(88, 80, 236, 0.1);
+        }
+
+        .refresh-btn {
+            background: #5850ec;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .refresh-btn:hover {
+            background: #4f46e5;
+        }
+
+        .loading-spinner {
+            border: 2px solid #f3f4f6;
+            border-top: 2px solid #5850ec;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50">
+    <div x-data="analyticsApp()" x-init="init()" class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white border-b border-gray-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center py-4">
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center">
+                                <span class="text-white font-bold text-sm">A</span>
+                            </div>
+                            <h1 class="text-xl font-semibold text-gray-900">Analytics</h1>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-2 text-sm text-gray-600">
+                            <input type="date" x-model="startDate" class="date-picker" />
+                            <span>to</span>
+                            <input type="date" x-model="endDate" class="date-picker" />
+                        </div>
+                        <button @click="loadStats()" class="refresh-btn flex items-center space-x-2"
+                            :disabled="loading">
+                            <div x-show="loading" class="loading-spinner"></div>
+                            <span x-show="!loading">Refresh</span>
+                            <span x-show="loading">Loading...</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Period Summary -->
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2" x-text="`${getDateRangeText()}`"></h2>
+                <p class="text-gray-600"
+                    x-text="`${(stats?.total_events || 0).toLocaleString()} total events from ${(stats?.unique_users || 0).toLocaleString()} unique visitors`">
+                </p>
+            </div>
+
+            <!-- Top Stats -->
+            <div class="top-stats mb-8">
+                <div class="bg-white rounded-lg p-6 metric-card">
+                    <div class="text-3xl font-bold text-gray-900 mb-1"
+                        x-text="(stats?.unique_users || 0).toLocaleString()"></div>
+                    <div class="text-sm text-gray-600">Unique visitors</div>
+                </div>
+                <div class="bg-white rounded-lg p-6 metric-card">
+                    <div class="text-3xl font-bold text-gray-900 mb-1"
+                        x-text="(stats?.total_events || 0).toLocaleString()"></div>
+                    <div class="text-sm text-gray-600">Total page views</div>
+                </div>
+                <div class="bg-white rounded-lg p-6 metric-card">
+                    <div class="text-3xl font-bold text-gray-900 mb-1" x-text="getAvgEventsPerUser()"></div>
+                    <div class="text-sm text-gray-600">Views per visitor</div>
+                </div>
+                <div class="bg-white rounded-lg p-6 metric-card">
+                    <div class="text-3xl font-bold text-gray-900 mb-1" x-text="getBounceRate()"></div>
+                    <div class="text-sm text-gray-600">Bounce rate</div>
+                </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="bg-white rounded-lg p-6 mb-8 border border-gray-200">
+                <div class="chart-container">
+                    <canvas x-ref="timelineChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="mb-6">
+                <div class="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
+                    <button @click="activeTab = 'sources'" :class="{'active': activeTab === 'sources'}"
+                        class="tab-button">
+                        Top Sources
+                    </button>
+                    <button @click="activeTab = 'pages'" :class="{'active': activeTab === 'pages'}" class="tab-button">
+                        Top Pages
+                    </button>
+                    <button @click="activeTab = 'countries'" :class="{'active': activeTab === 'countries'}"
+                        class="tab-button">
+                        Countries
+                    </button>
+                    <button @click="activeTab = 'browsers'" :class="{'active': activeTab === 'browsers'}"
+                        class="tab-button">
+                        Browsers
+                    </button>
+                    <button @click="activeTab = 'events'" :class="{'active': activeTab === 'events'}"
+                        class="tab-button">
+                        Events
+                    </button>
+                </div>
+            </div>
+
+            <!-- Content Sections -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Sources -->
+                <div x-show="activeTab === 'sources'" class="bg-white rounded-lg border border-gray-200">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900">Top Sources</h3>
+                        <p class="text-sm text-gray-600">by unique visitors</p>
+                    </div>
+                    <div class="p-6">
+                        <template x-for="(source, index) in stats?.top_sources?.slice(0, 8) || []" :key="source.name">
+                            <div class="breakdown-item">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-4 h-4 bg-gray-300 rounded-full flex items-center justify-center">
+                                        <span class="text-xs text-gray-600" x-text="index + 1"></span>
+                                    </div>
+                                    <span class="font-medium text-gray-900" x-text="source.name || 'Direct'"></span>
+                                </div>
+                                <div class="text-right">
+                                    <div class="font-semibold text-gray-900" x-text="source.count.toLocaleString()">
+                                    </div>
+                                    <div class="text-sm text-gray-500"
+                                        x-text="`${getPercentage(source.count, stats?.total_events)}%`"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Pages -->
+                <div x-show="activeTab === 'pages'" class="bg-white rounded-lg border border-gray-200">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900">Top Pages</h3>
+                        <p class="text-sm text-gray-600">by unique visitors</p>
+                    </div>
+                    <div class="p-6">
+                        <template x-for="(page, index) in stats?.top_pages?.slice(0, 8) || []" :key="page.url">
+                            <div class="breakdown-item">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-4 h-4 bg-gray-300 rounded-full flex items-center justify-center">
+                                        <span class="text-xs text-gray-600" x-text="index + 1"></span>
+                                    </div>
+                                    <span class="font-medium text-gray-900 truncate max-w-xs" x-text="page.url"></span>
+                                </div>
+                                <div class="text-right">
+                                    <div class="font-semibold text-gray-900" x-text="page.count.toLocaleString()"></div>
+                                    <div class="text-sm text-gray-500"
+                                        x-text="`${getPercentage(page.count, stats?.total_events)}%`"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Countries -->
+                <div x-show="activeTab === 'countries'" class="bg-white rounded-lg border border-gray-200">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900">Countries</h3>
+                        <p class="text-sm text-gray-600">by unique visitors</p>
+                    </div>
+                    <div class="p-6">
+                        <template x-for="(country, index) in stats?.top_countries?.slice(0, 8) || []"
+                            :key="country.name">
+                            <div class="breakdown-item">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-4 h-4 bg-gray-300 rounded-full flex items-center justify-center">
+                                        <span class="text-xs text-gray-600" x-text="index + 1"></span>
+                                    </div>
+                                    <span class="font-medium text-gray-900" x-text="country.name"></span>
+                                </div>
+                                <div class="text-right">
+                                    <div class="font-semibold text-gray-900" x-text="country.count.toLocaleString()">
+                                    </div>
+                                    <div class="text-sm text-gray-500"
+                                        x-text="`${getPercentage(country.count, stats?.total_events)}%`"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Browsers -->
+                <div x-show="activeTab === 'browsers'" class="bg-white rounded-lg border border-gray-200">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900">Browsers</h3>
+                        <p class="text-sm text-gray-600">by unique visitors</p>
+                    </div>
+                    <div class="p-6">
+                        <template x-for="(browser, index) in stats?.browsers?.slice(0, 8) || []" :key="browser.name">
+                            <div class="breakdown-item">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-4 h-4 bg-gray-300 rounded-full flex items-center justify-center">
+                                        <span class="text-xs text-gray-600" x-text="index + 1"></span>
+                                    </div>
+                                    <span class="font-medium text-gray-900" x-text="browser.name"></span>
+                                </div>
+                                <div class="text-right">
+                                    <div class="font-semibold text-gray-900" x-text="browser.count.toLocaleString()">
+                                    </div>
+                                    <div class="text-sm text-gray-500"
+                                        x-text="`${getPercentage(browser.count, stats?.total_events)}%`"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Events -->
+                <div x-show="activeTab === 'events'" class="bg-white rounded-lg border border-gray-200">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900">Top Events</h3>
+                        <p class="text-sm text-gray-600">by total count</p>
+                    </div>
+                    <div class="p-6">
+                        <template x-for="(event, index) in stats?.top_events?.slice(0, 8) || []" :key="event.name">
+                            <div class="breakdown-item">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-4 h-4 bg-gray-300 rounded-full flex items-center justify-center">
+                                        <span class="text-xs text-gray-600" x-text="index + 1"></span>
+                                    </div>
+                                    <span class="font-medium text-gray-900" x-text="event.name"></span>
+                                </div>
+                                <div class="text-right">
+                                    <div class="font-semibold text-gray-900" x-text="event.count.toLocaleString()">
+                                    </div>
+                                    <div class="text-sm text-gray-500"
+                                        x-text="`${getPercentage(event.count, stats?.total_events)}%`"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Empty state for when no tab is active -->
+                <div x-show="!['sources', 'pages', 'countries', 'browsers', 'events'].includes(activeTab)"
+                    class="bg-white rounded-lg border border-gray-200 p-6 lg:col-span-2">
+                    <div class="text-center text-gray-500">
+                        <p>Select a tab to view detailed analytics</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div x-show="loading" class="fixed inset-0 bg-black bg-opacity-25 flex items-center justify-center z-50">
+                <div class="bg-white rounded-lg p-6 flex items-center space-x-3">
+                    <div class="loading-spinner"></div>
+                    <span class="text-gray-700">Loading analytics...</span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function analyticsApp() {
+            return {
+                stats: null,
+                loading: true,
+                activeTab: 'sources',
+                startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                endDate: new Date().toISOString().split('T')[0],
+                timelineChart: null,
+
+                init() {
+                    this.loadStats();
+                },
+
+                getDateRangeText() {
+                    const start = new Date(this.startDate);
+                    const end = new Date(this.endDate);
+                    const options = { month: 'short', day: 'numeric' };
+
+                    if (start.getFullYear() !== end.getFullYear()) {
+                        return `${start.toLocaleDateString('en-US', { ...options, year: 'numeric' })} - ${end.toLocaleDateString('en-US', { ...options, year: 'numeric' })}`;
+                    } else if (start.getMonth() !== end.getMonth()) {
+                        return `${start.toLocaleDateString('en-US', options)} - ${end.toLocaleDateString('en-US', { ...options, year: 'numeric' })}`;
+                    } else {
+                        return `${start.toLocaleDateString('en-US', options)} - ${end.getDate()}, ${end.getFullYear()}`;
+                    }
+                },
+
+                getAvgEventsPerUser() {
+                    if (!this.stats?.unique_users || !this.stats?.total_events) return '0';
+                    return (this.stats.total_events / this.stats.unique_users).toFixed(1);
+                },
+
+                getBounceRate() {
+                    // Simple bounce rate calculation - users with only 1 event
+                    if (!this.stats?.unique_users || !this.stats?.total_events) return '0%';
+                    const estimatedBounces = Math.max(0, this.stats.unique_users - (this.stats.total_events - this.stats.unique_users));
+                    const bounceRate = (estimatedBounces / this.stats.unique_users) * 100;
+                    return Math.round(bounceRate) + '%';
+                },
+
+                getPercentage(count, total) {
+                    if (!total || !count) return '0';
+                    return Math.round((count / total) * 100);
+                },
+
+                async loadStats() {
+                    this.loading = true;
+                    try {
+                        const response = await fetch(`/api/stats?start=${this.startDate}&end=${this.endDate}`);
+                        this.stats = await response.json();
+                        this.$nextTick(() => {
+                            this.renderChart();
+                        });
+                    } catch (error) {
+                        console.error('Error loading stats:', error);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                renderChart() {
+                    if (!this.$refs.timelineChart) return;
+
+                    if (this.timelineChart) {
+                        this.timelineChart.destroy();
+                    }
+
+                    const timelineData = this.stats?.timeline || [];
+
+                    this.timelineChart = new Chart(this.$refs.timelineChart, {
+                        type: 'line',
+                        data: {
+                            labels: timelineData.map(d => {
+                                const date = new Date(d.date);
+                                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                            }),
+                            datasets: [{
+                                label: 'Visitors',
+                                data: timelineData.map(d => d.count),
+                                borderColor: '#5850ec',
+                                backgroundColor: 'rgba(88, 80, 236, 0.1)',
+                                tension: 0.4,
+                                fill: true,
+                                pointBackgroundColor: '#5850ec',
+                                pointBorderColor: '#ffffff',
+                                pointBorderWidth: 2,
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                                borderWidth: 2,
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: {
+                                intersect: false,
+                                mode: 'index',
+                            },
+                            plugins: {
+                                legend: {
+                                    display: false
+                                },
+                                tooltip: {
+                                    backgroundColor: '#ffffff',
+                                    titleColor: '#1f2937',
+                                    bodyColor: '#4b5563',
+                                    borderColor: '#e5e7eb',
+                                    borderWidth: 1,
+                                    padding: 12,
+                                    displayColors: false,
+                                    titleFont: {
+                                        weight: '600'
+                                    },
+                                    bodyFont: {
+                                        weight: '500'
+                                    },
+                                    callbacks: {
+                                        title: function (tooltipItems) {
+                                            return tooltipItems[0].label;
+                                        },
+                                        label: function (context) {
+                                            return `${context.parsed.y.toLocaleString()} visitors`;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    grid: {
+                                        display: false,
+                                        drawBorder: false
+                                    },
+                                    ticks: {
+                                        color: '#9ca3af',
+                                        font: {
+                                            size: 12
+                                        }
+                                    }
+                                },
+                                y: {
+                                    grid: {
+                                        color: '#f3f4f6',
+                                        drawBorder: false
+                                    },
+                                    ticks: {
+                                        color: '#9ca3af',
+                                        font: {
+                                            size: 12
+                                        },
+                                        callback: function (value) {
+                                            return value.toLocaleString();
+                                        }
+                                    },
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"time"
@@ -13,7 +14,7 @@ import (
 	_ "github.com/duckdb/duckdb-go/v2"
 )
 
-//go:embed ui/*
+//go:embed all:ui/dashboard
 var uiFiles embed.FS
 
 type Event struct {
@@ -549,9 +550,6 @@ func main() {
 		json.NewEncoder(w).Encode(stats)
 	})
 
-	// Serve UI
-	http.Handle("/", http.FileServer(http.FS(uiFiles)))
-
 	// Debug endpoint to show all events
 	http.HandleFunc("/api/debug/events", func(w http.ResponseWriter, r *http.Request) {
 		rows, err := analytics.db.Query("SELECT id, timestamp, event_name, user_id FROM events ORDER BY timestamp DESC LIMIT 50")
@@ -595,16 +593,28 @@ func main() {
 		})
 	})
 
+	// Serve dashboard (SvelteKit app)
+	dashboardFS, err := fs.Sub(uiFiles, "ui/dashboard")
+	if err != nil {
+		log.Printf("Warning: Could not load dashboard: %v", err)
+	} else {
+		http.Handle("/dashboard/", http.StripPrefix("/dashboard", http.FileServer(http.FS(dashboardFS))))
+	}
+
+	// Serve UI (must be last as it's a catch-all)
+	http.Handle("/", http.FileServer(http.FS(uiFiles)))
+
 	port := "8080"
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("📊 Analytics Server")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Printf("🌐 Dashboard:  http://localhost:%s\n", port)
+	fmt.Printf("� Dashboard:  http://localhost:%s/dashboard/\n", port)
 	fmt.Printf("📡 API Track:  http://localhost:%s/api/track\n", port)
 	fmt.Printf("📈 API Stats:  http://localhost:%s/api/stats\n", port)
 	fmt.Printf("❤️  Health:     http://localhost:%s/api/health\n", port)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("✓ Server ready - Using official DuckDB Go driver")
+	fmt.Println("✓ Svelte Dashboard embedded and ready")
 	fmt.Println()
 
 	// Apply middleware: logging first, then CORS
