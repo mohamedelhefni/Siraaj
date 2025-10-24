@@ -16,6 +16,7 @@
     constructor(config = {}) {
       this.config = {
         apiUrl: config.apiUrl || 'http://localhost:8080',
+        projectId: config.projectId || 'default',
         autoTrack: config.autoTrack !== false,
         bufferSize: config.bufferSize || 10,
         flushInterval: config.flushInterval || 30000, // 30 seconds
@@ -61,7 +62,8 @@
         browser: this._getBrowser(),
         os: this._getOS(),
         device: this._getDevice(),
-        properties: JSON.stringify(properties)
+        properties: JSON.stringify(properties),
+        project_id: this.config.projectId
       };
 
       this._log('Tracking event:', event);

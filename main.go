@@ -34,6 +34,7 @@ type Event struct {
 	OS         string    `json:"os"`
 	Device     string    `json:"device"`
 	Properties string    `json:"properties"` // JSON string
+	ProjectID  string    `json:"project_id"`
 }
 
 type Analytics struct {
@@ -84,7 +85,8 @@ func NewAnalytics(dbPath string) (*Analytics, error) {
 			browser VARCHAR,
 			os VARCHAR,
 			device VARCHAR,
-			properties JSON
+			properties JSON,
+			project_id VARCHAR DEFAULT 'default'
 		)`,
 		// Create sequence
 		`CREATE SEQUENCE IF NOT EXISTS id_sequence START 1`,
@@ -94,6 +96,7 @@ func NewAnalytics(dbPath string) (*Analytics, error) {
 		`CREATE INDEX IF NOT EXISTS idx_user_id ON events(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_country ON events(country)`,
 		`CREATE INDEX IF NOT EXISTS idx_referrer ON events(referrer)`,
+		`CREATE INDEX IF NOT EXISTS idx_project_id ON events(project_id)`,
 	}
 
 	for i, stmt := range statements {
@@ -116,9 +119,14 @@ func (a *Analytics) Close() error {
 func (a *Analytics) TrackEvent(event Event) error {
 	query := `
 		INSERT INTO events (id, timestamp, event_name, user_id, session_id, url, referrer, 
-			user_agent, ip, country, browser, os, device, properties)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			user_agent, ip, country, browser, os, device, properties, project_id)
+		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
+
+	// Default project_id if not provided
+	if event.ProjectID == "" {
+		event.ProjectID = "default"
+	}
 
 	_, err := a.db.Exec(query,
 		event.Timestamp,
@@ -134,6 +142,7 @@ func (a *Analytics) TrackEvent(event Event) error {
 		event.OS,
 		event.Device,
 		event.Properties,
+		event.ProjectID,
 	)
 
 	if err != nil {
@@ -157,8 +166,8 @@ func (a *Analytics) TrackEventBatch(events []Event) error {
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO events (id, timestamp, event_name, user_id, session_id, url, referrer, 
-			user_agent, ip, country, browser, os, device, properties)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			user_agent, ip, country, browser, os, device, properties, project_id)
+		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -166,6 +175,11 @@ func (a *Analytics) TrackEventBatch(events []Event) error {
 	defer stmt.Close()
 
 	for _, event := range events {
+		// Default project_id if not provided
+		if event.ProjectID == "" {
+			event.ProjectID = "default"
+		}
+
 		_, err := stmt.Exec(
 			event.Timestamp,
 			event.EventName,
@@ -180,6 +194,7 @@ func (a *Analytics) TrackEventBatch(events []Event) error {
 			event.OS,
 			event.Device,
 			event.Properties,
+			event.ProjectID,
 		)
 		if err != nil {
 			log.Printf("Error inserting batch event: %v", err)
@@ -190,18 +205,43 @@ func (a *Analytics) TrackEventBatch(events []Event) error {
 	return tx.Commit()
 }
 
-func (a *Analytics) GetStats(startDate, endDate time.Time, limit int) (map[string]interface{}, error) {
+func (a *Analytics) GetStats(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error) {
 	stats := make(map[string]interface{})
 
 	if limit <= 0 {
 		limit = 10
 	}
 
+	// Build WHERE clause based on filters
+	whereClause := "timestamp BETWEEN ? AND ?"
+	args := []interface{}{startDate, endDate}
+	
+	if projectID, ok := filters["project"]; ok && projectID != "" {
+		whereClause += " AND project_id = ?"
+		args = append(args, projectID)
+	}
+	if source, ok := filters["source"]; ok && source != "" {
+		whereClause += " AND referrer = ?"
+		args = append(args, source)
+	}
+	if country, ok := filters["country"]; ok && country != "" {
+		whereClause += " AND country = ?"
+		args = append(args, country)
+	}
+	if browser, ok := filters["browser"]; ok && browser != "" {
+		whereClause += " AND browser = ?"
+		args = append(args, browser)
+	}
+	if eventName, ok := filters["event"]; ok && eventName != "" {
+		whereClause += " AND event_name = ?"
+		args = append(args, eventName)
+	}
+
 	// Use a single query with CTEs for better performance
-	aggregateQuery := `
+	aggregateQuery := fmt.Sprintf(`
 	WITH date_filtered AS (
 		SELECT * FROM events 
-		WHERE timestamp BETWEEN ? AND ?
+		WHERE %s
 	),
 	event_stats AS (
 		SELECT 
@@ -210,10 +250,10 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int) (map[strin
 		FROM date_filtered
 	)
 	SELECT total_events, unique_users FROM event_stats;
-	`
+	`, whereClause)
 
 	var totalEvents, uniqueUsers int
-	err := a.db.QueryRow(aggregateQuery, startDate, endDate).Scan(&totalEvents, &uniqueUsers)
+	err := a.db.QueryRow(aggregateQuery, args...).Scan(&totalEvents, &uniqueUsers)
 	if err != nil {
 		return nil, err
 	}
@@ -221,14 +261,17 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int) (map[strin
 	stats["unique_users"] = uniqueUsers
 
 	// Top events with optimized query
-	rows, err := a.db.Query(`
+	query := fmt.Sprintf(`
 		SELECT event_name, COUNT(*) as count 
 		FROM events 
-		WHERE timestamp BETWEEN ? AND ?
+		WHERE %s
 		GROUP BY event_name 
 		ORDER BY count DESC 
 		LIMIT ?
-	`, startDate, endDate, limit)
+	`, whereClause)
+	queryArgs := append(args, limit)
+	
+	rows, err := a.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -249,15 +292,17 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int) (map[strin
 	stats["top_events"] = topEvents
 
 	// Events over time using date_trunc for daily aggregation
-	rows, err = a.db.Query(`
+	query = fmt.Sprintf(`
 		SELECT 
-			strftime(DATE_TRUNC('day', timestamp), '%Y-%m-%d') as date, 
+			strftime(DATE_TRUNC('day', timestamp), '%%Y-%%m-%%d') as date, 
 			COUNT(*) as count
 		FROM events 
-		WHERE timestamp BETWEEN ? AND ?
+		WHERE %s
 		GROUP BY date 
 		ORDER BY date
-	`, startDate, endDate)
+	`, whereClause)
+	
+	rows, err = a.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -278,14 +323,16 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int) (map[strin
 	stats["timeline"] = timeline
 
 	// Top pages
-	rows, err = a.db.Query(`
+	query = fmt.Sprintf(`
 		SELECT url, COUNT(*) as count 
 		FROM events 
-		WHERE timestamp BETWEEN ? AND ? AND url IS NOT NULL AND url != ''
+		WHERE %s AND url IS NOT NULL AND url != ''
 		GROUP BY url 
 		ORDER BY count DESC 
 		LIMIT ?
-	`, startDate, endDate, limit)
+	`, whereClause)
+	
+	rows, err = a.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -306,14 +353,16 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int) (map[strin
 	stats["top_pages"] = topPages
 
 	// Browsers
-	rows, err = a.db.Query(`
+	query = fmt.Sprintf(`
 		SELECT browser, COUNT(*) as count 
 		FROM events 
-		WHERE timestamp BETWEEN ? AND ? AND browser IS NOT NULL AND browser != ''
+		WHERE %s AND browser IS NOT NULL AND browser != ''
 		GROUP BY browser 
 		ORDER BY count DESC
 		LIMIT ?
-	`, startDate, endDate, limit)
+	`, whereClause)
+	
+	rows, err = a.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -334,14 +383,16 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int) (map[strin
 	stats["browsers"] = browsers
 
 	// Top Countries
-	rows, err = a.db.Query(`
+	query = fmt.Sprintf(`
 		SELECT country, COUNT(*) as count 
 		FROM events 
-		WHERE timestamp BETWEEN ? AND ? AND country IS NOT NULL AND country != ''
+		WHERE %s AND country IS NOT NULL AND country != ''
 		GROUP BY country 
 		ORDER BY count DESC 
 		LIMIT ?
-	`, startDate, endDate, limit)
+	`, whereClause)
+	
+	rows, err = a.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +413,7 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int) (map[strin
 	stats["top_countries"] = topCountries
 
 	// Top Sources (Referrers) with URL parsing
-	rows, err = a.db.Query(`
+	query = fmt.Sprintf(`
 		SELECT 
 			CASE 
 				WHEN referrer = '' OR referrer IS NULL THEN 'Direct'
@@ -370,11 +421,13 @@ func (a *Analytics) GetStats(startDate, endDate time.Time, limit int) (map[strin
 			END as source,
 			COUNT(*) as count 
 		FROM events 
-		WHERE timestamp BETWEEN ? AND ?
+		WHERE %s
 		GROUP BY source 
 		ORDER BY count DESC 
 		LIMIT ?
-	`, startDate, endDate, limit)
+	`, whereClause)
+	
+	rows, err = a.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -479,6 +532,28 @@ func (a *Analytics) GetOnlineUsers(timeWindowMinutes int) (map[string]interface{
 		"time_window_mins": timeWindowMinutes,
 		"cutoff_time":      cutoffTime,
 	}, nil
+}
+
+// GetProjects returns list of distinct project IDs
+func (a *Analytics) GetProjects() ([]string, error) {
+	query := `SELECT DISTINCT project_id FROM events WHERE project_id IS NOT NULL AND project_id != '' ORDER BY project_id`
+	
+	rows, err := a.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var projects []string
+	for rows.Next() {
+		var projectID string
+		if err := rows.Scan(&projectID); err != nil {
+			continue
+		}
+		projects = append(projects, projectID)
+	}
+
+	return projects, nil
 }
 
 func enableCORS(next http.Handler) http.Handler {
@@ -701,7 +776,25 @@ func main() {
 			}
 		}
 
-		stats, err := analytics.GetStats(startDate, endDate, limit)
+		// Parse filters
+		filters := make(map[string]string)
+		if project := r.URL.Query().Get("project"); project != "" {
+			filters["project"] = project
+		}
+		if source := r.URL.Query().Get("source"); source != "" {
+			filters["source"] = source
+		}
+		if country := r.URL.Query().Get("country"); country != "" {
+			filters["country"] = country
+		}
+		if browser := r.URL.Query().Get("browser"); browser != "" {
+			filters["browser"] = browser
+		}
+		if event := r.URL.Query().Get("event"); event != "" {
+			filters["event"] = event
+		}
+
+		stats, err := analytics.GetStats(startDate, endDate, limit, filters)
 		if err != nil {
 			log.Printf("Error getting stats: %v", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -776,6 +869,19 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(online)
+	})
+
+	// Projects endpoint - list all projects
+	http.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
+		projects, err := analytics.GetProjects()
+		if err != nil {
+			log.Printf("Error getting projects: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(projects)
 	})
 
 	// Debug endpoint to show all events

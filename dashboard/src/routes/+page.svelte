@@ -1,8 +1,8 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { format, subDays } from 'date-fns';
-	import { fetchStats, fetchOnlineUsers } from '$lib/api';
-	import { RefreshCw } from 'lucide-svelte';
+	import { fetchStats, fetchOnlineUsers, fetchProjects } from '$lib/api';
+	import { RefreshCw, X } from 'lucide-svelte';
 	import {
 		Card,
 		CardContent,
@@ -11,6 +11,7 @@
 		CardTitle
 	} from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
+	import { Badge } from '$lib/components/ui/badge';
 	import StatsCard from '$lib/components/StatsCard.svelte';
 	import TimelineChart from '$lib/components/TimelineChart.svelte';
 	import TopItemsList from '$lib/components/TopItemsList.svelte';
@@ -32,11 +33,23 @@
 		active_sessions: 0
 	});
 
+	let projects = $state([]);
+
 	let loading = $state(true);
 	let error = $state(null);
 	let autoRefresh = $state(true);
 	let refreshInterval = $state(null);
+	let refreshIntervalTime = $state(30000); // 30 seconds default
 	let lastRefresh = $state(new Date());
+
+	// Filter states
+	let activeFilters = $state({
+		source: null,
+		country: null,
+		browser: null,
+		event: null,
+		project: null
+	});
 
 	// Default to last 7 days
 	let startDate = $state(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
@@ -47,7 +60,7 @@
 		error = null;
 		try {
 			const [statsData, onlineUsersData] = await Promise.all([
-				fetchStats(startDate, endDate, 50),
+				fetchStats(startDate, endDate, 50, activeFilters),
 				fetchOnlineUsers(5)
 			]);
 			stats = statsData;
@@ -65,12 +78,11 @@
 		if (refreshInterval) {
 			clearInterval(refreshInterval);
 		}
-		
-		if (autoRefresh) {
-			// Refresh every 30 seconds
+
+		if (autoRefresh && refreshIntervalTime > 0) {
 			refreshInterval = setInterval(() => {
 				loadStats();
-			}, 30000);
+			}, refreshIntervalTime);
 		}
 	}
 
@@ -79,7 +91,34 @@
 		setupAutoRefresh();
 	}
 
+	function handleRefreshIntervalChange(event) {
+		refreshIntervalTime = parseInt(event.target.value);
+		setupAutoRefresh();
+	}
+
+	function addFilter(type, value) {
+		activeFilters[type] = value;
+		loadStats();
+	}
+
+	function removeFilter(type) {
+		activeFilters[type] = null;
+		loadStats();
+	}
+
+	function clearAllFilters() {
+		activeFilters = {
+			source: null,
+			country: null,
+			browser: null,
+			event: null,
+			project: null
+		};
+		loadStats();
+	}
+
 	onMount(() => {
+		loadProjects();
 		loadStats();
 		setupAutoRefresh();
 	});
@@ -89,6 +128,14 @@
 			clearInterval(refreshInterval);
 		}
 	});
+
+	async function loadProjects() {
+		try {
+			projects = await fetchProjects();
+		} catch (err) {
+			console.error('Failed to load projects:', err);
+		}
+	}
 
 	function handleDateChange(event) {
 		startDate = event.detail.startDate;
@@ -104,8 +151,30 @@
 			<h1 class="text-4xl font-bold tracking-tight">Siraaj Dashboard</h1>
 			<p class="text-muted-foreground mt-2">Real-time insights and analytics powered by DuckDB</p>
 		</div>
-		<div class="flex items-center gap-2">
+		<div class="flex flex-wrap items-center gap-2">
 			<DateRangePicker {startDate} {endDate} on:change={handleDateChange} />
+			
+			<!-- Project Selector -->
+			{#if projects.length > 0}
+				<select
+					class="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+					value={activeFilters.project || ''}
+					onchange={(e) => {
+						if (e.target.value) {
+							addFilter('project', e.target.value);
+						} else {
+							removeFilter('project');
+						}
+					}}
+				>
+					<option value="">All Projects</option>
+					{#each projects as project}
+						<option value={project}>{project}</option>
+					{/each}
+				</select>
+			{/if}
+
+			<!-- Auto-refresh controls -->
 			<div class="flex items-center gap-2 rounded-lg border p-2">
 				<Button
 					variant={autoRefresh ? 'default' : 'outline'}
@@ -116,14 +185,75 @@
 					<RefreshCw class={autoRefresh ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
 					{autoRefresh ? 'Auto' : 'Manual'}
 				</Button>
+				<select
+					class="h-9 rounded-md border border-input bg-background px-2 py-1 text-xs"
+					value={refreshIntervalTime}
+					onchange={handleRefreshIntervalChange}
+				>
+					<option value="10000">10s</option>
+					<option value="30000">30s</option>
+					<option value="60000">1min</option>
+					<option value="300000">5min</option>
+					<option value="0">Off</option>
+				</select>
 				{#if !loading}
-					<span class="text-muted-foreground text-xs">
-						Updated {format(lastRefresh, 'HH:mm:ss')}
+					<span class="text-muted-foreground text-xs whitespace-nowrap">
+						{format(lastRefresh, 'HH:mm:ss')}
 					</span>
 				{/if}
 			</div>
 		</div>
 	</div>
+
+	<!-- Active Filters -->
+	{#if Object.values(activeFilters).some(v => v !== null)}
+		<div class="flex flex-wrap items-center gap-2">
+			<span class="text-sm text-muted-foreground">Active Filters:</span>
+			{#if activeFilters.project}
+				<Badge variant="secondary" class="gap-1">
+					Project: {activeFilters.project}
+					<button onclick={() => removeFilter('project')} class="ml-1 hover:text-destructive">
+						<X class="h-3 w-3" />
+					</button>
+				</Badge>
+			{/if}
+			{#if activeFilters.source}
+				<Badge variant="secondary" class="gap-1">
+					Source: {activeFilters.source}
+					<button onclick={() => removeFilter('source')} class="ml-1 hover:text-destructive">
+						<X class="h-3 w-3" />
+					</button>
+				</Badge>
+			{/if}
+			{#if activeFilters.country}
+				<Badge variant="secondary" class="gap-1">
+					Country: {activeFilters.country}
+					<button onclick={() => removeFilter('country')} class="ml-1 hover:text-destructive">
+						<X class="h-3 w-3" />
+					</button>
+				</Badge>
+			{/if}
+			{#if activeFilters.browser}
+				<Badge variant="secondary" class="gap-1">
+					Browser: {activeFilters.browser}
+					<button onclick={() => removeFilter('browser')} class="ml-1 hover:text-destructive">
+						<X class="h-3 w-3" />
+					</button>
+				</Badge>
+			{/if}
+			{#if activeFilters.event}
+				<Badge variant="secondary" class="gap-1">
+					Event: {activeFilters.event}
+					<button onclick={() => removeFilter('event')} class="ml-1 hover:text-destructive">
+						<X class="h-3 w-3" />
+					</button>
+				</Badge>
+			{/if}
+			<Button variant="ghost" size="sm" onclick={clearAllFilters}>
+				Clear All
+			</Button>
+		</div>
+	{/if}
 
 	{#if loading}
 		<div class="flex items-center justify-center py-20">
@@ -195,7 +325,12 @@
 					<CardDescription>Most tracked events</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<TopItemsList items={stats.top_events || []} labelKey="name" valueKey="count" />
+					<TopItemsList 
+						items={stats.top_events || []} 
+						labelKey="name" 
+						valueKey="count"
+						onclick={(item) => addFilter('event', item.name)}
+					/>
 				</CardContent>
 			</Card>
 
@@ -224,6 +359,7 @@
 						valueKey="count"
 						maxItems={5}
 						type="browser"
+						onclick={(item) => addFilter('browser', item.name)}
 					/>
 				</CardContent>
 			</Card>
@@ -240,6 +376,7 @@
 						valueKey="count"
 						maxItems={5}
 						type="country"
+						onclick={(item) => addFilter('country', item.name)}
 					/>
 				</CardContent>
 			</Card>
@@ -256,6 +393,7 @@
 						valueKey="count"
 						maxItems={5}
 						type="source"
+						onclick={(item) => addFilter('source', item.name)}
 					/>
 				</CardContent>
 			</Card>

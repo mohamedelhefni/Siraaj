@@ -12,7 +12,8 @@
 		labelKey = 'name',
 		valueKey = 'count',
 		maxItems = 10,
-		type = 'default'
+		type = 'default',
+		onclick = null
 	} = $props();
 
 	const displayItems = $derived(items.slice(0, maxItems));
@@ -28,6 +29,12 @@
 		brave: '🦁',
 		unknown: '🌍'
 	};
+
+	function handleClick(item) {
+		if (onclick) {
+			onclick(item);
+		}
+	}
 </script>
 
 <div class="space-y-2">
@@ -43,24 +50,30 @@
 			{@const browserIcon =
 				type === 'browser' ? browserIcons[getBrowserName(item[labelKey])] : null}
 
-			<div class="flex items-center justify-between space-x-2">
+			<div 
+				class="flex items-center justify-between space-x-2 {onclick ? 'cursor-pointer hover:bg-accent rounded-md p-1 -m-1 transition-colors' : ''}"
+				onclick={() => handleClick(item)}
+				onkeydown={(e) => e.key === 'Enter' && handleClick(item)}
+				role="button"
+				tabindex="0"
+			>
 				<div class="min-w-0 flex-1">
 					<div class="mb-1 flex items-center justify-between">
 						<div class="flex min-w-0 flex-1 items-center gap-2">
 							{#if countryFlag}
-								<span class="flex-shrink-0 text-lg">{countryFlag}</span>
+								<span class="shrink-0 text-lg">{countryFlag}</span>
 							{:else if browserIcon}
-								<span class="flex-shrink-0 text-base">{browserIcon}</span>
+								<span class="shrink-0 text-base">{browserIcon}</span>
 							{:else if faviconUrl}
-								<img src={faviconUrl} alt="" class="h-4 w-4 flex-shrink-0" />
+								<img src={faviconUrl} alt="" class="h-4 w-4 shrink-0" />
 							{:else if type === 'source' && item[labelKey] === 'Direct'}
-								<span class="flex-shrink-0 text-base">🔗</span>
+								<span class="shrink-0 text-base">🔗</span>
 							{/if}
 							<span class="truncate text-sm font-medium" title={displayLabel}>
 								{i + 1}. {displayLabel}
 							</span>
 						</div>
-						<span class="text-muted-foreground ml-2 flex-shrink-0 text-sm">
+						<span class="text-muted-foreground ml-2 shrink-0 text-sm">
 							{item[valueKey]?.toLocaleString()} ({percentage}%)
 						</span>
 					</div>
