@@ -2,10 +2,13 @@
 	import { onMount } from 'svelte';
 	import * as d3 from 'd3';
 	import * as topojson from 'topojson-client';
+	import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-svelte';
 
 	let { data = [], onclick = null } = $props();
 	let svgElement = $state();
 	let mapContainer = $state();
+	let zoomBehavior = $state();
+	let svgSelection = $state();
 
 	// World map TopoJSON URL (using Natural Earth data)
 	const WORLD_MAP_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
@@ -20,40 +23,76 @@
 		return name;
 	}
 
+	function handleZoomIn() {
+		if (svgSelection && zoomBehavior) {
+			svgSelection.transition().duration(300).call(zoomBehavior.scaleBy, 1.5);
+		}
+	}
+
+	function handleZoomOut() {
+		if (svgSelection && zoomBehavior) {
+			svgSelection.transition().duration(300).call(zoomBehavior.scaleBy, 0.67);
+		}
+	}
+
+	function handleResetZoom() {
+		if (svgSelection && zoomBehavior) {
+			svgSelection.transition().duration(500).call(zoomBehavior.transform, d3.zoomIdentity);
+		}
+	}
+
 	async function drawMap() {
 		if (!svgElement || !mapContainer) return;
 
-		// Clear previous map
-		d3.select(svgElement).selectAll('*').remove();
-
-		const width = mapContainer.clientWidth;
-		const height = 400;
-
-		const svg = d3
-			.select(svgElement)
-			.attr('width', width)
-			.attr('height', height)
-			.attr('viewBox', [0, 0, width, height]);
-
-		// Create projection
-		const projection = d3
-			.geoNaturalEarth1()
-			.scale(width / 6)
-			.translate([width / 2, height / 2]);
-
-		const path = d3.geoPath(projection);
-
-		// Create color scale based on data
-		const maxCount = d3.max(data, (d) => d.count) || 1;
-		const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, maxCount]);
-
-		// Create a map of country data for quick lookup
-		// Normalize country names (replace Israel with Palestine)
-		const countryDataMap = new Map(
-			data.map((d) => [normalizeCountryName(d.country).toLowerCase(), d.count])
-		);
-
 		try {
+			// Clear previous map
+			d3.select(svgElement).selectAll('*').remove();
+
+			const width = mapContainer.clientWidth;
+			const height = 400;
+
+			if (width === 0 || height === 0) {
+				console.warn('Map container has zero dimensions');
+				return;
+			}
+
+			svgSelection = d3
+				.select(svgElement)
+				.attr('width', width)
+				.attr('height', height)
+				.attr('viewBox', [0, 0, width, height]);
+
+			// Create a container group for zoom
+			const g = svgSelection.append('g');
+
+			// Create projection
+			const projection = d3
+				.geoNaturalEarth1()
+				.scale(width / 6)
+				.translate([width / 2, height / 2]);
+
+			const path = d3.geoPath(projection);
+
+			// Setup zoom behavior
+			zoomBehavior = d3
+				.zoom()
+				.scaleExtent([1, 8]) // Min and max zoom levels
+				.on('zoom', (event) => {
+					g.attr('transform', event.transform);
+				});
+
+			svgSelection.call(zoomBehavior);
+
+			// Create color scale based on data
+			const maxCount = d3.max(data, (d) => d.count) || 1;
+			const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, maxCount]);
+
+			// Create a map of country data for quick lookup
+			// Normalize country names (replace Israel with Palestine)
+			const countryDataMap = new Map(
+				data.map((d) => [normalizeCountryName(d.country).toLowerCase(), d.count])
+			);
+
 			// Load world map data
 			const worldData = await d3.json(WORLD_MAP_URL);
 			const countries = topojson.feature(worldData, worldData.objects.countries);
@@ -72,10 +111,8 @@
 				.style('opacity', 0)
 				.style('z-index', '1000');
 
-			// Draw countries
-			svg
-				.append('g')
-				.selectAll('path')
+			// Draw countries in the zoomable group
+			g.selectAll('path')
 				.data(countries.features)
 				.join('path')
 				.attr('d', path)
@@ -143,7 +180,7 @@
 			const legendAxis = d3.axisBottom(legendScale).ticks(5).tickFormat(d3.format('.0f'));
 
 			// Create gradient for legend
-			const defs = svg.append('defs');
+			const defs = svgSelection.append('defs');
 			const linearGradient = defs
 				.append('linearGradient')
 				.attr('id', 'legend-gradient')
@@ -158,7 +195,7 @@
 				.attr('stop-color', (d) => colorScale(d * maxCount));
 
 			// Draw legend
-			const legend = svg.append('g').attr('transform', `translate(${legendX},${legendY})`);
+			const legend = svgSelection.append('g').attr('transform', `translate(${legendX},${legendY})`);
 
 			legend
 				.append('rect')
@@ -193,18 +230,23 @@
 			console.error('Error loading map data:', error);
 
 			// Show error message
-			svg
-				.append('text')
-				.attr('x', width / 2)
-				.attr('y', height / 2)
-				.attr('text-anchor', 'middle')
-				.attr('fill', '#6b7280')
-				.text('Error loading map data');
+			if (svgSelection) {
+				svgSelection
+					.append('text')
+					.attr('x', width / 2)
+					.attr('y', height / 2)
+					.attr('text-anchor', 'middle')
+					.attr('fill', '#6b7280')
+					.text('Error loading map data');
+			}
 		}
 	}
 
 	onMount(() => {
-		const cleanup = drawMap();
+		// Use setTimeout to ensure container is fully rendered
+		const timeoutId = setTimeout(() => {
+			drawMap();
+		}, 100);
 
 		// Handle window resize
 		const handleResize = () => {
@@ -214,25 +256,58 @@
 		window.addEventListener('resize', handleResize);
 
 		return () => {
+			clearTimeout(timeoutId);
 			window.removeEventListener('resize', handleResize);
-			if (cleanup) cleanup();
 		};
 	});
 
+	// Watch for data changes using a derived value
+	let previousDataLength = $state(0);
 	$effect(() => {
-		// Redraw when data changes
-		if (data) {
-			drawMap();
+		if (data.length !== previousDataLength && data.length > 0) {
+			previousDataLength = data.length;
+			// Use untrack to prevent infinite loops
+			setTimeout(() => drawMap(), 0);
 		}
 	});
 </script>
 
-<div bind:this={mapContainer} class="h-[400px] w-full">
+<div bind:this={mapContainer} class="relative h-[400px] w-full">
 	{#if data.length === 0}
 		<div class="text-muted-foreground flex h-full items-center justify-center">
 			<p>No geographical data available for the selected period</p>
 		</div>
 	{:else}
 		<svg bind:this={svgElement} class="w-full"></svg>
+		
+		<!-- Zoom Controls -->
+		<div class="absolute right-4 top-4 flex flex-col gap-1 rounded-md bg-white shadow-md">
+			<button
+				onclick={handleZoomIn}
+				class="hover:bg-accent p-2 transition-colors"
+				title="Zoom In"
+				type="button"
+			>
+				<ZoomIn class="h-4 w-4" />
+			</button>
+			<div class="bg-border h-px"></div>
+			<button
+				onclick={handleZoomOut}
+				class="hover:bg-accent p-2 transition-colors"
+				title="Zoom Out"
+				type="button"
+			>
+				<ZoomOut class="h-4 w-4" />
+			</button>
+			<div class="bg-border h-px"></div>
+			<button
+				onclick={handleResetZoom}
+				class="hover:bg-accent p-2 transition-colors"
+				title="Reset Zoom"
+				type="button"
+			>
+				<RotateCcw class="h-4 w-4" />
+			</button>
+		</div>
 	{/if}
 </div>

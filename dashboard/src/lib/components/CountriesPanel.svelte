@@ -6,7 +6,7 @@
 
 	let { countries = [], onclick = null, loading = false } = $props();
 
-	let activeTab = $state('list'); // 'list' or 'map'
+	let activeTab = $state('map'); // Default to 'map' view
 
 	function handleCountryClick(item) {
 		if (onclick) {

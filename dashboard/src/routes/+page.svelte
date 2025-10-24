@@ -230,7 +230,7 @@
 				});
 
 			// Load properties
-			const propertiesPromise = fetchTopProperties(startDate, endDate, 20, activeFilters)
+			const propertiesPromise = fetchTopProperties(startDate, endDate, 5, activeFilters)
 				.then((data) => {
 					topProperties = data || [];
 					propertiesLoading = false;
