@@ -3,10 +3,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import Modal from './Modal.svelte';
 
-	let {
-		properties = [],
-		onPropertyClick = null
-	} = $props();
+	let { properties = [], onPropertyClick = null } = $props();
 
 	let searchTerm = $state('');
 	let selectedKey = $state(null);
@@ -29,9 +26,7 @@
 	const uniqueKeys = $derived([...new Set(properties.map((p) => p.key))].sort());
 
 	// Get total count
-	const totalCount = $derived(
-		filteredProperties.reduce((sum, prop) => sum + (prop.count || 0), 0)
-	);
+	const totalCount = $derived(filteredProperties.reduce((sum, prop) => sum + (prop.count || 0), 0));
 
 	function handlePropertyClick(prop) {
 		if (onPropertyClick) {
@@ -66,7 +61,11 @@
 			<Badge variant="secondary" class="flex w-fit items-center gap-2">
 				<Filter class="h-3 w-3" />
 				{selectedKey}
-				<button type="button" onclick={clearKeyFilter} class="hover:bg-accent ml-1 rounded-full p-0.5">
+				<button
+					type="button"
+					onclick={clearKeyFilter}
+					class="hover:bg-accent ml-1 rounded-full p-0.5"
+				>
 					<X class="h-3 w-3" />
 				</button>
 			</Badge>
@@ -114,7 +113,9 @@
 				>
 					<div class="min-w-0 flex-1">
 						<div class="mb-1 flex items-center gap-2">
-							<code class="bg-muted text-muted-foreground truncate rounded px-2 py-0.5 text-xs font-medium">
+							<code
+								class="bg-muted text-muted-foreground truncate rounded px-2 py-0.5 text-xs font-medium"
+							>
 								{prop.key}
 							</code>
 							<span class="text-primary truncate text-sm font-medium" title={prop.value}>

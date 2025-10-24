@@ -16,6 +16,7 @@
 	import TimelineChart from '$lib/components/TimelineChart.svelte';
 	import TopItemsList from '$lib/components/TopItemsList.svelte';
 	import PropertiesPanel from '$lib/components/PropertiesPanel.svelte';
+	import GeographicalMap from '$lib/components/GeographicalMap.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 
 	let stats = $state({
@@ -665,6 +666,24 @@
 			</CardContent>
 		</Card>
 
+		<!-- Geographical Data Map -->
+		<Card>
+			<CardHeader>
+				<CardTitle>Geographical Distribution</CardTitle>
+				<CardDescription>
+					Visitor distribution across countries
+					{#if stats.top_countries && stats.top_countries.length > 0}
+						· {stats.top_countries.length} countries
+					{/if}
+				</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<GeographicalMap
+					data={stats.top_countries?.map((c) => ({ country: c.name, count: c.count })) || []}
+				/>
+			</CardContent>
+		</Card>
+
 		<!-- Top Events and Pages -->
 		<div class="grid gap-4 md:grid-cols-2">
 			<Card>
@@ -768,10 +787,7 @@
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
-				<PropertiesPanel 
-					properties={topProperties}
-					onPropertyClick={addPropertyFilter}
-				/>
+				<PropertiesPanel properties={topProperties} onPropertyClick={addPropertyFilter} />
 			</CardContent>
 		</Card>
 	{/if}
