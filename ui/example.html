@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,20 +14,24 @@
             padding: 20px;
             background: #f5f5f5;
         }
+
         .container {
             background: white;
             padding: 40px;
             border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
+
         h1 {
             color: #333;
             margin-bottom: 10px;
         }
+
         .subtitle {
             color: #666;
             margin-bottom: 30px;
         }
+
         button {
             background: #8b5cf6;
             color: white;
@@ -38,20 +43,25 @@
             margin: 5px;
             transition: background 0.2s;
         }
+
         button:hover {
             background: #7c3aed;
         }
+
         .section {
             margin: 30px 0;
             padding: 20px;
             background: #f9fafb;
             border-radius: 8px;
         }
+
         .section h3 {
             margin-top: 0;
             color: #374151;
         }
-        input, textarea {
+
+        input,
+        textarea {
             width: 100%;
             padding: 10px;
             margin: 10px 0;
@@ -59,6 +69,7 @@
             border-radius: 6px;
             font-size: 14px;
         }
+
         .code {
             background: #1f2937;
             color: #e5e7eb;
@@ -69,6 +80,7 @@
             font-size: 13px;
             margin: 10px 0;
         }
+
         .info {
             background: #dbeafe;
             color: #1e40af;
@@ -77,15 +89,18 @@
             margin: 10px 0;
             border-left: 4px solid #3b82f6;
         }
+
         a {
             color: #8b5cf6;
             text-decoration: none;
         }
+
         a:hover {
             text-decoration: underline;
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>📊 Analytics JavaScript SDK</h1>
@@ -100,14 +115,14 @@
             <h3>📦 Installation</h3>
             <p>Include the analytics.js script in your HTML:</p>
             <div class="code">
-&lt;script src="analytics.js"&gt;&lt;/script&gt;
-&lt;script&gt;
-  const analytics = new Analytics({
-    apiUrl: 'http://localhost:8080',
-    autoTrack: true,
-    debug: true
-  });
-&lt;/script&gt;
+                &lt;script src="analytics.js"&gt;&lt;/script&gt;
+                &lt;script&gt;
+                const analytics = new Analytics({
+                apiUrl: 'http://localhost:8080',
+                autoTrack: true,
+                debug: true
+                });
+                &lt;/script&gt;
             </div>
         </div>
 
@@ -117,12 +132,12 @@
             <button onclick="trackCustomEvent()">Track Button Click</button>
             <button onclick="trackPurchase()">Track Purchase</button>
             <button onclick="trackSignup()">Track Signup</button>
-            
+
             <div class="code" style="margin-top: 15px;">
-analytics.track('button_clicked', {
-  button_id: 'subscribe_btn',
-  page: '/pricing'
-});
+                analytics.track('button_clicked', {
+                button_id: 'subscribe_btn',
+                page: '/pricing'
+                });
             </div>
         </div>
 
@@ -130,11 +145,11 @@ analytics.track('button_clicked', {
         <div class="section">
             <h3>📄 Track Page Views</h3>
             <button onclick="trackPageView()">Track Page View</button>
-            
+
             <div class="code" style="margin-top: 15px;">
-analytics.pageView();
-// or with custom URL
-analytics.pageView('/custom/path');
+                analytics.pageView();
+                // or with custom URL
+                analytics.pageView('/custom/path');
             </div>
         </div>
 
@@ -143,13 +158,13 @@ analytics.pageView('/custom/path');
             <h3>👤 Identify Users</h3>
             <input type="text" id="userId" placeholder="Enter user ID (e.g., user123)" />
             <button onclick="identifyUser()">Identify User</button>
-            
+
             <div class="code" style="margin-top: 15px;">
-analytics.identify('user123', {
-  email: 'user@example.com',
-  name: 'John Doe',
-  plan: 'premium'
-});
+                analytics.identify('user123', {
+                email: 'user@example.com',
+                name: 'John Doe',
+                plan: 'premium'
+                });
             </div>
         </div>
 
@@ -161,12 +176,12 @@ analytics.identify('user123', {
                 <textarea placeholder="Message" required></textarea>
                 <button type="submit">Submit Form</button>
             </form>
-            
+
             <div class="code" style="margin-top: 15px;">
-analytics.trackForm('contact_form', {
-  form_type: 'contact',
-  fields: ['email', 'message']
-});
+                analytics.trackForm('contact_form', {
+                form_type: 'contact',
+                fields: ['email', 'message']
+                });
             </div>
         </div>
 
@@ -175,12 +190,12 @@ analytics.trackForm('contact_form', {
             <h3>❌ Track Errors</h3>
             <button onclick="trackError()">Track Error</button>
             <button onclick="throwError()">Throw Test Error</button>
-            
+
             <div class="code" style="margin-top: 15px;">
-analytics.trackError(new Error('Something went wrong'), {
-  component: 'checkout',
-  severity: 'high'
-});
+                analytics.trackError(new Error('Something went wrong'), {
+                component: 'checkout',
+                severity: 'high'
+                });
             </div>
         </div>
 
@@ -203,18 +218,19 @@ analytics.trackError(new Error('Something went wrong'), {
         <div class="section">
             <h3>⚙️ Configuration Options</h3>
             <div class="code">
-const analytics = new Analytics({
-  apiUrl: 'http://localhost:8080',     // Your analytics server URL
-  autoTrack: true,                     // Auto-track page views, clicks, errors
-  bufferSize: 10,                      // Buffer events before sending
-  flushInterval: 30000,                // Auto-flush every 30 seconds
-  debug: true                          // Enable debug logging
-});
+                const analytics = new Analytics({
+                apiUrl: 'http://localhost:8080', // Your analytics server URL
+                autoTrack: true, // Auto-track page views, clicks, errors
+                bufferSize: 10, // Buffer events before sending
+                flushInterval: 30000, // Auto-flush every 30 seconds
+                debug: true // Enable debug logging
+                });
             </div>
         </div>
 
         <div class="info" style="margin-top: 30px;">
-            <strong>💡 Tip:</strong> Open the browser console to see debug logs and check the Network tab to see events being sent to the server.
+            <strong>💡 Tip:</strong> Open the browser console to see debug logs and check the Network tab to see events
+            being sent to the server.
         </div>
     </div>
 
@@ -235,7 +251,7 @@ const analytics = new Analytics({
                 page: window.location.pathname,
                 timestamp: new Date().toISOString()
             });
-            alert('Custom event tracked! Check the console.');
+            showNotification('Custom event tracked! Check the console.');
         }
 
         // Track purchase
@@ -247,7 +263,7 @@ const analytics = new Analytics({
                 currency: 'USD',
                 quantity: 1
             });
-            alert('Purchase event tracked!');
+            showNotification('Purchase event tracked!');
         }
 
         // Track signup
@@ -257,13 +273,13 @@ const analytics = new Analytics({
                 plan: 'free',
                 source: 'homepage'
             });
-            alert('Signup event tracked!');
+            showNotification('Signup event tracked!');
         }
 
         // Track page view
         function trackPageView() {
             analytics.pageView();
-            alert('Page view tracked!');
+            showNotification('Page view tracked!');
         }
 
         // Identify user
@@ -276,9 +292,9 @@ const analytics = new Analytics({
                     plan: 'premium',
                     signup_date: new Date().toISOString()
                 });
-                alert(`User ${userId} identified!`);
+                showNotification(`User ${userId} identified!`);
             } else {
-                alert('Please enter a user ID');
+                showNotification('Please enter a user ID', 'error');
             }
         }
 
@@ -289,7 +305,7 @@ const analytics = new Analytics({
                 form_type: 'contact',
                 fields: ['email', 'message']
             });
-            alert('Form submission tracked!');
+            showNotification('Form submission tracked!');
         }
 
         // Track error
@@ -299,7 +315,7 @@ const analytics = new Analytics({
                 severity: 'medium',
                 user_action: 'button_click'
             });
-            alert('Error tracked!');
+            showNotification('Error tracked!');
         }
 
         // Throw test error (will be auto-tracked)
@@ -310,7 +326,7 @@ const analytics = new Analytics({
                 // Error will be caught by global error handler
                 console.error(e);
             }
-            alert('Test error thrown and tracked!');
+            showNotification('Test error thrown and tracked!');
         }
 
         // E-commerce tracking examples
@@ -323,7 +339,7 @@ const analytics = new Analytics({
                 quantity: 1,
                 currency: 'USD'
             });
-            alert('Add to cart tracked!');
+            showNotification('Add to cart tracked!');
         }
 
         function trackCheckout() {
@@ -333,7 +349,7 @@ const analytics = new Analytics({
                 currency: 'USD',
                 payment_method: 'credit_card'
             });
-            alert('Checkout started tracked!');
+            showNotification('Checkout started tracked!');
         }
 
         function trackPurchaseComplete() {
@@ -348,8 +364,51 @@ const analytics = new Analytics({
                 payment_method: 'credit_card',
                 shipping_method: 'express'
             });
-            alert('Purchase completed tracked!');
+            showNotification('Purchase completed tracked!');
+        }
+
+        // Better notification system instead of alerts
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${type === 'error' ? '#ef4444' : '#10b981'};
+                color: white;
+                padding: 12px 20px;
+                border-radius: 6px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                z-index: 1000;
+                opacity: 0;
+                transform: translateY(-20px);
+                transition: all 0.3s ease;
+                max-width: 300px;
+                font-size: 14px;
+            `;
+
+            document.body.appendChild(notification);
+
+            // Animate in
+            setTimeout(() => {
+                notification.style.opacity = '1';
+                notification.style.transform = 'translateY(0)';
+            }, 10);
+
+            // Remove after 3 seconds
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transform = 'translateY(-20px)';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 3000);
         }
     </script>
 </body>
+
 </html>

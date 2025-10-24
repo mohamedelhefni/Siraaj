@@ -3,13 +3,13 @@
  * Lightweight client-side analytics tracking library
  */
 
-(function(global, factory) {
+(function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined'
     ? module.exports = factory()
     : typeof define === 'function' && define.amd
       ? define(factory)
       : (global.Analytics = factory());
-}(this, (function() {
+}(this, (function () {
   'use strict';
 
   class Analytics {
@@ -154,7 +154,7 @@
      * @param {boolean} async - Whether to use sendBeacon (for page unload)
      */
     flush(async = false) {
-      if (this.buffer.length === 0) return;
+      if (this.buffer.length === 0) return Promise.resolve();
 
       const events = [...this.buffer];
       this.buffer = [];
@@ -163,25 +163,58 @@
 
       if (async && navigator.sendBeacon) {
         // Use sendBeacon for reliable delivery on page unload
-        events.forEach(event => {
+        return Promise.all(events.map(event => {
           const blob = new Blob([JSON.stringify(event)], { type: 'application/json' });
-          navigator.sendBeacon(`${this.config.apiUrl}/api/track`, blob);
-        });
+          return navigator.sendBeacon(`${this.config.apiUrl}/api/track`, blob);
+        }));
       } else {
-        // Use fetch for normal requests
-        events.forEach(event => {
-          fetch(`${this.config.apiUrl}/api/track`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(event),
-            keepalive: true
-          }).catch(err => {
-            this._log('Error sending event:', err);
-          });
-        });
+        // Use fetch for normal requests with better error handling and retries
+        return Promise.all(events.map(event => this._sendEvent(event)));
       }
+    }
+
+    /**
+     * Send individual event with retry logic
+     * @private
+     */
+    _sendEvent(event, retries = 3) {
+      return fetch(`${this.config.apiUrl}/api/track`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(event),
+        keepalive: true,
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          this._log('Event sent successfully:', event.event_name);
+          return response;
+        })
+        .catch(err => {
+          this._log('Error sending event:', err, event);
+
+          // Retry on network errors
+          if (retries > 0 && (err.name === 'NetworkError' || err.name === 'TypeError')) {
+            this._log(`Retrying event send, ${retries} attempts left`);
+            return new Promise(resolve => {
+              setTimeout(() => {
+                resolve(this._sendEvent(event, retries - 1));
+              }, 1000 * (4 - retries)); // Exponential backoff: 1s, 2s, 3s
+            });
+          }
+
+          // If all retries failed, add back to buffer for next flush
+          if (retries === 0) {
+            this.buffer.unshift(event);
+            this._log('Event added back to buffer after failed retries');
+          }
+
+          throw err;
+        });
     }
 
     /**
@@ -279,7 +312,7 @@
      * @private
      */
     _generateId() {
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
         const r = Math.random() * 16 | 0;
         const v = c === 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);

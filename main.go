@@ -38,61 +38,69 @@ type Analytics struct {
 }
 
 func NewAnalytics(dbPath string) (*Analytics, error) {
-	// Use DuckDB with optimized settings
-	connStr := dbPath + "?access_mode=read_write&threads=4"
-	db, err := sql.Open("duckdb", connStr)
+	// Use DuckDB with simplified settings to avoid WAL issues
+	db, err := sql.Open("duckdb", dbPath)
 	if err != nil {
 		return nil, err
 	}
 
+	// Test the connection
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %v", err)
+	}
+
 	// Set connection pool settings
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(5)
+	db.SetMaxIdleConns(2)
 	db.SetConnMaxLifetime(time.Hour)
 
-	// Enable DuckDB optimizations
-	_, err = db.Exec("PRAGMA memory_limit='1GB'")
-	if err != nil {
+	// Enable DuckDB optimizations with error handling
+	if _, err = db.Exec("PRAGMA memory_limit='512MB'"); err != nil {
 		log.Printf("Warning: Could not set memory limit: %v", err)
 	}
 
-	_, err = db.Exec("PRAGMA threads=4")
-	if err != nil {
+	if _, err = db.Exec("PRAGMA threads=2"); err != nil {
 		log.Printf("Warning: Could not set threads: %v", err)
 	}
 
 	// Create tables with optimized schema
-	schema := `
-	CREATE TABLE IF NOT EXISTS events (
-		id UBIGINT PRIMARY KEY ,
-		timestamp TIMESTAMP NOT NULL,
-		event_name VARCHAR NOT NULL,
-		user_id VARCHAR,
-		session_id VARCHAR,
-		url VARCHAR,
-		referrer VARCHAR,
-		user_agent VARCHAR,
-		ip VARCHAR,
-		country VARCHAR,
-		browser VARCHAR,
-		os VARCHAR,
-		device VARCHAR,
-		properties JSON
-	);
+	// Use a simpler approach that's more compatible with DuckDB
+	statements := []string{
+		// Create table with auto-incrementing ID
+		`CREATE TABLE IF NOT EXISTS events (
+			id UBIGINT PRIMARY KEY,
+			timestamp TIMESTAMP NOT NULL,
+			event_name VARCHAR NOT NULL,
+			user_id VARCHAR,
+			session_id VARCHAR,
+			url VARCHAR,
+			referrer VARCHAR,
+			user_agent VARCHAR,
+			ip VARCHAR,
+			country VARCHAR,
+			browser VARCHAR,
+			os VARCHAR,
+			device VARCHAR,
+			properties JSON
+		)`,
+		// Create sequence
+		`CREATE SEQUENCE IF NOT EXISTS id_sequence START 1`,
+		// Create indexes
+		`CREATE INDEX IF NOT EXISTS idx_timestamp ON events(timestamp)`,
+		`CREATE INDEX IF NOT EXISTS idx_event_name ON events(event_name)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_id ON events(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_country ON events(country)`,
+		`CREATE INDEX IF NOT EXISTS idx_referrer ON events(referrer)`,
+	}
 
-	CREATE SEQUENCE id_sequence START 1;
-	ALTER TABLE events ALTER COLUMN id SET DEFAULT NEXTVAL('id_sequence');
-
-
-	CREATE INDEX IF NOT EXISTS idx_timestamp ON events(timestamp);
-	CREATE INDEX IF NOT EXISTS idx_event_name ON events(event_name);
-	CREATE INDEX IF NOT EXISTS idx_user_id ON events(user_id);
-	CREATE INDEX IF NOT EXISTS idx_country ON events(country);
-	CREATE INDEX IF NOT EXISTS idx_referrer ON events(referrer);
-	`
-
-	if _, err := db.Exec(schema); err != nil {
-		return nil, err
+	for i, stmt := range statements {
+		if _, err := db.Exec(stmt); err != nil {
+			log.Printf("Error executing statement %d: %v", i+1, err)
+			log.Printf("Failed statement: %s", stmt)
+			return nil, fmt.Errorf("failed to create database schema: %v", err)
+		} else {
+			log.Printf("✓ Successfully executed statement %d", i+1)
+		}
 	}
 
 	return &Analytics{db: db}, nil
@@ -104,9 +112,9 @@ func (a *Analytics) Close() error {
 
 func (a *Analytics) TrackEvent(event Event) error {
 	query := `
-		INSERT INTO events (timestamp, event_name, user_id, session_id, url, referrer, 
+		INSERT INTO events (id, timestamp, event_name, user_id, session_id, url, referrer, 
 			user_agent, ip, country, browser, os, device, properties)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := a.db.Exec(query,
@@ -125,6 +133,10 @@ func (a *Analytics) TrackEvent(event Event) error {
 		event.Properties,
 	)
 
+	if err != nil {
+		log.Printf("Error inserting event: %v", err)
+	}
+
 	return err
 }
 
@@ -141,9 +153,9 @@ func (a *Analytics) TrackEventBatch(events []Event) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO events (timestamp, event_name, user_id, session_id, url, referrer, 
+		INSERT INTO events (id, timestamp, event_name, user_id, session_id, url, referrer, 
 			user_agent, ip, country, browser, os, device, properties)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -167,6 +179,7 @@ func (a *Analytics) TrackEventBatch(events []Event) error {
 			event.Properties,
 		)
 		if err != nil {
+			log.Printf("Error inserting batch event: %v", err)
 			return err
 		}
 	}
@@ -397,6 +410,45 @@ func enableCORS(next http.Handler) http.Handler {
 	})
 }
 
+// ResponseWriter wrapper to capture status code
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+// Logging middleware
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		// Wrap the response writer to capture status code
+		wrapped := &responseWriter{
+			ResponseWriter: w,
+			statusCode:     http.StatusOK,
+		}
+
+		// Call the next handler
+		next.ServeHTTP(wrapped, r)
+
+		// Log the request
+		duration := time.Since(start)
+		log.Printf("[%s] %s %s - Status: %d - Duration: %v - IP: %s - User-Agent: %s",
+			r.Method,
+			r.URL.Path,
+			r.URL.RawQuery,
+			wrapped.statusCode,
+			duration,
+			r.RemoteAddr,
+			r.Header.Get("User-Agent"),
+		)
+	})
+}
+
 func main() {
 	analytics, err := NewAnalytics("analytics.db")
 	if err != nil {
@@ -459,8 +511,29 @@ func main() {
 		}
 		if end := r.URL.Query().Get("end"); end != "" {
 			if t, err := time.Parse("2006-01-02", end); err == nil {
-				endDate = t
+				// Set to end of day for the end date
+				endDate = t.Add(24*time.Hour - time.Nanosecond)
 			}
+		}
+
+		log.Printf("Stats query: startDate=%v, endDate=%v", startDate, endDate)
+
+		// First, let's check if there are any events at all
+		var totalCount int
+		err := analytics.db.QueryRow("SELECT COUNT(*) FROM events").Scan(&totalCount)
+		if err != nil {
+			log.Printf("Error counting total events: %v", err)
+		} else {
+			log.Printf("Total events in database: %d", totalCount)
+		}
+
+		// Check events in date range
+		var rangeCount int
+		err = analytics.db.QueryRow("SELECT COUNT(*) FROM events WHERE timestamp BETWEEN ? AND ?", startDate, endDate).Scan(&rangeCount)
+		if err != nil {
+			log.Printf("Error counting events in range: %v", err)
+		} else {
+			log.Printf("Events in date range: %d", rangeCount)
 		}
 
 		stats, err := analytics.GetStats(startDate, endDate)
@@ -476,6 +549,39 @@ func main() {
 
 	// Serve UI
 	http.Handle("/", http.FileServer(http.FS(uiFiles)))
+
+	// Debug endpoint to show all events
+	http.HandleFunc("/api/debug/events", func(w http.ResponseWriter, r *http.Request) {
+		rows, err := analytics.db.Query("SELECT id, timestamp, event_name, user_id FROM events ORDER BY timestamp DESC LIMIT 50")
+		if err != nil {
+			log.Printf("Error querying events: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		events := []map[string]interface{}{}
+		for rows.Next() {
+			var id uint64
+			var timestamp time.Time
+			var eventName, userID string
+			if err := rows.Scan(&id, &timestamp, &eventName, &userID); err != nil {
+				continue
+			}
+			events = append(events, map[string]interface{}{
+				"id":         id,
+				"timestamp":  timestamp.Format(time.RFC3339),
+				"event_name": eventName,
+				"user_id":    userID,
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"events": events,
+			"count":  len(events),
+		})
+	})
 
 	// Health check endpoint
 	http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -499,5 +605,7 @@ func main() {
 	fmt.Println("✓ Server ready - Using official DuckDB Go driver")
 	fmt.Println()
 
-	log.Fatal(http.ListenAndServe(":"+port, enableCORS(http.DefaultServeMux)))
+	// Apply middleware: logging first, then CORS
+	handler := loggingMiddleware(enableCORS(http.DefaultServeMux))
+	log.Fatal(http.ListenAndServe(":"+port, handler))
 }
