@@ -158,6 +158,7 @@
 						labelKey="name"
 						valueKey="count"
 						maxItems={5}
+						type="browser"
 					/>
 				</CardContent>
 			</Card>
@@ -173,6 +174,7 @@
 						labelKey="name"
 						valueKey="count"
 						maxItems={5}
+						type="country"
 					/>
 				</CardContent>
 			</Card>
@@ -188,6 +190,7 @@
 						labelKey="name"
 						valueKey="count"
 						maxItems={5}
+						type="source"
 					/>
 				</CardContent>
 			</Card>
