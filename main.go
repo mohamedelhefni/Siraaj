@@ -467,12 +467,14 @@ func main() {
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
+			log.Printf("Error reading request body: %v", err)
 			http.Error(w, "Bad request", http.StatusBadRequest)
 			return
 		}
 
 		var event Event
 		if err := json.Unmarshal(body, &event); err != nil {
+			log.Printf("Error Unmarshal json: %v", err)
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
