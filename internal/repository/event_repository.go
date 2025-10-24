@@ -575,16 +575,23 @@ func (r *eventRepository) GetTopProperties(startDate, endDate time.Time, limit i
 	// Only get events that have valid JSON properties
 	whereClause += " AND properties IS NOT NULL AND TRY_CAST(properties AS JSON) IS NOT NULL AND json_valid(properties)"
 
-	// Query to get all property key-value pairs with their counts using json_each as lateral join
+	// Query to get all property key-value pairs with their counts
+	// Use json_extract_string to safely convert values to strings
 	query := fmt.Sprintf(`
 		SELECT 
-			je.key as prop_key,
-			CAST(je.value AS VARCHAR) as prop_value,
+			je.key::VARCHAR as prop_key,
+			CASE 
+				WHEN je.type = 'VARCHAR' THEN je.value::VARCHAR
+				WHEN je.type = 'BIGINT' THEN je.value::BIGINT::VARCHAR
+				WHEN je.type = 'DOUBLE' THEN je.value::DOUBLE::VARCHAR
+				WHEN je.type = 'BOOLEAN' THEN je.value::BOOLEAN::VARCHAR
+				ELSE je.value::VARCHAR
+			END as prop_value,
 			COUNT(*) as count,
 			COUNT(DISTINCT e.event_name) as event_types
 		FROM events e, json_each(CAST(e.properties AS JSON)) je
 		WHERE %s
-		GROUP BY je.key, CAST(je.value AS VARCHAR)
+		GROUP BY je.key::VARCHAR, prop_value
 		ORDER BY count DESC
 		LIMIT ?
 	`, whereClause)

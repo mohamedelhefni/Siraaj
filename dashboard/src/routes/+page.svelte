@@ -1,7 +1,7 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { format, subDays, startOfMonth, startOfYear, subMonths } from 'date-fns';
-	import { fetchStats, fetchOnlineUsers, fetchProjects, fetchTopProperties } from '$lib/api';
+	import { fetchStats, fetchOnlineUsers, fetchProjects } from '$lib/api';
 	import { RefreshCw, X, TrendingUp, TrendingDown, Minus } from 'lucide-svelte';
 	import {
 		Card,
@@ -230,18 +230,18 @@
 				});
 
 			// Load properties
-			const propertiesPromise = fetchTopProperties(startDate, endDate, 5, activeFilters)
-				.then((data) => {
-					topProperties = data || [];
-					propertiesLoading = false;
-					return data;
-				})
-				.catch((err) => {
-					propertiesLoading = false;
-					throw err;
-				});
+			// const propertiesPromise = fetchTopProperties(startDate, endDate, 5, activeFilters)
+			// 	.then((data) => {
+			// 		topProperties = data || [];
+			// 		propertiesLoading = false;
+			// 		return data;
+			// 	})
+			// 	.catch((err) => {
+			// 		propertiesLoading = false;
+			// 		throw err;
+			// 	});
 
-			await Promise.all([statsPromise, onlinePromise, propertiesPromise]);
+			await Promise.all([statsPromise, onlinePromise]);
 
 			lastRefresh = new Date();
 			updateURLParams();
@@ -742,7 +742,7 @@
 							items={stats.top_events || []}
 							labelKey="name"
 							valueKey="count"
-							maxItems={5}
+							maxItems={8}
 							showMoreTitle="All Events ({(stats.top_events || []).length} total)"
 							onclick={(item) => addFilter('event', item.name)}
 						/>
@@ -858,7 +858,7 @@
 		</div>
 
 		<!-- Custom Properties Panel -->
-		<Card>
+		<!-- <Card>
 			<CardHeader>
 				<CardTitle>Custom Event Properties</CardTitle>
 				<CardDescription>
@@ -882,6 +882,6 @@
 					<PropertiesPanel properties={topProperties} onPropertyClick={addPropertyFilter} />
 				{/if}
 			</CardContent>
-		</Card>
+		</Card> -->
 	{/if}
 </div>
