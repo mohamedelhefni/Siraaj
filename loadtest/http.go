@@ -91,7 +91,7 @@ var (
 		"United States", "Canada", "United Kingdom", "Germany", "France", "Spain",
 		"Italy", "Netherlands", "Sweden", "Norway", "Denmark", "Finland",
 		"Australia", "New Zealand", "Japan", "South Korea", "Singapore", "India",
-		"Brazil", "Mexico", "Argentina", "Chile", "Russia", "China", "Israel",
+		"Brazil", "Mexico", "Argentina", "Chile", "Russia", "China", "Palestine",
 	}
 
 	browsers = []string{

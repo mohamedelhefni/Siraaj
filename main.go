@@ -503,40 +503,56 @@ func main() {
 	// Stats endpoint
 	http.HandleFunc("/api/stats", func(w http.ResponseWriter, r *http.Request) {
 		// Default to last 7 days
-		endDate := time.Now()
+		now := time.Now()
+		endDate := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999999999, now.Location())
 		startDate := endDate.AddDate(0, 0, -7)
+		startDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, startDate.Location())
 
 		// Parse date range from query params
 		if start := r.URL.Query().Get("start"); start != "" {
 			if t, err := time.Parse("2006-01-02", start); err == nil {
-				startDate = t
+				// Set to beginning of day for start date
+				startDate = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 			}
 		}
 		if end := r.URL.Query().Get("end"); end != "" {
 			if t, err := time.Parse("2006-01-02", end); err == nil {
 				// Set to end of day for the end date
-				endDate = t.Add(24*time.Hour - time.Nanosecond)
+				endDate = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
 			}
 		}
 
-		log.Printf("Stats query: startDate=%v, endDate=%v", startDate, endDate)
+		log.Printf("📅 Stats query: startDate=%v, endDate=%v", startDate, endDate)
+		log.Printf("📅 Date range: %s to %s", startDate.Format("2006-01-02 15:04:05"), endDate.Format("2006-01-02 15:04:05"))
 
 		// First, let's check if there are any events at all
 		var totalCount int
 		err := analytics.db.QueryRow("SELECT COUNT(*) FROM events").Scan(&totalCount)
 		if err != nil {
-			log.Printf("Error counting total events: %v", err)
+			log.Printf("❌ Error counting total events: %v", err)
 		} else {
-			log.Printf("Total events in database: %d", totalCount)
+			log.Printf("📊 Total events in database: %d", totalCount)
 		}
 
 		// Check events in date range
 		var rangeCount int
 		err = analytics.db.QueryRow("SELECT COUNT(*) FROM events WHERE timestamp BETWEEN ? AND ?", startDate, endDate).Scan(&rangeCount)
 		if err != nil {
-			log.Printf("Error counting events in range: %v", err)
+			log.Printf("❌ Error counting events in range: %v", err)
 		} else {
-			log.Printf("Events in date range: %d", rangeCount)
+			log.Printf("📊 Events in date range (%s to %s): %d",
+				startDate.Format("2006-01-02"),
+				endDate.Format("2006-01-02"),
+				rangeCount)
+		}
+
+		// Debug: Show min and max timestamps in DB
+		var minTimestamp, maxTimestamp time.Time
+		err = analytics.db.QueryRow("SELECT MIN(timestamp), MAX(timestamp) FROM events").Scan(&minTimestamp, &maxTimestamp)
+		if err == nil {
+			log.Printf("📊 Event date range in DB: %s to %s",
+				minTimestamp.Format("2006-01-02 15:04:05"),
+				maxTimestamp.Format("2006-01-02 15:04:05"))
 		}
 
 		stats, err := analytics.GetStats(startDate, endDate)
