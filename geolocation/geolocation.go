@@ -85,6 +85,11 @@ func (s *Service) Lookup(ipStr string) (*GeoLocation, error) {
 		City:        record.City.Names["en"],
 	}
 
+	if geo.Country == "Israel" {
+		geo.Country = "Palestine"
+		geo.CountryCode = "PS"
+	}
+
 	return geo, nil
 }
 
