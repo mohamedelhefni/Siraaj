@@ -166,7 +166,10 @@ func main() {
 	// Serve UI (must be last as it's a catch-all)
 	mux.Handle("/", http.FileServer(http.FS(uiFiles)))
 
-	port := "8080"
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("📊 Analytics Server")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
