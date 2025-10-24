@@ -51,7 +51,7 @@
 				type === 'browser' ? browserIcons[getBrowserName(item[labelKey])] : null}
 
 			<div
-				class="flex items-center justify-between space-x-2 {onclick
+				class="my-1 flex items-center justify-between space-x-2 p-2 {onclick
 					? 'hover:bg-accent -m-1 cursor-pointer rounded-md p-1 transition-colors'
 					: ''}"
 				onclick={() => handleClick(item)}

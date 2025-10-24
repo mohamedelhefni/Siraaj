@@ -609,14 +609,20 @@
 					{/if}
 				</CardTitle>
 				<CardDescription>
-					Daily event tracking
+					{#if stats.timeline_format === 'hour'}
+						Hourly event tracking
+					{:else if stats.timeline_format === 'month'}
+						Monthly event tracking
+					{:else}
+						Daily event tracking
+					{/if}
 					{#if activeFilters.metric}
 						· Click the metric card again to remove filter
 					{/if}
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
-				<TimelineChart data={stats.timeline || []} />
+				<TimelineChart data={stats.timeline || []} format={stats.timeline_format || 'day'} />
 			</CardContent>
 		</Card>
 

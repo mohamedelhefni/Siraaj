@@ -271,18 +271,51 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	}
 	stats["top_events"] = topEvents
 
-	// Events over time using date_trunc for daily aggregation
-	query = fmt.Sprintf(`
-		SELECT 
-			strftime(DATE_TRUNC('day', timestamp), '%%Y-%%m-%%d') as date, 
-			COUNT(*) as count
-		FROM events 
-		WHERE %s
-		GROUP BY date 
-		ORDER BY date
-	`, whereClause)
+	// Events over time with dynamic granularity based on date range
+	timelineDuration := endDate.Sub(startDate)
+	var timelineQuery string
+	var timeFormat string
 
-	rows, err = r.db.Query(query, args...)
+	// Determine granularity based on date range
+	if timelineDuration <= 24*time.Hour {
+		// For today or single day: show hourly data
+		timelineQuery = fmt.Sprintf(`
+			SELECT 
+				strftime(DATE_TRUNC('hour', timestamp), '%%Y-%%m-%%d %%H:00:00') as date, 
+				COUNT(*) as count
+			FROM events 
+			WHERE %s
+			GROUP BY date 
+			ORDER BY date
+		`, whereClause)
+		timeFormat = "hour"
+	} else if timelineDuration <= 90*24*time.Hour {
+		// For up to 3 months: show daily data
+		timelineQuery = fmt.Sprintf(`
+			SELECT 
+				strftime(DATE_TRUNC('day', timestamp), '%%Y-%%m-%%d') as date, 
+				COUNT(*) as count
+			FROM events 
+			WHERE %s
+			GROUP BY date 
+			ORDER BY date
+		`, whereClause)
+		timeFormat = "day"
+	} else {
+		// For more than 3 months: show monthly data
+		timelineQuery = fmt.Sprintf(`
+			SELECT 
+				strftime(DATE_TRUNC('month', timestamp), '%%Y-%%m-01') as date, 
+				COUNT(*) as count
+			FROM events 
+			WHERE %s
+			GROUP BY date 
+			ORDER BY date
+		`, whereClause)
+		timeFormat = "month"
+	}
+
+	rows, err = r.db.Query(timelineQuery, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -301,6 +334,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		})
 	}
 	stats["timeline"] = timeline
+	stats["timeline_format"] = timeFormat
 
 	// Top pages
 	query = fmt.Sprintf(`
