@@ -638,6 +638,7 @@
 						items={stats.top_events || []}
 						labelKey="name"
 						valueKey="count"
+						showMoreTitle="All Events ({(stats.top_events || []).length} total)"
 						onclick={(item) => addFilter('event', item.name)}
 					/>
 				</CardContent>
@@ -649,7 +650,12 @@
 					<CardDescription>Most visited pages</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<TopItemsList items={stats.top_pages || []} labelKey="url" valueKey="count" />
+					<TopItemsList 
+						items={stats.top_pages || []} 
+						labelKey="url" 
+						valueKey="count"
+						showMoreTitle="All Pages ({(stats.top_pages || []).length} total)"
+					/>
 				</CardContent>
 			</Card>
 		</div>
@@ -668,6 +674,7 @@
 						valueKey="count"
 						maxItems={5}
 						type="browser"
+						showMoreTitle="All Browsers ({(stats.browsers || []).length} total)"
 						onclick={(item) => addFilter('browser', item.name)}
 					/>
 				</CardContent>
@@ -685,6 +692,7 @@
 						valueKey="count"
 						maxItems={5}
 						type="country"
+						showMoreTitle="All Countries ({(stats.top_countries || []).length} total)"
 						onclick={(item) => addFilter('country', item.name)}
 					/>
 				</CardContent>
@@ -702,6 +710,7 @@
 						valueKey="count"
 						maxItems={5}
 						type="source"
+						showMoreTitle="All Sources ({(stats.top_sources || []).length} total)"
 						onclick={(item) => addFilter('source', item.name)}
 					/>
 				</CardContent>
