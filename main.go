@@ -190,8 +190,12 @@ func (a *Analytics) TrackEventBatch(events []Event) error {
 	return tx.Commit()
 }
 
-func (a *Analytics) GetStats(startDate, endDate time.Time) (map[string]interface{}, error) {
+func (a *Analytics) GetStats(startDate, endDate time.Time, limit int) (map[string]interface{}, error) {
 	stats := make(map[string]interface{})
+
+	if limit <= 0 {
+		limit = 10
+	}
 
 	// Use a single query with CTEs for better performance
 	aggregateQuery := `
@@ -223,8 +227,8 @@ func (a *Analytics) GetStats(startDate, endDate time.Time) (map[string]interface
 		WHERE timestamp BETWEEN ? AND ?
 		GROUP BY event_name 
 		ORDER BY count DESC 
-		LIMIT 10
-	`, startDate, endDate)
+		LIMIT ?
+	`, startDate, endDate, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -280,8 +284,8 @@ func (a *Analytics) GetStats(startDate, endDate time.Time) (map[string]interface
 		WHERE timestamp BETWEEN ? AND ? AND url IS NOT NULL AND url != ''
 		GROUP BY url 
 		ORDER BY count DESC 
-		LIMIT 10
-	`, startDate, endDate)
+		LIMIT ?
+	`, startDate, endDate, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +312,8 @@ func (a *Analytics) GetStats(startDate, endDate time.Time) (map[string]interface
 		WHERE timestamp BETWEEN ? AND ? AND browser IS NOT NULL AND browser != ''
 		GROUP BY browser 
 		ORDER BY count DESC
-	`, startDate, endDate)
+		LIMIT ?
+	`, startDate, endDate, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -335,8 +340,8 @@ func (a *Analytics) GetStats(startDate, endDate time.Time) (map[string]interface
 		WHERE timestamp BETWEEN ? AND ? AND country IS NOT NULL AND country != ''
 		GROUP BY country 
 		ORDER BY count DESC 
-		LIMIT 10
-	`, startDate, endDate)
+		LIMIT ?
+	`, startDate, endDate, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -368,8 +373,8 @@ func (a *Analytics) GetStats(startDate, endDate time.Time) (map[string]interface
 		WHERE timestamp BETWEEN ? AND ?
 		GROUP BY source 
 		ORDER BY count DESC 
-		LIMIT 10
-	`, startDate, endDate)
+		LIMIT ?
+	`, startDate, endDate, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -390,6 +395,90 @@ func (a *Analytics) GetStats(startDate, endDate time.Time) (map[string]interface
 	stats["top_sources"] = topSources
 
 	return stats, nil
+}
+
+// GetEvents returns paginated events
+func (a *Analytics) GetEvents(startDate, endDate time.Time, limit, offset int) (map[string]interface{}, error) {
+	query := `
+		SELECT id, timestamp, event_name, user_id, session_id, url, referrer, 
+			   user_agent, ip, country, browser, os, device, properties
+		FROM events 
+		WHERE timestamp BETWEEN ? AND ?
+		ORDER BY timestamp DESC
+		LIMIT ? OFFSET ?
+	`
+
+	rows, err := a.db.Query(query, startDate, endDate, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := []Event{}
+	for rows.Next() {
+		var event Event
+		err := rows.Scan(
+			&event.ID,
+			&event.Timestamp,
+			&event.EventName,
+			&event.UserID,
+			&event.SessionID,
+			&event.URL,
+			&event.Referrer,
+			&event.UserAgent,
+			&event.IP,
+			&event.Country,
+			&event.Browser,
+			&event.OS,
+			&event.Device,
+			&event.Properties,
+		)
+		if err != nil {
+			continue
+		}
+		events = append(events, event)
+	}
+
+	// Get total count
+	var total int
+	countQuery := `SELECT COUNT(*) FROM events WHERE timestamp BETWEEN ? AND ?`
+	err = a.db.QueryRow(countQuery, startDate, endDate).Scan(&total)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"events": events,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	}, nil
+}
+
+// GetOnlineUsers returns currently online users (active in last N minutes)
+func (a *Analytics) GetOnlineUsers(timeWindowMinutes int) (map[string]interface{}, error) {
+	cutoffTime := time.Now().Add(-time.Duration(timeWindowMinutes) * time.Minute)
+
+	query := `
+		SELECT 
+			COUNT(DISTINCT user_id) as online_users,
+			COUNT(DISTINCT session_id) as active_sessions
+		FROM events 
+		WHERE timestamp >= ?
+	`
+
+	var onlineUsers, activeSessions int
+	err := a.db.QueryRow(query, cutoffTime).Scan(&onlineUsers, &activeSessions)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"online_users":     onlineUsers,
+		"active_sessions":  activeSessions,
+		"time_window_mins": timeWindowMinutes,
+		"cutoff_time":      cutoffTime,
+	}, nil
 }
 
 func enableCORS(next http.Handler) http.Handler {
@@ -602,7 +691,17 @@ func main() {
 				maxTimestamp.Format("2006-01-02 15:04:05"))
 		}
 
-		stats, err := analytics.GetStats(startDate, endDate)
+		// Parse limit parameter
+		limit := 50
+		if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+			if l, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil && l == 1 {
+				if limit > 1000 {
+					limit = 1000 // Cap at 1000
+				}
+			}
+		}
+
+		stats, err := analytics.GetStats(startDate, endDate, limit)
 		if err != nil {
 			log.Printf("Error getting stats: %v", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -611,6 +710,72 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(stats)
+	})
+
+	// Events endpoint with pagination
+	http.HandleFunc("/api/events", func(w http.ResponseWriter, r *http.Request) {
+		// Parse date range
+		now := time.Now()
+		endDate := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999999999, now.Location())
+		startDate := endDate.AddDate(0, 0, -7)
+		startDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, startDate.Location())
+
+		if start := r.URL.Query().Get("start"); start != "" {
+			if t, err := time.Parse("2006-01-02", start); err == nil {
+				startDate = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+			}
+		}
+		if end := r.URL.Query().Get("end"); end != "" {
+			if t, err := time.Parse("2006-01-02", end); err == nil {
+				endDate = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
+			}
+		}
+
+		// Parse pagination parameters
+		limit := 100
+		if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+			if l, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil && l == 1 {
+				if limit > 1000 {
+					limit = 1000
+				}
+			}
+		}
+
+		offset := 0
+		if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+			fmt.Sscanf(offsetStr, "%d", &offset)
+		}
+
+		events, err := analytics.GetEvents(startDate, endDate, limit, offset)
+		if err != nil {
+			log.Printf("Error getting events: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(events)
+	})
+
+	// Online users endpoint
+	http.HandleFunc("/api/online", func(w http.ResponseWriter, r *http.Request) {
+		timeWindow := 5 // default 5 minutes
+		if windowStr := r.URL.Query().Get("window"); windowStr != "" {
+			fmt.Sscanf(windowStr, "%d", &timeWindow)
+			if timeWindow > 60 {
+				timeWindow = 60 // cap at 1 hour
+			}
+		}
+
+		online, err := analytics.GetOnlineUsers(timeWindow)
+		if err != nil {
+			log.Printf("Error getting online users: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(online)
 	})
 
 	// Debug endpoint to show all events

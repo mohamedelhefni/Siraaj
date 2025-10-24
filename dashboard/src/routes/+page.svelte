@@ -1,7 +1,8 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { format, subDays } from 'date-fns';
-	import { fetchStats } from '$lib/api';
+	import { fetchStats, fetchOnlineUsers } from '$lib/api';
+	import { RefreshCw } from 'lucide-svelte';
 	import {
 		Card,
 		CardContent,
@@ -9,6 +10,7 @@
 		CardHeader,
 		CardTitle
 	} from '$lib/components/ui/card';
+	import { Button } from '$lib/components/ui/button';
 	import StatsCard from '$lib/components/StatsCard.svelte';
 	import TimelineChart from '$lib/components/TimelineChart.svelte';
 	import TopItemsList from '$lib/components/TopItemsList.svelte';
@@ -25,8 +27,16 @@
 		top_sources: []
 	});
 
+	let onlineData = $state({
+		online_users: 0,
+		active_sessions: 0
+	});
+
 	let loading = $state(true);
 	let error = $state(null);
+	let autoRefresh = $state(true);
+	let refreshInterval = $state(null);
+	let lastRefresh = $state(new Date());
 
 	// Default to last 7 days
 	let startDate = $state(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
@@ -36,7 +46,13 @@
 		loading = true;
 		error = null;
 		try {
-			stats = await fetchStats(startDate, endDate);
+			const [statsData, onlineUsersData] = await Promise.all([
+				fetchStats(startDate, endDate, 50),
+				fetchOnlineUsers(5)
+			]);
+			stats = statsData;
+			onlineData = onlineUsersData;
+			lastRefresh = new Date();
 		} catch (err) {
 			error = err.message;
 			console.error('Failed to load stats:', err);
@@ -45,8 +61,33 @@
 		}
 	}
 
+	function setupAutoRefresh() {
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+		}
+		
+		if (autoRefresh) {
+			// Refresh every 30 seconds
+			refreshInterval = setInterval(() => {
+				loadStats();
+			}, 30000);
+		}
+	}
+
+	function toggleAutoRefresh() {
+		autoRefresh = !autoRefresh;
+		setupAutoRefresh();
+	}
+
 	onMount(() => {
 		loadStats();
+		setupAutoRefresh();
+	});
+
+	onDestroy(() => {
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+		}
 	});
 
 	function handleDateChange(event) {
@@ -58,12 +99,30 @@
 
 <div class="container mx-auto space-y-6 p-6">
 	<!-- Header -->
-	<div class="flex items-center justify-between">
+	<div class="flex flex-wrap items-center justify-between gap-4">
 		<div>
-			<h1 class="text-4xl font-bold tracking-tight">Analytics Dashboard</h1>
+			<h1 class="text-4xl font-bold tracking-tight">Siraaj Dashboard</h1>
 			<p class="text-muted-foreground mt-2">Real-time insights and analytics powered by DuckDB</p>
 		</div>
-		<DateRangePicker {startDate} {endDate} on:change={handleDateChange} />
+		<div class="flex items-center gap-2">
+			<DateRangePicker {startDate} {endDate} on:change={handleDateChange} />
+			<div class="flex items-center gap-2 rounded-lg border p-2">
+				<Button
+					variant={autoRefresh ? 'default' : 'outline'}
+					size="sm"
+					onclick={toggleAutoRefresh}
+					class="gap-2"
+				>
+					<RefreshCw class={autoRefresh ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+					{autoRefresh ? 'Auto' : 'Manual'}
+				</Button>
+				{#if !loading}
+					<span class="text-muted-foreground text-xs">
+						Updated {format(lastRefresh, 'HH:mm:ss')}
+					</span>
+				{/if}
+			</div>
+		</div>
 	</div>
 
 	{#if loading}
@@ -84,7 +143,7 @@
 		</Card>
 	{:else}
 		<!-- Overview Stats -->
-		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
 			<StatsCard
 				title="Total Events"
 				value={stats.total_events?.toLocaleString() || '0'}
@@ -96,6 +155,12 @@
 				value={stats.unique_users?.toLocaleString() || '0'}
 				icon="users"
 				description="Unique visitors"
+			/>
+			<StatsCard
+				title="Online Now"
+				value={onlineData.online_users?.toLocaleString() || '0'}
+				icon="eye"
+				description="Active in last 5 min"
 			/>
 			<StatsCard
 				title="Avg Events/User"

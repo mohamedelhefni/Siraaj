@@ -79,6 +79,7 @@
         search: window.location.search,
         hash: window.location.hash
       });
+      this.flush()
     }
 
     /**

@@ -5,18 +5,58 @@ const API_BASE_URL = 'http://localhost:8080/api';
  * Fetch analytics stats from the backend
  * @param {string} startDate - Start date in YYYY-MM-DD format
  * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {number} limit - Limit for top results (default 50)
  * @returns {Promise<Object>} Analytics stats
  */
-export async function fetchStats(startDate, endDate) {
-    const params = new URLSearchParams();
-    if (startDate) params.append('start', startDate);
-    if (endDate) params.append('end', endDate);
+export async function fetchStats(startDate, endDate, limit = 50) {
+	const params = new URLSearchParams();
+	if (startDate) params.append('start', startDate);
+	if (endDate) params.append('end', endDate);
+	if (limit) params.append('limit', limit.toString());
 
-    const response = await fetch(`${API_BASE_URL}/stats?${params}`);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch stats: ${response.statusText}`);
-    }
-    return response.json();
+	const response = await fetch(`${API_BASE_URL}/stats?${params}`);
+	if (!response.ok) {
+		throw new Error(`Failed to fetch stats: ${response.statusText}`);
+	}
+	return response.json();
+}
+
+/**
+ * Fetch all events with pagination
+ * @param {string} startDate - Start date
+ * @param {string} endDate - End date
+ * @param {number} limit - Number of events to fetch
+ * @param {number} offset - Offset for pagination
+ * @returns {Promise<Object>} Events data
+ */
+export async function fetchEvents(startDate, endDate, limit = 100, offset = 0) {
+	const params = new URLSearchParams();
+	if (startDate) params.append('start', startDate);
+	if (endDate) params.append('end', endDate);
+	params.append('limit', limit.toString());
+	params.append('offset', offset.toString());
+
+	const response = await fetch(`${API_BASE_URL}/events?${params}`);
+	if (!response.ok) {
+		throw new Error(`Failed to fetch events: ${response.statusText}`);
+	}
+	return response.json();
+}
+
+/**
+ * Fetch online users count
+ * @param {number} timeWindowMinutes - Time window in minutes (default 5)
+ * @returns {Promise<Object>} Online users data
+ */
+export async function fetchOnlineUsers(timeWindowMinutes = 5) {
+	const params = new URLSearchParams();
+	params.append('window', timeWindowMinutes.toString());
+
+	const response = await fetch(`${API_BASE_URL}/online?${params}`);
+	if (!response.ok) {
+		throw new Error(`Failed to fetch online users: ${response.statusText}`);
+	}
+	return response.json();
 }
 
 /**
