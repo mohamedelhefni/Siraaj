@@ -9,9 +9,11 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	_ "github.com/duckdb/duckdb-go/v2"
+	"github.com/mohamedelhefni/siraaj/geolocation"
 )
 
 //go:embed all:ui/dashboard
@@ -450,7 +452,42 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// getClientIP extracts the real client IP from request
+func getClientIP(r *http.Request) string {
+	// Check X-Forwarded-For header
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		ips := strings.Split(xff, ",")
+		if len(ips) > 0 {
+			return strings.TrimSpace(ips[0])
+		}
+	}
+
+	// Check X-Real-IP header
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+
+	// Fall back to RemoteAddr
+	ip := r.RemoteAddr
+	// Remove port if present
+	if idx := strings.LastIndex(ip, ":"); idx != -1 {
+		ip = ip[:idx]
+	}
+	return ip
+}
+
 func main() {
+	// Initialize geolocation service
+	geoService, err := geolocation.NewService()
+	if err != nil {
+		log.Printf("⚠️  Warning: Geolocation service unavailable: %v", err)
+		log.Println("⚠️  Continuing without geolocation support...")
+		geoService = nil
+	}
+	if geoService != nil {
+		defer geoService.Close()
+	}
+
 	analytics, err := NewAnalytics("analytics.db")
 	if err != nil {
 		log.Fatal(err)
@@ -487,7 +524,17 @@ func main() {
 
 		// Get IP from request
 		if event.IP == "" {
-			event.IP = r.RemoteAddr
+			event.IP = getClientIP(r)
+		}
+
+		// Enrich with geolocation data if service is available
+		if geoService != nil && event.Country == "" {
+			if geo := geoService.LookupOrDefault(event.IP); geo != nil {
+				event.Country = geo.Country
+				if event.Country == "" {
+					event.Country = geo.CountryCode
+				}
+			}
 		}
 
 		if err := analytics.TrackEvent(event); err != nil {
@@ -603,9 +650,33 @@ func main() {
 	http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":   "ok",
-			"database": "duckdb",
-			"version":  "1.0.0",
+			"status":      "ok",
+			"database":    "duckdb",
+			"version":     "1.0.0",
+			"geolocation": geoService != nil,
+		})
+	})
+
+	// Geolocation test endpoint
+	http.HandleFunc("/api/geo", func(w http.ResponseWriter, r *http.Request) {
+		if geoService == nil {
+			http.Error(w, "Geolocation service not available", http.StatusServiceUnavailable)
+			return
+		}
+
+		ip := r.URL.Query().Get("ip")
+		if ip == "" {
+			ip = getClientIP(r)
+		}
+
+		geo := geoService.LookupOrDefault(ip)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ip":           ip,
+			"country":      geo.Country,
+			"country_code": geo.CountryCode,
+			"city":         geo.City,
 		})
 	})
 
@@ -624,13 +695,19 @@ func main() {
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("📊 Analytics Server")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Printf("� Dashboard:  http://localhost:%s/dashboard/\n", port)
+	fmt.Printf("🎨 Dashboard:  http://localhost:%s/dashboard/\n", port)
 	fmt.Printf("📡 API Track:  http://localhost:%s/api/track\n", port)
 	fmt.Printf("📈 API Stats:  http://localhost:%s/api/stats\n", port)
-	fmt.Printf("❤️  Health:     http://localhost:%s/api/health\n", port)
+	fmt.Printf("🌍 Geo Test:   http://localhost:%s/api/geo\n", port)
+	fmt.Printf("❤️  Health:    http://localhost:%s/api/health\n", port)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("✓ Server ready - Using official DuckDB Go driver")
 	fmt.Println("✓ Svelte Dashboard embedded and ready")
+	if geoService != nil {
+		fmt.Println("✓ Geolocation service enabled")
+	} else {
+		fmt.Println("⚠️  Geolocation service disabled")
+	}
 	fmt.Println()
 
 	// Apply middleware: logging first, then CORS

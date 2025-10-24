@@ -1,10 +1,13 @@
 module github.com/mohamedelhefni/siraaj
 
-go 1.24
+go 1.24.0
 
 toolchain go1.24.9
 
-require github.com/duckdb/duckdb-go/v2 v2.5.0
+require (
+	github.com/duckdb/duckdb-go/v2 v2.5.0
+	github.com/oschwald/maxminddb-golang/v2 v2.0.0
+)
 
 require (
 	github.com/apache/arrow-go/v18 v18.4.1 // indirect
@@ -27,7 +30,7 @@ require (
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/mod v0.27.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.35.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 )
