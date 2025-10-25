@@ -118,7 +118,11 @@ func main() {
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
-		defer rows.Close()
+		defer func() {
+			if err := rows.Close(); err != nil {
+				log.Printf("Warning: failed to close rows: %v", err)
+			}
+		}()
 
 		events := []map[string]interface{}{}
 		for rows.Next() {

@@ -385,7 +385,11 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
 
 	topPages := []map[string]interface{}{}
 	for rows.Next() {
@@ -415,7 +419,11 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
 
 	browsers := []map[string]interface{}{}
 	for rows.Next() {
@@ -445,7 +453,11 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
 
 	topCountries := []map[string]interface{}{}
 	for rows.Next() {
@@ -480,7 +492,11 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
 
 	topSources := []map[string]interface{}{}
 	for rows.Next() {
@@ -621,7 +637,11 @@ func (r *eventRepository) GetTopProperties(startDate, endDate time.Time, limit i
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
 
 	properties := []map[string]interface{}{}
 	for rows.Next() {
@@ -673,7 +693,11 @@ func (r *eventRepository) GetProjects() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
 
 	var projects []string
 	for rows.Next() {
