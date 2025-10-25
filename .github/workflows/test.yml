@@ -139,7 +139,6 @@ jobs:
     - name: Build
       run: |
         go build -v -o siraaj .
-        ./siraaj --version || echo "Built successfully"
 
     - name: Upload binary
       uses: actions/upload-artifact@v4

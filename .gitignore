@@ -27,6 +27,15 @@ go.work.sum
 # env file
 .env
 
+# Nginx config (use nginx.conf.example as template)
+nginx.conf
+
+# SSL certificates
+ssl/
+*.pem
+*.crt
+*.key
+
 # Editor/IDE
 # .idea/
 # .vscode/
