@@ -89,6 +89,64 @@
 
 	// Apply date range preset
 	function applyDateRangePreset(preset) {
+		applyDateRangePresetWithoutLoad(preset);
+		loadStats();
+	}
+
+	// URL param helpers
+	function updateURLParams() {
+		if (typeof window === 'undefined') return;
+
+		const params = new URLSearchParams();
+		params.set('range', dateRangePreset);
+		if (dateRangePreset === 'custom') {
+			params.set('start', startDate);
+			params.set('end', endDate);
+		}
+		if (activeFilters.project) params.set('project', activeFilters.project);
+		if (activeFilters.source) params.set('source', activeFilters.source);
+		if (activeFilters.country) params.set('country', activeFilters.country);
+		if (activeFilters.browser) params.set('browser', activeFilters.browser);
+		if (activeFilters.event) params.set('event', activeFilters.event);
+		if (activeFilters.metric) params.set('metric', activeFilters.metric);
+		if (activeFilters.propertyKey) params.set('propKey', activeFilters.propertyKey);
+		if (activeFilters.propertyValue) params.set('propValue', activeFilters.propertyValue);
+		if (refreshIntervalTime !== 30000) params.set('interval', refreshIntervalTime.toString());
+
+		const newURL = `${window.location.pathname}?${params.toString()}`;
+		window.history.replaceState({}, '', newURL);
+	}
+	function loadFromURLParams() {
+		if (typeof window === 'undefined') return;
+
+		const params = new URLSearchParams(window.location.search);
+
+		if (params.has('range')) {
+			dateRangePreset = params.get('range');
+			if (dateRangePreset === 'custom') {
+				if (params.has('start')) startDate = params.get('start');
+				if (params.has('end')) endDate = params.get('end');
+				showCustomDateInputs = true;
+			} else {
+				// Don't call loadStats() here - will be called in onMount
+				applyDateRangePresetWithoutLoad(dateRangePreset);
+			}
+		}
+		if (params.has('project')) activeFilters.project = params.get('project');
+		if (params.has('source')) activeFilters.source = params.get('source');
+		if (params.has('country')) activeFilters.country = params.get('country');
+		if (params.has('browser')) activeFilters.browser = params.get('browser');
+		if (params.has('event')) activeFilters.event = params.get('event');
+		if (params.has('metric')) activeFilters.metric = params.get('metric');
+		if (params.has('propKey')) activeFilters.propertyKey = params.get('propKey');
+		if (params.has('propValue')) activeFilters.propertyValue = params.get('propValue');
+		if (params.has('interval')) {
+			refreshIntervalTime = parseInt(params.get('interval'));
+		}
+	}
+
+	// Apply date range preset without triggering loadStats (for initial load)
+	function applyDateRangePresetWithoutLoad(preset) {
 		const now = new Date();
 		const today = format(now, 'yyyy-MM-dd');
 
@@ -137,58 +195,6 @@
 				return;
 		}
 		showCustomDateInputs = false;
-		loadStats();
-	}
-
-	// URL param helpers
-	function updateURLParams() {
-		if (typeof window === 'undefined') return;
-
-		const params = new URLSearchParams();
-		params.set('range', dateRangePreset);
-		if (dateRangePreset === 'custom') {
-			params.set('start', startDate);
-			params.set('end', endDate);
-		}
-		if (activeFilters.project) params.set('project', activeFilters.project);
-		if (activeFilters.source) params.set('source', activeFilters.source);
-		if (activeFilters.country) params.set('country', activeFilters.country);
-		if (activeFilters.browser) params.set('browser', activeFilters.browser);
-		if (activeFilters.event) params.set('event', activeFilters.event);
-		if (activeFilters.metric) params.set('metric', activeFilters.metric);
-		if (activeFilters.propertyKey) params.set('propKey', activeFilters.propertyKey);
-		if (activeFilters.propertyValue) params.set('propValue', activeFilters.propertyValue);
-		if (refreshIntervalTime !== 30000) params.set('interval', refreshIntervalTime.toString());
-
-		const newURL = `${window.location.pathname}?${params.toString()}`;
-		window.history.replaceState({}, '', newURL);
-	}
-	function loadFromURLParams() {
-		if (typeof window === 'undefined') return;
-
-		const params = new URLSearchParams(window.location.search);
-
-		if (params.has('range')) {
-			dateRangePreset = params.get('range');
-			if (dateRangePreset === 'custom') {
-				if (params.has('start')) startDate = params.get('start');
-				if (params.has('end')) endDate = params.get('end');
-				showCustomDateInputs = true;
-			} else {
-				applyDateRangePreset(dateRangePreset);
-			}
-		}
-		if (params.has('project')) activeFilters.project = params.get('project');
-		if (params.has('source')) activeFilters.source = params.get('source');
-		if (params.has('country')) activeFilters.country = params.get('country');
-		if (params.has('browser')) activeFilters.browser = params.get('browser');
-		if (params.has('event')) activeFilters.event = params.get('event');
-		if (params.has('metric')) activeFilters.metric = params.get('metric');
-		if (params.has('propKey')) activeFilters.propertyKey = params.get('propKey');
-		if (params.has('propValue')) activeFilters.propertyValue = params.get('propValue');
-		if (params.has('interval')) {
-			refreshIntervalTime = parseInt(params.get('interval'));
-		}
 	}
 
 	async function loadStats() {
