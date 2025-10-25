@@ -17,6 +17,15 @@
     <img src="https://img.shields.io/badge/DuckDB-Powered-yellow?style=flat" alt="DuckDB"/>
     <img src="https://img.shields.io/badge/Svelte-5-FF3E00?style=flat&logo=svelte" alt="Svelte"/>
     <img src="https://img.shields.io/badge/License-MIT-green?style=flat" alt="License"/>
+    <a href="https://github.com/mohamedelhefni/siraaj/actions/workflows/test.yml">
+      <img src="https://github.com/mohamedelhefni/siraaj/actions/workflows/test.yml/badge.svg" alt="Tests"/>
+    </a>
+    <a href="https://github.com/mohamedelhefni/siraaj/actions/workflows/docker-build-push.yml">
+      <img src="https://github.com/mohamedelhefni/siraaj/actions/workflows/docker-build-push.yml/badge.svg" alt="Docker Build"/>
+    </a>
+    <a href="https://hub.docker.com/r/mohamedelhefni/siraaj">
+      <img src="https://img.shields.io/docker/pulls/mohamedelhefni/siraaj?style=flat&logo=docker" alt="Docker Pulls"/>
+    </a>
   </p>
 </div>
 
@@ -115,13 +124,48 @@ go build -o siraaj
 The server will start on `http://localhost:8080`
 
 - **Dashboard**: http://localhost:8080/dashboard/
-- **API**: http://localhost:8080/api/
 
 ---
 
 ## 📦 Installation
 
-### Method 1: Pre-built Binary
+### Method 2: Docker (Recommended)
+
+```bash
+# Pull and run the latest version
+docker pull mohamedelhefni/siraaj:latest
+
+docker run -d \
+  -p 8080:8080 \
+  -v $(pwd)/data:/data \
+  --name siraaj \
+  mohamedelhefni/siraaj:latest
+```
+
+**With Docker Compose:**
+
+```yaml
+version: '3.8'
+
+services:
+  siraaj:
+    image: mohamedelhefni/siraaj:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      - PORT=8080
+      - DB_PATH=/data/analytics.db
+    restart: unless-stopped
+```
+
+Save as `docker-compose.yml` and run:
+```bash
+docker-compose up -d
+```
+
+### Method 3: Pre-built Binary
 
 ```bash
 # Download the latest release
@@ -130,7 +174,7 @@ chmod +x siraaj
 ./siraaj
 ```
 
-### Method 2: Build from Source
+### Method 4: Build from Source
 
 ```bash
 # Clone the repository
@@ -148,12 +192,6 @@ go build -o siraaj
 
 # Run
 ./siraaj
-```
-
-### Method 3: Docker (Coming Soon)
-
-```bash
-docker run -p 8080:8080 -v ./data:/data mohamedelhefni/siraaj
 ```
 
 ---
@@ -219,141 +257,6 @@ const analytics = new Analytics({
 });
 ```
 
----
-
-## 🔌 API Reference
-
-### Track Event
-
-```bash
-POST /api/track
-Content-Type: application/json
-
-{
-  "event_name": "page_view",
-  "user_id": "user-123",
-  "session_id": "session-456",
-  "url": "https://example.com/page",
-  "referrer": "https://google.com",
-  "user_agent": "Mozilla/5.0...",
-  "project_id": "my-website",
-  "properties": "{\"custom\": \"data\"}"
-}
-
-Response: {"status": "ok"}
-```
-
-### Get Statistics
-
-```bash
-GET /api/stats?start=2024-01-01&end=2024-01-31&project=my-website&limit=50
-
-Response:
-{
-  "total_events": 1500,
-  "unique_users": 450,
-  "total_visits": 1200,
-  "page_views": 2000,
-  "bounce_rate": 45.5,
-  "events_change": 25.5,
-  "users_change": 15.2,
-  "timeline": [...],
-  "timeline_format": "day",
-  "top_events": [...],
-  "top_pages": [...],
-  "browsers": [...],
-  "top_countries": [...],
-  "top_sources": [...]
-}
-```
-
-### Query Parameters
-
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `start` | Start date (YYYY-MM-DD) | `2024-01-01` |
-| `end` | End date (YYYY-MM-DD) | `2024-01-31` |
-| `project` | Filter by project ID | `my-website` |
-| `source` | Filter by referrer | `google.com` |
-| `country` | Filter by country | `United States` |
-| `browser` | Filter by browser | `Chrome` |
-| `event` | Filter by event name | `page_view` |
-| `limit` | Result limit (max 1000) | `50` |
-
-### Get Events
-
-```bash
-GET /api/events?start=2024-01-01&end=2024-01-31&limit=100&offset=0
-
-Response:
-{
-  "events": [...],
-  "total": 5000,
-  "limit": 100,
-  "offset": 0
-}
-```
-
-### Online Users
-
-```bash
-GET /api/online?window=5
-
-Response:
-{
-  "online_users": 12,
-  "active_sessions": 18,
-  "time_window_mins": 5,
-  "cutoff_time": "2024-10-24T10:30:00Z"
-}
-```
-
-### List Projects
-
-```bash
-GET /api/projects
-
-Response: ["default", "website-1", "website-2"]
-```
-
-### Get Top Properties
-
-```bash
-GET /api/properties?start=2024-01-01&end=2024-01-31&limit=20
-
-Response:
-[
-  {
-    "key": "button_id",
-    "value": "signup",
-    "count": 1250,
-    "event_types": 3
-  },
-  {
-    "key": "plan",
-    "value": "premium",
-    "count": 890,
-    "event_types": 5
-  }
-]
-```
-
-### Health Check
-
-```bash
-GET /api/health
-
-Response:
-{
-  "status": "ok",
-  "database": "duckdb",
-  "version": "1.0.0",
-  "geolocation": true
-}
-```
-
----
-
 ## 🏗️ Architecture
 
 Siraaj follows Clean Architecture principles:
@@ -407,35 +310,11 @@ siraaj/
 PORT=8080
 DB_PATH=analytics.db
 
-# Geolocation (optional)
-GEOIP_DB_PATH=/path/to/dbip-city.mmdb
-
 # CORS (optional)
-CORS_ORIGINS=https://mysite.com,https://app.mysite.com
+CORS=https://mysite.com,https://app.mysite.com
 ```
 
-### Database
-
-Siraaj uses DuckDB, a fast in-process analytical database. The database file (`analytics.db`) is created automatically on first run.
-
-**Schema:**
-- Auto-migrated on startup
-- Indexed for fast queries
-- Optimized for analytical workloads
-
 ---
-
-## 🔒 Privacy & GDPR Compliance
-
-Siraaj is designed with privacy in mind:
-
-- ✅ No cookies used
-- ✅ No cross-site tracking
-- ✅ No PII collected by default
-- ✅ IP addresses can be anonymized
-- ✅ Respects Do Not Track (DNT)
-- ✅ Self-hosted (you control the data)
-- ✅ Easy data export/deletion
 
 ### Data Retention
 
@@ -448,46 +327,7 @@ DELETE FROM events WHERE timestamp < NOW() - INTERVAL 90 DAYS;
 
 ---
 
-## 📊 Performance
-
-Siraaj is built for speed:
-
-- **Query Performance**: Sub-second queries on millions of events
-- **Ingestion**: 10,000+ events/second (single instance)
-- **Memory**: Efficient memory usage with DuckDB
-- **Scalability**: Vertical scaling (add more CPU/RAM)
-
-### Benchmarks
-
-```
-Hardware: MacBook Pro M1, 16GB RAM
-Dataset: 1M events
-
-Query              | Time
--------------------|-------
-Total stats        | 45ms
-Timeline (30 days) | 67ms
-Top pages          | 23ms
-Country breakdown  | 31ms
-```
-
----
-
 ## 🛠️ Development
-
-### Prerequisites
-
-```bash
-# Install Go
-brew install go  # macOS
-# or download from https://golang.org/
-
-# Install Node.js and pnpm
-brew install node pnpm
-
-# Install Air (hot reload for Go)
-go install github.com/air-verse/air@latest
-```
 
 ### Development Workflow
 
@@ -508,129 +348,11 @@ cd dashboard
 pnpm dev  # Frontend dev server on :5173
 ```
 
-### Project Structure
-
-```
-.
-├── cmd/                   # Command-line tools
-├── internal/              # Private application code
-│   ├── domain/           # Core business models
-│   ├── repository/       # Database operations
-│   ├── service/          # Business logic
-│   ├── handler/          # HTTP handlers
-│   └── middleware/       # HTTP middleware
-├── dashboard/             # Frontend application
-│   ├── src/
-│   │   ├── routes/       # SvelteKit routes
-│   │   └── lib/          # Shared components
-│   └── static/           # Static assets
-├── sdk/                   # JavaScript SDK
-├── geolocation/          # GeoIP functionality
-└── main.go               # Application entry
-```
-
-### Running Tests
-
-```bash
-# Run all tests
-go test ./...
-
-# With coverage
-go test -cover ./...
-
-# Specific package
-go test ./internal/repository
-
-# Integration tests
-go test -tags=integration ./...
-```
-
-### Building for Production
-
-```bash
-# Build dashboard
-cd dashboard
-pnpm build
-cd ..
-
-# Build binary
-go build -ldflags="-s -w" -o siraaj
-
-# Cross-compile
-GOOS=linux GOARCH=amd64 go build -o siraaj-linux-amd64
-GOOS=windows GOARCH=amd64 go build -o siraaj-windows-amd64.exe
-GOOS=darwin GOARCH=arm64 go build -o siraaj-darwin-arm64
-```
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these guidelines:
-
-1. **Fork the repository**
-2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
-3. **Commit your changes** (`git commit -m 'Add amazing feature'`)
-4. **Push to the branch** (`git push origin feature/amazing-feature`)
-5. **Open a Pull Request**
-
-### Code Style
-
-- Go: Follow standard Go conventions (`gofmt`, `golint`)
-- JavaScript: Prettier + ESLint
-- Svelte: Standard Svelte formatting
-
-### Commit Messages
-
-Use conventional commits:
-```
-feat: add user authentication
-fix: resolve timezone issue in charts
-docs: update API documentation
-refactor: improve query performance
-test: add repository tests
-```
-
 ---
 
 ## 📝 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- [DuckDB](https://duckdb.org/) - Amazing analytical database
-- [SvelteKit](https://kit.svelte.dev/) - Fantastic web framework
-- [Chart.js](https://www.chartjs.org/) - Beautiful charts
-- [MaxMind](https://www.maxmind.com/) - GeoIP data
-- [DB-IP](https://db-ip.com/) - Free GeoIP alternative
-
----
-
-## 📮 Contact & Support
-
-- **Issues**: [GitHub Issues](https://github.com/mohamedelhefni/siraaj/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/mohamedelhefni/siraaj/discussions)
-- **Author**: [@mohamedelhefni](https://github.com/mohamedelhefni)
-
----
-
-## 🗺️ Roadmap
-
-- [ ] Docker support with Docker Compose
-- [ ] Kubernetes deployment manifests
-- [ ] Email reports (daily/weekly/monthly)
-- [ ] Webhook integrations
-- [ ] Custom dashboards
-- [ ] A/B testing support
-- [ ] Funnel analysis
-- [ ] User session recordings (optional)
-- [ ] API rate limiting
-- [ ] Multi-user authentication
-- [ ] Database backup automation
-- [ ] Data export (CSV, JSON)
 
 ---
 
