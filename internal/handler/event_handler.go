@@ -357,12 +357,12 @@ func parseOS(userAgent string) string {
 
 func parseDevice(userAgent string) string {
 	ua := strings.ToLower(userAgent)
+	if strings.Contains(ua, "tablet") || strings.Contains(ua, "ipad") {
+		return "Tablet"
+	}
 	if strings.Contains(ua, "mobile") || strings.Contains(ua, "android") ||
 		strings.Contains(ua, "iphone") {
 		return "Mobile"
-	}
-	if strings.Contains(ua, "tablet") || strings.Contains(ua, "ipad") {
-		return "Tablet"
 	}
 	return "Desktop"
 }

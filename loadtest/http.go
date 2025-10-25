@@ -1,5 +1,25 @@
 package main
 
+// High-Performance HTTP Load Tester for Analytics Service
+//
+// Optimizations:
+// - Pre-generates all events to eliminate generation overhead during test
+// - Uses large connection pool (1000 idle connections)
+// - Disabled compression for lower latency
+// - Increased buffer sizes (32KB read/write)
+// - Removed artificial rate limiting - workers run at maximum speed
+// - Minimized lock contention in stats collection
+// - HTTP/1.1 for lower latency vs HTTP/2
+// - Large event channel buffer (concurrency * 10)
+//
+// Expected Performance:
+// - With Appender API: 10,000+ req/s on modern hardware
+// - With regular INSERT: 1,000-2,000 req/s
+//
+// Usage:
+//   go run http.go 100000 200        # 100k requests, 200 workers
+//   go run http.go 500000 500        # 500k requests, 500 workers (stress test)
+
 import (
 	"bytes"
 	"encoding/json"
@@ -116,11 +136,17 @@ func NewHTTPLoadTester(baseURL string) *HTTPLoadTester {
 	return &HTTPLoadTester{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 10 * time.Second, // Reduced timeout for faster failure detection
 			Transport: &http.Transport{
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 100,
+				MaxIdleConns:        1000, // Increased for high concurrency
+				MaxIdleConnsPerHost: 1000, // Match MaxIdleConns
+				MaxConnsPerHost:     0,    // No limit
 				IdleConnTimeout:     90 * time.Second,
+				DisableKeepAlives:   false,     // Keep connections alive
+				DisableCompression:  true,      // Disable compression for speed
+				WriteBufferSize:     32 * 1024, // 32KB write buffer
+				ReadBufferSize:      32 * 1024, // 32KB read buffer
+				ForceAttemptHTTP2:   false,     // Use HTTP/1.1 for lower latency
 			},
 		},
 		stats: &LoadTestStats{
@@ -255,24 +281,23 @@ func (hlt *HTTPLoadTester) SendEvent(event Event) error {
 	return nil
 }
 
-// updateStats safely updates the performance statistics
+// updateStats safely updates the performance statistics with minimal locking
 func (hlt *HTTPLoadTester) updateStats(latency int64, resp *http.Response, err error) {
-	hlt.stats.mutex.Lock()
-	defer hlt.stats.mutex.Unlock()
-
+	// Use atomics for counters (no lock needed)
 	atomic.AddInt64(&hlt.stats.totalRequests, 1)
 	atomic.AddInt64(&hlt.stats.totalLatency, latency)
 
 	if err != nil {
 		atomic.AddInt64(&hlt.stats.failedReqs, 1)
-		if resp != nil {
-			hlt.stats.responseCodes[resp.StatusCode]++
-		}
 	} else {
 		atomic.AddInt64(&hlt.stats.successfulReqs, 1)
-		if resp != nil {
-			hlt.stats.responseCodes[resp.StatusCode]++
-		}
+	}
+
+	// Only lock for response codes and min/max latency
+	hlt.stats.mutex.Lock()
+
+	if resp != nil {
+		hlt.stats.responseCodes[resp.StatusCode]++
 	}
 
 	// Update min/max latency
@@ -282,16 +307,18 @@ func (hlt *HTTPLoadTester) updateStats(latency int64, resp *http.Response, err e
 	if latency > hlt.stats.maxLatency {
 		hlt.stats.maxLatency = latency
 	}
+
+	hlt.stats.mutex.Unlock()
 }
 
-// RunConcurrentLoadTest runs a concurrent HTTP load test
+// RunConcurrentLoadTest runs a high-performance concurrent HTTP load test
 func (hlt *HTTPLoadTester) RunConcurrentLoadTest(totalRequests int, concurrency int, numUsers int, duration time.Duration) error {
-	log.Printf("🚀 Starting HTTP load test")
+	log.Printf("🚀 Starting HIGH-PERFORMANCE HTTP load test")
 	log.Printf("📊 Target: %s/api/track", hlt.baseURL)
 	log.Printf("📈 Total requests: %d", totalRequests)
-	log.Printf("🔄 Concurrency: %d", concurrency)
+	log.Printf("🔄 Concurrency: %d workers", concurrency)
 	log.Printf("👥 Users: %d", numUsers)
-	log.Printf("⏱️  Duration: %v", duration)
+	log.Printf("⏱️  Max Duration: %v", duration)
 
 	// Test server connectivity first
 	resp, err := hlt.httpClient.Get(hlt.baseURL + "/api/health")
@@ -307,71 +334,93 @@ func (hlt *HTTPLoadTester) RunConcurrentLoadTest(totalRequests int, concurrency 
 		userPool[i] = fmt.Sprintf("loadtest_user_%d", i+1)
 	}
 
+	// Pre-generate all events for maximum throughput
+	log.Printf("🔄 Pre-generating %d events...", totalRequests)
+	events := make([]Event, totalRequests)
+	for i := 0; i < totalRequests; i++ {
+		events[i] = hlt.GenerateRandomEvent(userPool)
+	}
+	log.Printf("✅ Events generated, starting load test...")
+
 	hlt.stats.startTime = time.Now()
 
-	// Create channels for work distribution
-	eventChan := make(chan Event, concurrency*2)
+	// Large buffer channel for maximum throughput
+	eventChan := make(chan Event, concurrency*10)
 	var wg sync.WaitGroup
 
-	// Start worker goroutines
+	// Atomic counter for completed requests
+	var completed int64
+
+	// Start worker goroutines - each worker processes events as fast as possible
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
 			for event := range eventChan {
 				if err := hlt.SendEvent(event); err != nil {
-					log.Printf("Worker %d error: %v", workerID, err)
+					// Don't log every error, just count them
+					if atomic.LoadInt64(&hlt.stats.failedReqs)%100 == 0 {
+						log.Printf("Worker %d: %d errors so far", workerID, atomic.LoadInt64(&hlt.stats.failedReqs))
+					}
 				}
+				atomic.AddInt64(&completed, 1)
 			}
 		}(i)
 	}
 
-	// Generate and send events
+	// Feed events to workers as fast as possible
 	go func() {
 		defer close(eventChan)
 
-		requestCount := 0
 		timeout := time.After(duration)
-		ticker := time.NewTicker(time.Second / time.Duration(totalRequests/int(duration.Seconds())))
-		defer ticker.Stop()
+		sent := 0
 
-		for {
+		for sent < totalRequests {
 			select {
 			case <-timeout:
-				log.Printf("⏰ Duration limit reached")
+				log.Printf("⏰ Duration limit reached after %d requests", sent)
 				return
-			case <-ticker.C:
-				if requestCount >= totalRequests {
-					log.Printf("🎯 Request limit reached")
-					return
-				}
-
-				event := hlt.GenerateRandomEvent(userPool)
-				select {
-				case eventChan <- event:
-					requestCount++
-				default:
-					// Channel full, skip this event
-				}
+			case eventChan <- events[sent]:
+				sent++
+				// No artificial rate limiting - send as fast as workers can handle
 			}
 		}
+		log.Printf("🎯 All %d requests queued", sent)
 	}()
 
 	// Progress reporting
+	progressDone := make(chan struct{})
 	go func() {
-		progressTicker := time.NewTicker(5 * time.Second)
+		progressTicker := time.NewTicker(2 * time.Second)
 		defer progressTicker.Stop()
+
+		lastCount := int64(0)
+		lastTime := time.Now()
 
 		for {
 			select {
 			case <-progressTicker.C:
-				hlt.printProgress()
+				currentCount := atomic.LoadInt64(&completed)
+				currentTime := time.Now()
+
+				// Calculate instantaneous RPS
+				countDelta := currentCount - lastCount
+				timeDelta := currentTime.Sub(lastTime).Seconds()
+				instantRPS := float64(countDelta) / timeDelta
+
+				hlt.printProgressWithRPS(instantRPS)
+
+				lastCount = currentCount
+				lastTime = currentTime
+			case <-progressDone:
+				return
 			}
 		}
 	}()
 
 	// Wait for all workers to complete
 	wg.Wait()
+	close(progressDone)
 	hlt.stats.endTime = time.Now()
 
 	log.Printf("✅ Load test completed!")
@@ -399,6 +448,27 @@ func (hlt *HTTPLoadTester) printProgress() {
 
 	log.Printf("📊 Progress: %d requests | ✅ %d success | ❌ %d failed | 🚄 %.1f req/s | ⏱️ %.1fms avg",
 		total, successful, failed, rps, float64(avgLatency)/1000.0)
+}
+
+// printProgressWithRPS displays progress with instantaneous RPS
+func (hlt *HTTPLoadTester) printProgressWithRPS(instantRPS float64) {
+	hlt.stats.mutex.RLock()
+	defer hlt.stats.mutex.RUnlock()
+
+	total := atomic.LoadInt64(&hlt.stats.totalRequests)
+	successful := atomic.LoadInt64(&hlt.stats.successfulReqs)
+	failed := atomic.LoadInt64(&hlt.stats.failedReqs)
+	avgLatency := int64(0)
+
+	if total > 0 {
+		avgLatency = atomic.LoadInt64(&hlt.stats.totalLatency) / total
+	}
+
+	elapsed := time.Since(hlt.stats.startTime)
+	overallRPS := float64(total) / elapsed.Seconds()
+
+	log.Printf("📊 %d reqs | ✅ %d | ❌ %d | 🚄 %.0f req/s (inst: %.0f) | ⏱️ %.1fms avg",
+		total, successful, failed, overallRPS, instantRPS, float64(avgLatency)/1000.0)
 }
 
 // printFinalStats displays comprehensive final statistics
@@ -442,37 +512,39 @@ func (hlt *HTTPLoadTester) printFinalStats() {
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Println("Usage: go run main.go <total_requests> [concurrency] [users] [duration_seconds] [server_url]")
+		log.Println("Usage: go run http.go <total_requests> [concurrency] [users] [duration_seconds] [server_url]")
 		log.Println("Examples:")
-		log.Println("  go run main.go 10000                    # 10k requests, default settings")
-		log.Println("  go run main.go 50000 20                 # 50k requests, 20 concurrent")
-		log.Println("  go run main.go 100000 50 5000 60        # 100k requests, 50 concurrent, 5k users, 60s max")
-		log.Println("  go run main.go 10000 10 1000 30 http://localhost:8080  # Custom server")
+		log.Println("  go run http.go 10000                    # 10k requests, default settings")
+		log.Println("  go run http.go 100000 100               # 100k requests, 100 workers")
+		log.Println("  go run http.go 500000 200 5000 300      # 500k requests, 200 workers, 5k users, 300s")
+		log.Println("  go run http.go 10000 50 1000 30 http://localhost:8080  # Custom server")
+		log.Println("\nRecommended for high performance:")
+		log.Println("  go run http.go 100000 200               # 200 concurrent workers")
 		return
 	}
 
-	totalRequests := 10000
+	totalRequests := 100000 // Increased default
 	if len(os.Args) > 1 {
 		if n, err := strconv.Atoi(os.Args[1]); err == nil {
 			totalRequests = n
 		}
 	}
 
-	concurrency := 10
+	concurrency := 100 // Increased default for better throughput
 	if len(os.Args) > 2 {
 		if n, err := strconv.Atoi(os.Args[2]); err == nil {
 			concurrency = n
 		}
 	}
 
-	numUsers := 1000
+	numUsers := 10000 // Increased default
 	if len(os.Args) > 3 {
 		if n, err := strconv.Atoi(os.Args[3]); err == nil {
 			numUsers = n
 		}
 	}
 
-	durationSeconds := 300 // 5 minutes default
+	durationSeconds := 600 // 10 minutes default (increased)
 	if len(os.Args) > 4 {
 		if n, err := strconv.Atoi(os.Args[4]); err == nil {
 			durationSeconds = n
@@ -485,6 +557,13 @@ func main() {
 	}
 
 	duration := time.Duration(durationSeconds) * time.Second
+
+	log.Printf("⚙️  Configuration:")
+	log.Printf("   Requests:    %d", totalRequests)
+	log.Printf("   Concurrency: %d", concurrency)
+	log.Printf("   Users:       %d", numUsers)
+	log.Printf("   Duration:    %v", duration)
+	log.Printf("   Server:      %s\n", serverURL)
 
 	hlt := NewHTTPLoadTester(serverURL)
 	if err := hlt.RunConcurrentLoadTest(totalRequests, concurrency, numUsers, duration); err != nil {
