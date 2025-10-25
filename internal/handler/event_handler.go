@@ -50,7 +50,8 @@ func (h *EventHandler) TrackEvent(w http.ResponseWriter, r *http.Request) {
 
 	// Enrich with geolocation data if service is available
 	if h.geoService != nil && event.Country == "" {
-		if geo := h.geoService.LookupOrDefault(event.IP); geo != nil {
+		geo := h.geoService.LookupOrDefault(event.IP)
+		if geo != nil {
 			event.Country = geo.Country
 			if event.Country == "" {
 				event.Country = geo.CountryCode
