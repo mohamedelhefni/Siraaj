@@ -10,7 +10,9 @@ import (
 func TestLogging(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	})
 
 	middleware := Logging(handler)
@@ -72,7 +74,9 @@ func TestCORS(t *testing.T) {
 
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("OK"))
+				if _, err := w.Write([]byte("OK")); err != nil {
+					t.Errorf("Failed to write response: %v", err)
+				}
 			})
 
 			middleware := CORS(handler)
@@ -107,7 +111,9 @@ func TestCORS(t *testing.T) {
 func TestCORSChaining(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Chained"))
+		if _, err := w.Write([]byte("Chained")); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	})
 
 	// Chain CORS and Logging

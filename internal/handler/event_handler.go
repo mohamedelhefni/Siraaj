@@ -65,7 +65,9 @@ func (h *EventHandler) TrackEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
+		log.Printf("Error encoding response: %v", err)
+	}
 }
 
 func (h *EventHandler) GetStats(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +97,9 @@ func (h *EventHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	// Parse limit parameter
 	limit := 50
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil && l == 1 {
+		var l int
+		if n, err := fmt.Sscanf(limitStr, "%d", &l); err == nil && n == 1 {
+			limit = l
 			if limit > 1000 {
 				limit = 1000 // Cap at 1000
 			}
@@ -131,7 +135,9 @@ func (h *EventHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		log.Printf("Error encoding stats: %v", err)
+	}
 }
 
 func (h *EventHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
@@ -155,7 +161,9 @@ func (h *EventHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 	// Parse pagination parameters
 	limit := 100
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil && l == 1 {
+		var l int
+		if n, err := fmt.Sscanf(limitStr, "%d", &l); err == nil && n == 1 {
+			limit = l
 			if limit > 1000 {
 				limit = 1000
 			}
@@ -164,7 +172,10 @@ func (h *EventHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 
 	offset := 0
 	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		fmt.Sscanf(offsetStr, "%d", &offset)
+		var o int
+		if _, err := fmt.Sscanf(offsetStr, "%d", &o); err == nil {
+			offset = o
+		}
 	}
 
 	events, err := h.service.GetEvents(startDate, endDate, limit, offset)
@@ -175,15 +186,20 @@ func (h *EventHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(events)
+	if err := json.NewEncoder(w).Encode(events); err != nil {
+		log.Printf("Error encoding events: %v", err)
+	}
 }
 
 func (h *EventHandler) GetOnlineUsers(w http.ResponseWriter, r *http.Request) {
 	timeWindow := 5
 	if windowStr := r.URL.Query().Get("window"); windowStr != "" {
-		fmt.Sscanf(windowStr, "%d", &timeWindow)
-		if timeWindow > 60 {
-			timeWindow = 60
+		var tw int
+		if _, err := fmt.Sscanf(windowStr, "%d", &tw); err == nil {
+			timeWindow = tw
+			if timeWindow > 60 {
+				timeWindow = 60
+			}
 		}
 	}
 
@@ -195,7 +211,9 @@ func (h *EventHandler) GetOnlineUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(online)
+	if err := json.NewEncoder(w).Encode(online); err != nil {
+		log.Printf("Error encoding online users: %v", err)
+	}
 }
 
 func (h *EventHandler) GetProjects(w http.ResponseWriter, r *http.Request) {
@@ -207,7 +225,9 @@ func (h *EventHandler) GetProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(projects)
+	if err := json.NewEncoder(w).Encode(projects); err != nil {
+		log.Printf("Error encoding projects: %v", err)
+	}
 }
 
 func (h *EventHandler) GetTopProperties(w http.ResponseWriter, r *http.Request) {
@@ -232,7 +252,9 @@ func (h *EventHandler) GetTopProperties(w http.ResponseWriter, r *http.Request) 
 	// Parse limit parameter
 	limit := 20
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil && l == 1 {
+		var l int
+		if n, err := fmt.Sscanf(limitStr, "%d", &l); err == nil && n == 1 {
+			limit = l
 			if limit > 100 {
 				limit = 100 // Cap at 100
 			}
@@ -265,17 +287,21 @@ func (h *EventHandler) GetTopProperties(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(properties)
+	if err := json.NewEncoder(w).Encode(properties); err != nil {
+		log.Printf("Error encoding properties: %v", err)
+	}
 }
 
 func (h *EventHandler) Health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":      "ok",
 		"database":    "duckdb",
 		"version":     "1.0.0",
 		"geolocation": h.geoService != nil,
-	})
+	}); err != nil {
+		log.Printf("Error encoding health response: %v", err)
+	}
 }
 
 func (h *EventHandler) GeoTest(w http.ResponseWriter, r *http.Request) {
@@ -292,12 +318,14 @@ func (h *EventHandler) GeoTest(w http.ResponseWriter, r *http.Request) {
 	geo := h.geoService.LookupOrDefault(ip)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"ip":           ip,
 		"country":      geo.Country,
 		"country_code": geo.CountryCode,
 		"city":         geo.City,
-	})
+	}); err != nil {
+		log.Printf("Error encoding geo response: %v", err)
+	}
 }
 
 func getClientIP(r *http.Request) string {
@@ -313,56 +341,4 @@ func getClientIP(r *http.Request) string {
 	}
 
 	return strings.Split(r.RemoteAddr, ":")[0]
-}
-
-func parseBrowser(userAgent string) string {
-	ua := strings.ToLower(userAgent)
-	browsers := map[string]string{
-		"edg":     "Edge",
-		"chrome":  "Chrome",
-		"safari":  "Safari",
-		"firefox": "Firefox",
-		"opera":   "Opera",
-	}
-
-	for key, name := range browsers {
-		if strings.Contains(ua, key) {
-			if key == "safari" && strings.Contains(ua, "chrome") {
-				continue
-			}
-			return name
-		}
-	}
-	return "Other"
-}
-
-func parseOS(userAgent string) string {
-	ua := strings.ToLower(userAgent)
-	osList := map[string]string{
-		"windows": "Windows",
-		"mac":     "macOS",
-		"linux":   "Linux",
-		"android": "Android",
-		"iphone":  "iOS",
-		"ipad":    "iOS",
-	}
-
-	for key, name := range osList {
-		if strings.Contains(ua, key) {
-			return name
-		}
-	}
-	return "Other"
-}
-
-func parseDevice(userAgent string) string {
-	ua := strings.ToLower(userAgent)
-	if strings.Contains(ua, "tablet") || strings.Contains(ua, "ipad") {
-		return "Tablet"
-	}
-	if strings.Contains(ua, "mobile") || strings.Contains(ua, "android") ||
-		strings.Contains(ua, "iphone") {
-		return "Mobile"
-	}
-	return "Desktop"
 }

@@ -150,10 +150,12 @@ func main() {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"events": events,
 			"count":  len(events),
-		})
+		}); err != nil {
+			log.Printf("Error encoding debug events: %v", err)
+		}
 	})
 
 	// Serve dashboard (SvelteKit app)
