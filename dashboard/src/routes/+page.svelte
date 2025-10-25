@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { format, subDays, startOfMonth, startOfYear, subMonths } from 'date-fns';
 	import { fetchStats, fetchOnlineUsers, fetchProjects } from '$lib/api';
@@ -19,7 +19,7 @@
 	import CountriesPanel from '$lib/components/CountriesPanel.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 
-	let stats = $state({
+	let stats: any = $state({
 		total_events: 0,
 		unique_users: 0,
 		total_visits: 0,
@@ -42,16 +42,16 @@
 		active_sessions: 0
 	});
 
-	let projects = $state([]);
-	let topProperties = $state([]);
+	let projects: string[] = $state([]);
+	let topProperties: any[] = $state([]);
 
 	let loading = $state(true);
 	let statsLoading = $state(false);
 	let propertiesLoading = $state(false);
 	let onlineUsersLoading = $state(false);
-	let error = $state(null);
+	let error = $state<string | null>(null);
 	let autoRefresh = $state(true);
-	let refreshInterval = $state(null);
+	let refreshInterval = $state<number | null>(null);
 	let refreshIntervalTime = $state(30000); // 30 seconds default
 	let lastRefresh = $state(new Date());
 
@@ -71,7 +71,16 @@
 	];
 
 	// Filter states
-	let activeFilters = $state({
+	let activeFilters = $state<{
+		source: string | null;
+		country: string | null;
+		browser: string | null;
+		event: string | null;
+		project: string | null;
+		metric: string | null;
+		propertyKey: string | null;
+		propertyValue: string | null;
+	}>({
 		source: null,
 		country: null,
 		browser: null,
@@ -88,7 +97,7 @@
 	let showCustomDateInputs = $state(false);
 
 	// Apply date range preset
-	function applyDateRangePreset(preset) {
+	function applyDateRangePreset(preset: string) {
 		applyDateRangePresetWithoutLoad(preset);
 		loadStats();
 	}
@@ -122,31 +131,44 @@
 		const params = new URLSearchParams(window.location.search);
 
 		if (params.has('range')) {
-			dateRangePreset = params.get('range');
+			const range = params.get('range');
+			if (range) dateRangePreset = range;
 			if (dateRangePreset === 'custom') {
-				if (params.has('start')) startDate = params.get('start');
-				if (params.has('end')) endDate = params.get('end');
+				const start = params.get('start');
+				const end = params.get('end');
+				if (start) startDate = start;
+				if (end) endDate = end;
 				showCustomDateInputs = true;
 			} else {
 				// Don't call loadStats() here - will be called in onMount
 				applyDateRangePresetWithoutLoad(dateRangePreset);
 			}
 		}
-		if (params.has('project')) activeFilters.project = params.get('project');
-		if (params.has('source')) activeFilters.source = params.get('source');
-		if (params.has('country')) activeFilters.country = params.get('country');
-		if (params.has('browser')) activeFilters.browser = params.get('browser');
-		if (params.has('event')) activeFilters.event = params.get('event');
-		if (params.has('metric')) activeFilters.metric = params.get('metric');
-		if (params.has('propKey')) activeFilters.propertyKey = params.get('propKey');
-		if (params.has('propValue')) activeFilters.propertyValue = params.get('propValue');
-		if (params.has('interval')) {
-			refreshIntervalTime = parseInt(params.get('interval'));
+		const project = params.get('project');
+		const source = params.get('source');
+		const country = params.get('country');
+		const browser = params.get('browser');
+		const event = params.get('event');
+		const metric = params.get('metric');
+		const propKey = params.get('propKey');
+		const propValue = params.get('propValue');
+		const interval = params.get('interval');
+
+		if (project) activeFilters.project = project;
+		if (source) activeFilters.source = source;
+		if (country) activeFilters.country = country;
+		if (browser) activeFilters.browser = browser;
+		if (event) activeFilters.event = event;
+		if (metric) activeFilters.metric = metric;
+		if (propKey) activeFilters.propertyKey = propKey;
+		if (propValue) activeFilters.propertyValue = propValue;
+		if (interval) {
+			refreshIntervalTime = parseInt(interval);
 		}
 	}
 
 	// Apply date range preset without triggering loadStats (for initial load)
-	function applyDateRangePresetWithoutLoad(preset) {
+	function applyDateRangePresetWithoutLoad(preset: string) {
 		const now = new Date();
 		const today = format(now, 'yyyy-MM-dd');
 
@@ -213,7 +235,7 @@
 		try {
 			// Load stats
 			const statsPromise = fetchStats(startDate, endDate, 50, activeFilters)
-				.then((data) => {
+				.then((data: any) => {
 					stats = data;
 					statsLoading = false;
 					return data;
@@ -225,7 +247,7 @@
 
 			// Load online users
 			const onlinePromise = fetchOnlineUsers(5)
-				.then((data) => {
+				.then((data: any) => {
 					onlineData = data;
 					onlineUsersLoading = false;
 					return data;
@@ -251,9 +273,9 @@
 
 			lastRefresh = new Date();
 			updateURLParams();
-		} catch (err) {
-			error = err.message;
-			console.error('Failed to load stats:', err);
+		} catch (err: any) {
+			error = err?.message || 'Failed to load stats';
+			// Failed to load stats
 		} finally {
 			loading = false;
 		}
@@ -276,19 +298,20 @@
 		setupAutoRefresh();
 	}
 
-	function handleRefreshIntervalChange(event) {
-		refreshIntervalTime = parseInt(event.target.value);
+	function handleRefreshIntervalChange(event: Event) {
+		const target = event.target as HTMLSelectElement;
+		refreshIntervalTime = parseInt(target.value);
 		setupAutoRefresh();
 		updateURLParams();
 	}
 
-	function addFilter(type, value) {
+	function addFilter(type: keyof typeof activeFilters, value: string) {
 		activeFilters[type] = value;
 		updateURLParams();
 		loadStats();
 	}
 
-	function removeFilter(type) {
+	function removeFilter(type: keyof typeof activeFilters) {
 		activeFilters[type] = null;
 		updateURLParams();
 		loadStats();
@@ -326,11 +349,11 @@
 		try {
 			projects = await fetchProjects();
 		} catch (err) {
-			console.error('Failed to load projects:', err);
+			// Failed to load projects - silently fail, not critical
 		}
 	}
 
-	function handleDateChange(event) {
+	function handleDateChange(event: CustomEvent) {
 		startDate = event.detail.startDate;
 		endDate = event.detail.endDate;
 		updateURLParams();
@@ -338,20 +361,20 @@
 	}
 
 	// Helper to format trend
-	function getTrendIcon(change) {
+	function getTrendIcon(change: number) {
 		if (change > 0) return TrendingUp;
 		if (change < 0) return TrendingDown;
 		return Minus;
 	}
 
-	function getTrendColor(change) {
+	function getTrendColor(change: number) {
 		if (change > 0) return 'text-green-600';
 		if (change < 0) return 'text-red-600';
 		return 'text-gray-600';
 	}
 
 	// Handle metric card clicks for filtering timeline
-	function handleMetricClick(metricType) {
+	function handleMetricClick(metricType: string) {
 		if (activeFilters.metric === metricType) {
 			// Toggle off if already selected
 			activeFilters.metric = null;
@@ -363,12 +386,12 @@
 	}
 
 	// Check if a metric is selected
-	function isMetricSelected(metricType) {
+	function isMetricSelected(metricType: string) {
 		return activeFilters.metric === metricType;
 	}
 
 	// Handle property filter
-	function addPropertyFilter(prop) {
+	function addPropertyFilter(prop: { key: string; value: string }) {
 		activeFilters.propertyKey = prop.key;
 		activeFilters.propertyValue = prop.value;
 		updateURLParams();
@@ -389,11 +412,14 @@
 	<div class="flex flex-wrap items-center gap-3">
 		<!-- Date Range Selector -->
 		<div class="flex items-center gap-2">
-			<label class="text-sm font-medium">Period:</label>
+			<span class="text-sm font-medium">Period:</span>
 			<select
 				class="border-input bg-background focus-visible:ring-ring flex h-9 rounded-md border px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1"
 				bind:value={dateRangePreset}
-				onchange={(e) => applyDateRangePreset(e.target.value)}
+				onchange={(e: Event) => {
+					const target = e.target as HTMLSelectElement;
+					applyDateRangePreset(target.value);
+				}}
 			>
 				{#each dateRangePresets as preset}
 					<option value={preset.value}>{preset.label}</option>
@@ -423,13 +449,14 @@
 		<!-- Project Selector -->
 		{#if projects.length > 0}
 			<div class="flex items-center gap-2">
-				<label class="text-sm font-medium">Project:</label>
+				<span class="text-sm font-medium">Project:</span>
 				<select
 					class="border-input bg-background focus-visible:ring-ring flex h-9 rounded-md border px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1"
 					value={activeFilters.project || ''}
-					onchange={(e) => {
-						if (e.target.value) {
-							addFilter('project', e.target.value);
+					onchange={(e: Event) => {
+						const target = e.target as HTMLSelectElement;
+						if (target.value) {
+							addFilter('project', target.value);
 						} else {
 							removeFilter('project');
 						}
@@ -445,7 +472,7 @@
 
 		<!-- Auto-refresh controls -->
 		<div class="ml-auto flex items-center gap-2">
-			<label class="text-sm font-medium">Auto-refresh:</label>
+			<span class="text-sm font-medium">Auto-refresh:</span>
 			<select
 				class="border-input bg-background focus-visible:ring-ring flex h-9 rounded-md border px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1"
 				value={refreshIntervalTime}
@@ -750,7 +777,7 @@
 							valueKey="count"
 							maxItems={8}
 							showMoreTitle="All Events ({(stats.top_events || []).length} total)"
-							onclick={(item) => addFilter('event', item.name)}
+							onclick={(item: any) => addFilter('event', item.name)}
 						/>
 					{/if}
 				</CardContent>
@@ -768,7 +795,7 @@
 				<CardContent>
 					<CountriesPanel
 						countries={stats.top_countries || []}
-						onclick={(item) => addFilter('country', item.name)}
+						onclick={(item: any) => addFilter('country', item.name)}
 						loading={statsLoading}
 					/>
 				</CardContent>
@@ -800,7 +827,7 @@
 							maxItems={5}
 							type="browser"
 							showMoreTitle="All Browsers ({(stats.browsers || []).length} total)"
-							onclick={(item) => addFilter('browser', item.name)}
+							onclick={(item: any) => addFilter('browser', item.name)}
 						/>
 					{/if}
 				</CardContent>
@@ -856,7 +883,7 @@
 							maxItems={5}
 							type="source"
 							showMoreTitle="All Sources ({(stats.top_sources || []).length} total)"
-							onclick={(item) => addFilter('source', item.name)}
+							onclick={(item: any) => addFilter('source', item.name)}
 						/>
 					{/if}
 				</CardContent>

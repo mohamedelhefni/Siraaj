@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	import { List, Globe2 } from 'lucide-svelte';
 	import TopItemsList from './TopItemsList.svelte';
 	import GeographicalMap from './GeographicalMap.svelte';
@@ -8,7 +8,7 @@
 
 	let activeTab = $state('map'); // Default to 'map' view
 
-	function handleCountryClick(item) {
+	function handleCountryClick(item: { name: string; count: number }) {
 		if (onclick) {
 			onclick(item);
 		}

@@ -1,20 +1,20 @@
-<script>
+<script lang="ts">
 	import { onMount } from 'svelte';
 	import * as d3 from 'd3';
 	import * as topojson from 'topojson-client';
 	import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-svelte';
 
 	let { data = [], onclick = null } = $props();
-	let svgElement = $state();
-	let mapContainer = $state();
-	let zoomBehavior = $state();
-	let svgSelection = $state();
+	let svgElement: SVGSVGElement | undefined = $state();
+	let mapContainer: HTMLDivElement | undefined = $state();
+	let zoomBehavior: any = $state();
+	let svgSelection: any = $state();
 
 	// World map TopoJSON URL (using Natural Earth data)
 	const WORLD_MAP_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
 	// Helper function to normalize country names
-	function normalizeCountryName(name) {
+	function normalizeCountryName(name: string | undefined): string | undefined {
 		if (!name) return name;
 		// Replace Israel with Palestine
 		if (name.toLowerCase() === 'israel') {
@@ -51,7 +51,7 @@
 			const width = mapContainer.clientWidth;
 			const height = 400;
 
-			if (width === 0 || height === 0) {
+			if (width === 0) {
 				console.warn('Map container has zero dimensions');
 				return;
 			}
@@ -77,25 +77,25 @@
 			zoomBehavior = d3
 				.zoom()
 				.scaleExtent([1, 8]) // Min and max zoom levels
-				.on('zoom', (event) => {
+				.on('zoom', (event: any) => {
 					g.attr('transform', event.transform);
 				});
 
 			svgSelection.call(zoomBehavior);
 
 			// Create color scale based on data
-			const maxCount = d3.max(data, (d) => d.count) || 1;
+			const maxCount = d3.max(data, (d: any) => d.count) || 1;
 			const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, maxCount]);
 
 			// Create a map of country data for quick lookup
 			// Normalize country names (replace Israel with Palestine)
 			const countryDataMap = new Map(
-				data.map((d) => [normalizeCountryName(d.country).toLowerCase(), d.count])
+				data.map((d: any) => [normalizeCountryName(d.country)?.toLowerCase(), d.count])
 			);
 
 			// Load world map data
-			const worldData = await d3.json(WORLD_MAP_URL);
-			const countries = topojson.feature(worldData, worldData.objects.countries);
+			const worldData: any = await d3.json(WORLD_MAP_URL);
+			const countries: any = topojson.feature(worldData, worldData.objects.countries);
 
 			// Create tooltip
 			const tooltip = d3
@@ -116,7 +116,7 @@
 				.data(countries.features)
 				.join('path')
 				.attr('d', path)
-				.attr('fill', (d) => {
+				.attr('fill', (d: any) => {
 					// Normalize country name (replace Israel with Palestine)
 					let countryName = normalizeCountryName(d.properties.name);
 					const count = countryDataMap.get(countryName?.toLowerCase());
@@ -126,7 +126,7 @@
 				.attr('stroke-width', 0.5)
 				.style('cursor', 'pointer')
 				.style('opacity', 0)
-				.on('mouseover', function (event, d) {
+				.on('mouseover', function (this: any, event: any, d: any) {
 					// Normalize country name (replace Israel with Palestine)
 					const countryName = normalizeCountryName(d.properties.name);
 					const count = countryDataMap.get(countryName?.toLowerCase());
@@ -146,7 +146,7 @@
 							.style('top', event.pageY - 10 + 'px');
 					}
 				})
-				.on('mouseout', function () {
+				.on('mouseout', function (this: any) {
 					d3.select(this)
 						.transition()
 						.duration(200)
@@ -155,7 +155,7 @@
 
 					tooltip.transition().duration(200).style('opacity', 0);
 				})
-				.on('click', function (event, d) {
+				.on('click', function (event: any, d: any) {
 					// Normalize country name (replace Israel with Palestine)
 					const countryName = normalizeCountryName(d.properties.name);
 					const count = countryDataMap.get(countryName?.toLowerCase());
@@ -166,7 +166,7 @@
 				})
 				.transition()
 				.duration(800)
-				.delay((d, i) => i * 2)
+				.delay((_d: any, i: number) => i * 2)
 				.style('opacity', 1);
 
 			// Add legend
@@ -191,8 +191,8 @@
 				.selectAll('stop')
 				.data(d3.range(0, 1.1, 0.1))
 				.join('stop')
-				.attr('offset', (d) => d * 100 + '%')
-				.attr('stop-color', (d) => colorScale(d * maxCount));
+				.attr('offset', (d: number) => d * 100 + '%')
+				.attr('stop-color', (d: number) => colorScale(d * maxCount));
 
 			// Draw legend
 			const legend = svgSelection.append('g').attr('transform', `translate(${legendX},${legendY})`);
@@ -227,14 +227,14 @@
 				tooltip.remove();
 			};
 		} catch (error) {
-			console.error('Error loading map data:', error);
-
-			// Show error message
-			if (svgSelection) {
+			// Error loading map data - show error message
+			if (svgSelection && mapContainer) {
+				const containerWidth = mapContainer.clientWidth || 800;
+				const containerHeight = 400;
 				svgSelection
 					.append('text')
-					.attr('x', width / 2)
-					.attr('y', height / 2)
+					.attr('x', containerWidth / 2)
+					.attr('y', containerHeight / 2)
 					.attr('text-anchor', 'middle')
 					.attr('fill', '#6b7280')
 					.text('Error loading map data');
