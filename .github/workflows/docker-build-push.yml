@@ -18,6 +18,8 @@ jobs:
   build-and-push:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
+    outputs:
+      credentials_available: ${{ steps.check_secrets.outputs.credentials_available }}
     permissions:
       contents: read
       packages: write
@@ -32,8 +34,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Check Docker Hub credentials
+        id: check_secrets
+        run: |
+          if [ -n "${{ secrets.DOCKER_USERNAME }}" ] && [ -n "${{ secrets.DOCKER_PASSWORD }}" ]; then
+            echo "credentials_available=true" >> $GITHUB_OUTPUT
+            echo "✓ Docker Hub credentials found"
+          else
+            echo "credentials_available=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Docker Hub credentials not configured"
+            echo "ℹ️ Docker build will run but images won't be pushed"
+            echo "ℹ️ See .github/DOCKER_SETUP.md for setup instructions"
+          fi
+
       - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
+        if: steps.check_secrets.outputs.credentials_available == 'true' && github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -60,7 +75,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ steps.check_secrets.outputs.credentials_available == 'true' && github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -70,7 +85,7 @@ jobs:
             COMMIT=${{ github.sha }}
 
       - name: Generate artifact attestation
-        if: github.event_name != 'pull_request'
+        if: steps.check_secrets.outputs.credentials_available == 'true' && github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -81,7 +96,7 @@ jobs:
     name: Test Docker Image
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: github.event_name != 'pull_request'
+    if: needs.build-and-push.outputs.credentials_available == 'true' && github.event_name != 'pull_request'
     
     steps:
       - name: Check out code
@@ -115,7 +130,7 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [build-and-push, test-docker-image]
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') && needs.build-and-push.outputs.credentials_available == 'true'
     permissions:
       contents: write
     
