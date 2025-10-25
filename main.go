@@ -66,7 +66,11 @@ func main() {
 		geoService = nil
 	}
 	if geoService != nil {
-		defer geoService.Close()
+		defer func() {
+			if err := geoService.Close(); err != nil {
+				log.Printf("Warning: failed to close geolocation service: %v", err)
+			}
+		}()
 	}
 
 	// Initialize database
@@ -80,7 +84,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("Warning: failed to close database: %v", err)
+		}
+	}()
 
 	log.Println("✓ DuckDB initialized successfully")
 

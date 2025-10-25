@@ -83,7 +83,7 @@ func getCurrentVersion(db *sql.DB) (int, error) {
 
 func Migrate(db *sql.DB) error {
 	log.Println("Running database migrations...")
-	
+
 	if err := initMigrationTable(db); err != nil {
 		return fmt.Errorf("failed to initialize migration table: %v", err)
 	}
@@ -101,7 +101,7 @@ func Migrate(db *sql.DB) error {
 		}
 
 		log.Printf("Applying migration %d: %s", m.Version, m.Description)
-		
+
 		if _, err := db.Exec(m.Up); err != nil {
 			return fmt.Errorf("failed to apply migration %d: %v", m.Version, err)
 		}
@@ -137,7 +137,7 @@ func Rollback(db *sql.DB, targetVersion int) error {
 		}
 
 		log.Printf("Rolling back migration %d: %s", m.Version, m.Description)
-		
+
 		if _, err := db.Exec(m.Down); err != nil {
 			return fmt.Errorf("failed to rollback migration %d: %v", m.Version, err)
 		}

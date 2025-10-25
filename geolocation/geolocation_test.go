@@ -51,7 +51,11 @@ func TestLookup(t *testing.T) {
 	service, err := NewService()
 	dbAvailable := err == nil
 	if dbAvailable {
-		defer service.Close()
+		defer func() {
+			if err := service.Close(); err != nil {
+				t.Logf("Warning: failed to close geolocation service: %v", err)
+			}
+		}()
 	}
 
 	for _, tt := range tests {

@@ -22,9 +22,6 @@ func TestNewEventHandler(t *testing.T) {
 	mockService := mocks.NewMockEventService(ctrl)
 	handler := NewEventHandler(mockService, nil)
 
-	if handler == nil {
-		t.Error("Expected NewEventHandler to return a non-nil handler")
-	}
 	if handler.service == nil {
 		t.Error("Expected handler service to be set")
 	}

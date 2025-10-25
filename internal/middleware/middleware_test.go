@@ -66,11 +66,19 @@ func TestCORS(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set environment variable
 			if tt.corsEnv != "" {
-				os.Setenv("CORS", tt.corsEnv)
+				if err := os.Setenv("CORS", tt.corsEnv); err != nil {
+					t.Fatalf("Failed to set CORS env: %v", err)
+				}
 			} else {
-				os.Unsetenv("CORS")
+				if err := os.Unsetenv("CORS"); err != nil {
+					t.Fatalf("Failed to unset CORS env: %v", err)
+				}
 			}
-			defer os.Unsetenv("CORS")
+			defer func() {
+				if err := os.Unsetenv("CORS"); err != nil {
+					t.Logf("Warning: failed to unset CORS env: %v", err)
+				}
+			}()
 
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)

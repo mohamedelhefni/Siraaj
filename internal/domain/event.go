@@ -21,17 +21,17 @@ type Event struct {
 }
 
 type Stats struct {
-	PageViews     int64                    `json:"page_views"`
-	UniqueVisitors int64                    `json:"unique_visitors"`
-	UniqueUsers   int64                    `json:"unique_users"`
-	TopPages      []PageStat               `json:"top_pages"`
-	TopReferrers  []ReferrerStat           `json:"top_referrers"`
-	Countries     []CountryStat            `json:"countries"`
-	Browsers      []BrowserStat            `json:"browsers"`
-	OSList        []OSStat                 `json:"os"`
-	Devices       []DeviceStat             `json:"devices"`
-	Timeline      []TimelineStat           `json:"timeline"`
-	Events        map[string]int64         `json:"events"`
+	PageViews      int64            `json:"page_views"`
+	UniqueVisitors int64            `json:"unique_visitors"`
+	UniqueUsers    int64            `json:"unique_users"`
+	TopPages       []PageStat       `json:"top_pages"`
+	TopReferrers   []ReferrerStat   `json:"top_referrers"`
+	Countries      []CountryStat    `json:"countries"`
+	Browsers       []BrowserStat    `json:"browsers"`
+	OSList         []OSStat         `json:"os"`
+	Devices        []DeviceStat     `json:"devices"`
+	Timeline       []TimelineStat   `json:"timeline"`
+	Events         map[string]int64 `json:"events"`
 }
 
 type PageStat struct {

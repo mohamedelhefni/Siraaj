@@ -85,7 +85,11 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() {
+		if err := stmt.Close(); err != nil {
+			log.Printf("Warning: failed to close statement: %v", err)
+		}
+	}()
 
 	for _, event := range events {
 		if event.ProjectID == "" {
@@ -131,7 +135,11 @@ func (r *eventRepository) GetEvents(startDate, endDate time.Time, limit, offset 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
 
 	var events []domain.Event
 	for rows.Next() {
@@ -260,7 +268,11 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
 
 	topEvents := []map[string]interface{}{}
 	for rows.Next() {
@@ -282,7 +294,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	var timeFormat string
 
 	// Determine what metric to display in timeline
-	metric, _ := filters["metric"]
+	metric := filters["metric"]
 	var selectClause string
 	switch metric {
 	case "users":
@@ -338,7 +350,11 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
 
 	timeline := []map[string]interface{}{}
 	for rows.Next() {

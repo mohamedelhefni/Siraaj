@@ -138,7 +138,11 @@ func downloadDatabase() error {
 			lastErr = err
 			continue
 		}
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				log.Printf("Warning: failed to close response body: %v", err)
+			}
+		}()
 
 		if resp.StatusCode == 404 && i < len(urls)-1 {
 			log.Printf("Got 404 for %s, trying next URL...", url)
@@ -167,7 +171,11 @@ func decompressAndSave(body io.Reader) error {
 	if err != nil {
 		return fmt.Errorf("failed to create gzip reader: %w", err)
 	}
-	defer gzReader.Close()
+	defer func() {
+		if err := gzReader.Close(); err != nil {
+			log.Printf("Warning: failed to close gzip reader: %v", err)
+		}
+	}()
 
 	// Create temporary file
 	tmpFile := geoDBPath + ".tmp"
@@ -175,18 +183,26 @@ func decompressAndSave(body io.Reader) error {
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
-	defer outFile.Close()
+	defer func() {
+		if err := outFile.Close(); err != nil {
+			log.Printf("Warning: failed to close output file: %v", err)
+		}
+	}()
 
 	// Copy decompressed data
 	_, err = io.Copy(outFile, gzReader)
 	if err != nil {
-		os.Remove(tmpFile)
+		if removeErr := os.Remove(tmpFile); removeErr != nil {
+			log.Printf("Warning: failed to remove temp file: %v", removeErr)
+		}
 		return fmt.Errorf("failed to write database: %w", err)
 	}
 
 	// Rename temp file to final name
 	if err := os.Rename(tmpFile, geoDBPath); err != nil {
-		os.Remove(tmpFile)
+		if removeErr := os.Remove(tmpFile); removeErr != nil {
+			log.Printf("Warning: failed to remove temp file: %v", removeErr)
+		}
 		return fmt.Errorf("failed to rename database file: %w", err)
 	}
 
