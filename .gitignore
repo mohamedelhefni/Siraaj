@@ -33,5 +33,4 @@ go.work.sum
 *db*
 tmp
 
-ui/dashboard
 data/
