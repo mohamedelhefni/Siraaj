@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/mohamedelhefni/siraaj/internal/domain"
@@ -16,6 +17,7 @@ type EventRepository interface {
 	GetStats(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error)
 	GetOnlineUsers(timeWindow int) (map[string]interface{}, error)
 	GetProjects() ([]string, error)
+	GetFunnelAnalysis(request domain.FunnelRequest) (*domain.FunnelAnalysisResult, error)
 }
 
 type eventRepository struct {
@@ -871,4 +873,421 @@ func (r *eventRepository) GetProjects() ([]string, error) {
 	}
 
 	return projects, nil
+}
+
+func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*domain.FunnelAnalysisResult, error) {
+	if len(request.Steps) == 0 {
+		return nil, fmt.Errorf("at least one funnel step is required")
+	}
+
+	// Parse dates
+	startDate, err := time.Parse("2006-01-02", request.StartDate)
+	if err != nil {
+		return nil, fmt.Errorf("invalid start date: %v", err)
+	}
+	endDate, err := time.Parse("2006-01-02", request.EndDate)
+	if err != nil {
+		return nil, fmt.Errorf("invalid end date: %v", err)
+	}
+
+	// Set to beginning and end of day
+	startDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, startDate.Location())
+	endDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 999999999, endDate.Location())
+
+	result := &domain.FunnelAnalysisResult{
+		Steps:     make([]domain.FunnelStepResult, len(request.Steps)),
+		TimeRange: fmt.Sprintf("%s to %s", request.StartDate, request.EndDate),
+	}
+
+	// Build base WHERE clause for global filters
+	baseWhereClause := "timestamp BETWEEN ? AND ?"
+	baseArgs := []interface{}{startDate, endDate}
+
+	if projectID, ok := request.Filters["project"]; ok && projectID != "" {
+		baseWhereClause += " AND project_id = ?"
+		baseArgs = append(baseArgs, projectID)
+	}
+	if country, ok := request.Filters["country"]; ok && country != "" {
+		baseWhereClause += " AND country = ?"
+		baseArgs = append(baseArgs, country)
+	}
+	if browser, ok := request.Filters["browser"]; ok && browser != "" {
+		baseWhereClause += " AND browser = ?"
+		baseArgs = append(baseArgs, browser)
+	}
+	if device, ok := request.Filters["device"]; ok && device != "" {
+		baseWhereClause += " AND device = ?"
+		baseArgs = append(baseArgs, device)
+	}
+	if os, ok := request.Filters["os"]; ok && os != "" {
+		baseWhereClause += " AND os = ?"
+		baseArgs = append(baseArgs, os)
+	}
+	if botFilter, ok := request.Filters["botFilter"]; ok && botFilter != "" {
+		if botFilter == "bot" {
+			baseWhereClause += " AND is_bot = TRUE"
+		} else if botFilter == "human" {
+			baseWhereClause += " AND is_bot = FALSE"
+		}
+	}
+
+	// For each step, calculate metrics
+	var previousUserCount int64 = 0
+	var totalUsers int64 = 0
+
+	for i, step := range request.Steps {
+		// Build WHERE clause for this step
+		stepWhereClause := baseWhereClause
+		stepArgs := make([]interface{}, len(baseArgs))
+		copy(stepArgs, baseArgs)
+
+		// Add event name filter
+		if step.EventName != "" {
+			stepWhereClause += " AND event_name = ?"
+			stepArgs = append(stepArgs, step.EventName)
+		}
+
+		// Add URL filter if specified
+		if step.URL != "" {
+			stepWhereClause += " AND url = ?"
+			stepArgs = append(stepArgs, step.URL)
+		}
+
+		// Add step-specific filters
+		for key, value := range step.Filters {
+			switch key {
+			case "country":
+				stepWhereClause += " AND country = ?"
+				stepArgs = append(stepArgs, value)
+			case "browser":
+				stepWhereClause += " AND browser = ?"
+				stepArgs = append(stepArgs, value)
+			case "device":
+				stepWhereClause += " AND device = ?"
+				stepArgs = append(stepArgs, value)
+			case "os":
+				stepWhereClause += " AND os = ?"
+				stepArgs = append(stepArgs, value)
+			}
+		}
+
+		// If this is not the first step, we need to filter for users who completed previous steps
+		if i == 0 {
+			// First step: count all matching users
+			query := fmt.Sprintf(`
+				SELECT 
+					COUNT(DISTINCT user_id) as user_count,
+					COUNT(DISTINCT session_id) as session_count,
+					COUNT(*) as event_count
+				FROM events 
+				WHERE %s
+			`, stepWhereClause)
+
+			var userCount, sessionCount, eventCount int64
+			err := r.db.QueryRow(query, stepArgs...).Scan(&userCount, &sessionCount, &eventCount)
+			if err != nil {
+				return nil, fmt.Errorf("error querying step %d: %v", i+1, err)
+			}
+
+			result.Steps[i] = domain.FunnelStepResult{
+				Step:           step,
+				UserCount:      userCount,
+				SessionCount:   sessionCount,
+				EventCount:     eventCount,
+				ConversionRate: 100.0, // First step is always 100%
+				OverallRate:    100.0,
+				DropoffRate:    0.0,
+			}
+
+			totalUsers = userCount
+			previousUserCount = userCount
+			result.TotalUsers = totalUsers
+
+		} else {
+			// Subsequent steps: only count users who completed all previous steps
+			// Build a CTE that finds users who completed all previous steps in order
+			var cteBuilder strings.Builder
+			cteBuilder.WriteString("WITH ")
+
+			// Collect all arguments for all CTEs
+			var allCteArgs []interface{}
+
+			// Create CTEs for each previous step
+			for j := 0; j <= i; j++ {
+				if j > 0 {
+					cteBuilder.WriteString(", ")
+				}
+
+				prevStep := request.Steps[j]
+				cteName := fmt.Sprintf("step_%d", j+1)
+
+				// Build WHERE for this CTE
+				var cteWhereClause string
+				var cteArgs []interface{}
+
+				if j == 0 {
+					// First step: simple query without joins
+					cteWhereClause = baseWhereClause
+					cteArgs = make([]interface{}, len(baseArgs))
+					copy(cteArgs, baseArgs)
+
+					if prevStep.EventName != "" {
+						cteWhereClause += " AND event_name = ?"
+						cteArgs = append(cteArgs, prevStep.EventName)
+					}
+					if prevStep.URL != "" {
+						cteWhereClause += " AND url = ?"
+						cteArgs = append(cteArgs, prevStep.URL)
+					}
+
+					for key, value := range prevStep.Filters {
+						switch key {
+						case "country":
+							cteWhereClause += " AND country = ?"
+							cteArgs = append(cteArgs, value)
+						case "browser":
+							cteWhereClause += " AND browser = ?"
+							cteArgs = append(cteArgs, value)
+						case "device":
+							cteWhereClause += " AND device = ?"
+							cteArgs = append(cteArgs, value)
+						case "os":
+							cteWhereClause += " AND os = ?"
+							cteArgs = append(cteArgs, value)
+						}
+					}
+
+					fmt.Fprintf(&cteBuilder, "%s AS (SELECT user_id, session_id, timestamp FROM events WHERE %s)", cteName, cteWhereClause)
+					allCteArgs = append(allCteArgs, cteArgs...)
+				} else {
+					// Subsequent steps: join with previous step
+					// Build WHERE clause with e. prefix
+					cteWhereClause = "e.timestamp BETWEEN ? AND ?"
+					cteArgs = []interface{}{startDate, endDate}
+
+					// Add global filters with e. prefix
+					if projectID, ok := request.Filters["project"]; ok && projectID != "" {
+						cteWhereClause += " AND e.project_id = ?"
+						cteArgs = append(cteArgs, projectID)
+					}
+					if country, ok := request.Filters["country"]; ok && country != "" {
+						cteWhereClause += " AND e.country = ?"
+						cteArgs = append(cteArgs, country)
+					}
+					if browser, ok := request.Filters["browser"]; ok && browser != "" {
+						cteWhereClause += " AND e.browser = ?"
+						cteArgs = append(cteArgs, browser)
+					}
+					if device, ok := request.Filters["device"]; ok && device != "" {
+						cteWhereClause += " AND e.device = ?"
+						cteArgs = append(cteArgs, device)
+					}
+					if os, ok := request.Filters["os"]; ok && os != "" {
+						cteWhereClause += " AND e.os = ?"
+						cteArgs = append(cteArgs, os)
+					}
+					if botFilter, ok := request.Filters["botFilter"]; ok && botFilter != "" {
+						if botFilter == "bot" {
+							cteWhereClause += " AND e.is_bot = TRUE"
+						} else if botFilter == "human" {
+							cteWhereClause += " AND e.is_bot = FALSE"
+						}
+					}
+
+					if prevStep.EventName != "" {
+						cteWhereClause += " AND e.event_name = ?"
+						cteArgs = append(cteArgs, prevStep.EventName)
+					}
+					if prevStep.URL != "" {
+						cteWhereClause += " AND e.url = ?"
+						cteArgs = append(cteArgs, prevStep.URL)
+					}
+
+					for key, value := range prevStep.Filters {
+						switch key {
+						case "country":
+							cteWhereClause += " AND e.country = ?"
+							cteArgs = append(cteArgs, value)
+						case "browser":
+							cteWhereClause += " AND e.browser = ?"
+							cteArgs = append(cteArgs, value)
+						case "device":
+							cteWhereClause += " AND e.device = ?"
+							cteArgs = append(cteArgs, value)
+						case "os":
+							cteWhereClause += " AND e.os = ?"
+							cteArgs = append(cteArgs, value)
+						}
+					}
+
+					prevCteName := fmt.Sprintf("step_%d", j)
+					fmt.Fprintf(&cteBuilder, "%s AS (SELECT e.user_id, e.session_id, e.timestamp FROM events e INNER JOIN %s prev ON e.user_id = prev.user_id AND e.timestamp > prev.timestamp WHERE %s)", cteName, prevCteName, cteWhereClause)
+					allCteArgs = append(allCteArgs, cteArgs...)
+				}
+			}
+
+			// Main query to count users who reached this step
+			currentCteName := fmt.Sprintf("step_%d", i+1)
+			mainQuery := fmt.Sprintf(`
+				%s
+				SELECT 
+					COUNT(DISTINCT user_id) as user_count,
+					COUNT(DISTINCT session_id) as session_count,
+					COUNT(*) as event_count
+				FROM %s
+			`, cteBuilder.String(), currentCteName)
+
+			var userCount, sessionCount, eventCount int64
+			err := r.db.QueryRow(mainQuery, allCteArgs...).Scan(&userCount, &sessionCount, &eventCount)
+			if err != nil {
+				return nil, fmt.Errorf("error querying step %d: %v", i+1, err)
+			}
+
+			// Calculate conversion rates
+			conversionRate := 0.0
+			if previousUserCount > 0 {
+				conversionRate = float64(userCount) / float64(previousUserCount) * 100
+			}
+
+			overallRate := 0.0
+			if totalUsers > 0 {
+				overallRate = float64(userCount) / float64(totalUsers) * 100
+			}
+
+			dropoffRate := 100.0 - conversionRate
+
+			result.Steps[i] = domain.FunnelStepResult{
+				Step:           step,
+				UserCount:      userCount,
+				SessionCount:   sessionCount,
+				EventCount:     eventCount,
+				ConversionRate: conversionRate,
+				OverallRate:    overallRate,
+				DropoffRate:    dropoffRate,
+			}
+
+			previousUserCount = userCount
+		}
+
+		// Calculate average and median time to next step (if not the last step)
+		if i < len(request.Steps)-1 {
+			nextStep := request.Steps[i+1]
+
+			// Build query to find time between this step and next step
+			timeQuery := fmt.Sprintf(`
+				WITH current_step AS (
+					SELECT user_id, timestamp 
+					FROM events 
+					WHERE %s
+				),
+				next_step AS (
+					SELECT user_id, timestamp 
+					FROM events 
+					WHERE %s
+				)
+				SELECT 
+					AVG(EXTRACT(EPOCH FROM (n.timestamp - c.timestamp))) as avg_time,
+					PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (n.timestamp - c.timestamp))) as median_time
+				FROM current_step c
+				INNER JOIN next_step n ON c.user_id = n.user_id AND n.timestamp > c.timestamp
+			`, stepWhereClause, stepWhereClause) // We'll need to build next step WHERE clause
+
+			// Build next step WHERE clause
+			nextStepWhereClause := baseWhereClause
+			nextStepArgs := make([]interface{}, len(baseArgs))
+			copy(nextStepArgs, baseArgs)
+
+			if nextStep.EventName != "" {
+				nextStepWhereClause += " AND event_name = ?"
+				nextStepArgs = append(nextStepArgs, nextStep.EventName)
+			}
+			if nextStep.URL != "" {
+				nextStepWhereClause += " AND url = ?"
+				nextStepArgs = append(nextStepArgs, nextStep.URL)
+			}
+
+			// Combine args for the time query
+			timeQueryArgs := append(stepArgs, nextStepArgs...)
+
+			var avgTime, medianTime sql.NullFloat64
+			err := r.db.QueryRow(timeQuery, timeQueryArgs...).Scan(&avgTime, &medianTime)
+			if err == nil {
+				if avgTime.Valid {
+					result.Steps[i].AvgTimeToNext = avgTime.Float64
+				}
+				if medianTime.Valid {
+					result.Steps[i].MedianTimeToNext = medianTime.Float64
+				}
+			}
+		}
+	}
+
+	// Calculate overall completion metrics
+	if len(request.Steps) > 0 {
+		lastStep := result.Steps[len(result.Steps)-1]
+		result.CompletedUsers = lastStep.UserCount
+
+		if result.TotalUsers > 0 {
+			result.CompletionRate = float64(result.CompletedUsers) / float64(result.TotalUsers) * 100
+		}
+
+		// Calculate average time to complete entire funnel
+		if len(request.Steps) > 1 {
+			firstStep := request.Steps[0]
+			lastStepDef := request.Steps[len(request.Steps)-1]
+
+			// Build WHERE clauses
+			firstWhereClause := baseWhereClause
+			firstArgs := make([]interface{}, len(baseArgs))
+			copy(firstArgs, baseArgs)
+			if firstStep.EventName != "" {
+				firstWhereClause += " AND event_name = ?"
+				firstArgs = append(firstArgs, firstStep.EventName)
+			}
+			if firstStep.URL != "" {
+				firstWhereClause += " AND url = ?"
+				firstArgs = append(firstArgs, firstStep.URL)
+			}
+
+			lastWhereClause := baseWhereClause
+			lastArgs := make([]interface{}, len(baseArgs))
+			copy(lastArgs, baseArgs)
+			if lastStepDef.EventName != "" {
+				lastWhereClause += " AND event_name = ?"
+				lastArgs = append(lastArgs, lastStepDef.EventName)
+			}
+			if lastStepDef.URL != "" {
+				lastWhereClause += " AND url = ?"
+				lastArgs = append(lastArgs, lastStepDef.URL)
+			}
+
+			completionTimeQuery := fmt.Sprintf(`
+				WITH first_step AS (
+					SELECT user_id, MIN(timestamp) as first_time 
+					FROM events 
+					WHERE %s
+					GROUP BY user_id
+				),
+				last_step AS (
+					SELECT user_id, MAX(timestamp) as last_time 
+					FROM events 
+					WHERE %s
+					GROUP BY user_id
+				)
+				SELECT AVG(EXTRACT(EPOCH FROM (l.last_time - f.first_time))) as avg_completion
+				FROM first_step f
+				INNER JOIN last_step l ON f.user_id = l.user_id AND l.last_time > f.first_time
+			`, firstWhereClause, lastWhereClause)
+
+			completionArgs := append(firstArgs, lastArgs...)
+
+			var avgCompletion sql.NullFloat64
+			err := r.db.QueryRow(completionTimeQuery, completionArgs...).Scan(&avgCompletion)
+			if err == nil && avgCompletion.Valid {
+				result.AvgCompletion = avgCompletion.Float64
+			}
+		}
+	}
+
+	return result, nil
 }

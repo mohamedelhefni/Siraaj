@@ -455,7 +455,6 @@
 
 <div class="container mx-auto space-y-4 p-6">
 	<!-- Header -->
-	<h1 class="text-3xl font-black">🏮 Siraaj</h1>
 	<div class="flex flex-wrap items-center justify-between gap-4">
 		<div class="flex items-center gap-4">
 			<h1 class="text-2xl font-bold">📊 {activeFilters.project || 'Siraaj'}</h1>

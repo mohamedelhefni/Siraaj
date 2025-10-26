@@ -14,6 +14,7 @@ type EventService interface {
 	GetStats(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error)
 	GetOnlineUsers(timeWindow int) (map[string]interface{}, error)
 	GetProjects() ([]string, error)
+	GetFunnelAnalysis(request domain.FunnelRequest) (*domain.FunnelAnalysisResult, error)
 }
 
 type eventService struct {
@@ -55,4 +56,8 @@ func (s *eventService) GetOnlineUsers(timeWindow int) (map[string]interface{}, e
 
 func (s *eventService) GetProjects() ([]string, error) {
 	return s.repo.GetProjects()
+}
+
+func (s *eventService) GetFunnelAnalysis(request domain.FunnelRequest) (*domain.FunnelAnalysisResult, error) {
+	return s.repo.GetFunnelAnalysis(request)
 }

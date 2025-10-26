@@ -56,6 +56,21 @@ func (mr *MockEventServiceMockRecorder) GetEvents(startDate, endDate, limit, off
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEvents", reflect.TypeOf((*MockEventService)(nil).GetEvents), startDate, endDate, limit, offset)
 }
 
+// GetFunnelAnalysis mocks base method.
+func (m *MockEventService) GetFunnelAnalysis(request domain.FunnelRequest) (*domain.FunnelAnalysisResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFunnelAnalysis", request)
+	ret0, _ := ret[0].(*domain.FunnelAnalysisResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetFunnelAnalysis indicates an expected call of GetFunnelAnalysis.
+func (mr *MockEventServiceMockRecorder) GetFunnelAnalysis(request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFunnelAnalysis", reflect.TypeOf((*MockEventService)(nil).GetFunnelAnalysis), request)
+}
+
 // GetOnlineUsers mocks base method.
 func (m *MockEventService) GetOnlineUsers(timeWindow int) (map[string]any, error) {
 	m.ctrl.T.Helper()

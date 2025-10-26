@@ -147,7 +147,31 @@ export async function fetchDebugEvents() {
 export async function healthCheck() {
     const response = await fetch(`${API_BASE_URL}/health`);
     if (!response.ok) {
-        throw new Error(`Failed to check health: ${response.statusText}`);
+        throw new Error(`Failed to fetch health status: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Analyze a funnel
+ * @param {Object} funnelRequest - Funnel configuration
+ * @param {Array<Object>} funnelRequest.steps - Array of funnel steps
+ * @param {string} funnelRequest.start_date - Start date (YYYY-MM-DD)
+ * @param {string} funnelRequest.end_date - End date (YYYY-MM-DD)
+ * @param {Object} funnelRequest.filters - Global filters
+ * @returns {Promise<Object>} Funnel analysis results
+ */
+export async function fetchFunnelAnalysis(funnelRequest) {
+    const response = await fetch(`${API_BASE_URL}/funnel`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(funnelRequest),
+    });
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch funnel analysis: ${errorText || response.statusText}`);
     }
     return response.json();
 }

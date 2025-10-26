@@ -286,6 +286,43 @@ func (h *EventHandler) GeoTest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *EventHandler) GetFunnelAnalysis(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var request domain.FunnelRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		log.Printf("Error decoding funnel request: %v", err)
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Validate request
+	if len(request.Steps) == 0 {
+		http.Error(w, "At least one funnel step is required", http.StatusBadRequest)
+		return
+	}
+
+	if request.StartDate == "" || request.EndDate == "" {
+		http.Error(w, "Start date and end date are required", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.service.GetFunnelAnalysis(request)
+	if err != nil {
+		log.Printf("Error getting funnel analysis: %v", err)
+		http.Error(w, fmt.Sprintf("Error analyzing funnel: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		log.Printf("Error encoding funnel analysis response: %v", err)
+	}
+}
+
 func getClientIP(r *http.Request) string {
 	forwarded := r.Header.Get("X-Forwarded-For")
 	if forwarded != "" {
