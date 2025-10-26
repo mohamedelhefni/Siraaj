@@ -101,6 +101,7 @@
 		propertyKey: string | null;
 		propertyValue: string | null;
 		botFilter: string | null; // 'human', 'bot', or null for all
+		page: string | null;
 	}>({
 		source: null,
 		country: null,
@@ -112,7 +113,8 @@
 		metric: null, // For filtering by clicked metric card
 		propertyKey: null,
 		propertyValue: null,
-		botFilter: null
+		botFilter: null,
+		page: null
 	});
 
 	// Default to last 7 days
@@ -147,6 +149,7 @@
 		if (activeFilters.propertyKey) params.set('propKey', activeFilters.propertyKey);
 		if (activeFilters.propertyValue) params.set('propValue', activeFilters.propertyValue);
 		if (activeFilters.botFilter) params.set('botFilter', activeFilters.botFilter);
+		if (activeFilters.page) params.set('page', activeFilters.page);
 		if (refreshIntervalTime !== 30000) params.set('interval', refreshIntervalTime.toString());
 
 		const newURL = `${window.location.pathname}?${params.toString()}`;
@@ -182,6 +185,7 @@
 		const propKey = params.get('propKey');
 		const propValue = params.get('propValue');
 		const botFilter = params.get('botFilter');
+		const page = params.get('page');
 		const interval = params.get('interval');
 
 		if (project) activeFilters.project = project;
@@ -195,6 +199,7 @@
 		if (propKey) activeFilters.propertyKey = propKey;
 		if (propValue) activeFilters.propertyValue = propValue;
 		if (botFilter) activeFilters.botFilter = botFilter;
+		if (page) activeFilters.page = page;
 		if (interval) {
 			refreshIntervalTime = parseInt(interval);
 		}
@@ -374,7 +379,8 @@
 			metric: null,
 			propertyKey: null,
 			propertyValue: null,
-			botFilter: null
+			botFilter: null,
+			page: null
 		};
 		updateURLParams();
 		loadStats();
@@ -667,6 +673,14 @@
 					</button>
 				</Badge>
 			{/if}
+			{#if activeFilters.page}
+				<Badge variant="secondary" class="gap-1">
+					Page: {activeFilters.page}
+					<button onclick={() => removeFilter('page')} class="hover:text-destructive ml-1">
+						<X class="h-3 w-3" />
+					</button>
+				</Badge>
+			{/if}
 			<Button variant="ghost" size="sm" onclick={clearAllFilters}>Clear All</Button>
 		</div>
 	{/if}
@@ -946,6 +960,7 @@
 								maxItems={10}
 								valueKey="count"
 								showMoreTitle="All Pages"
+								onclick={(item: any) => addFilter('page', item.url)}
 							/>
 						{:else if pagesTab === 'entry'}
 							<TopItemsList
@@ -954,6 +969,7 @@
 								maxItems={10}
 								valueKey="count"
 								showMoreTitle="All Entry Pages"
+								onclick={(item: any) => addFilter('page', item.url)}
 							/>
 						{:else if pagesTab === 'exit'}
 							<TopItemsList
@@ -962,6 +978,7 @@
 								maxItems={10}
 								valueKey="count"
 								showMoreTitle="All Exit Pages"
+								onclick={(item: any) => addFilter('page', item.url)}
 							/>
 						{/if}
 					</CardContent>

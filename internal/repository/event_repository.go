@@ -212,6 +212,10 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		whereClause += " AND event_name = ?"
 		args = append(args, eventName)
 	}
+	if page, ok := filters["page"]; ok && page != "" {
+		whereClause += " AND url = ?"
+		args = append(args, page)
+	}
 	if botFilter, ok := filters["botFilter"]; ok && botFilter != "" {
 		if botFilter == "bot" {
 			whereClause += " AND is_bot = TRUE"
@@ -777,6 +781,10 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	if eventName, ok := filters["event"]; ok && eventName != "" {
 		prevWhereClause += " AND event_name = ?"
 		prevArgs = append(prevArgs, eventName)
+	}
+	if page, ok := filters["page"]; ok && page != "" {
+		prevWhereClause += " AND url = ?"
+		prevArgs = append(prevArgs, page)
 	}
 
 	prevQuery := fmt.Sprintf(`

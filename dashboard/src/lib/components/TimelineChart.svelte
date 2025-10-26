@@ -107,14 +107,12 @@
 		// Calculate max value from both datasets for consistent y-axis
 		const maxValue = d3.max([
 			d3.max(parsedData, (d) => d.count),
-			showComparison && parsedComparisonData.length > 0 ? d3.max(parsedComparisonData, (d) => d.count) : 0
+			showComparison && parsedComparisonData.length > 0
+				? d3.max(parsedComparisonData, (d) => d.count)
+				: 0
 		]);
 
-		const y = d3
-			.scaleLinear()
-			.domain([0, maxValue])
-			.nice()
-			.range([height, 0]);
+		const y = d3.scaleLinear().domain([0, maxValue]).nice().range([height, 0]);
 
 		// Create line generator
 		const line = d3
@@ -265,7 +263,7 @@
 				.duration(300)
 				.attr('r', 3);
 
-			// Add hover effects for comparison dots
+			// Add hover effects f0or comparison dots
 			comparisonDots
 				.on('mouseover', function (event, d) {
 					d3.select(this).transition().duration(200).attr('r', 5);
@@ -378,7 +376,7 @@
 
 <div class="relative">
 	{#if data.length > 0 && comparisonData.length > 0}
-		<div class="absolute right-0 top-0 z-10 flex items-center gap-4">
+		<div class="absolute -bottom-5 right-0 z-10 flex items-center gap-4">
 			<div class="flex items-center gap-3 text-sm">
 				<div class="flex items-center gap-2">
 					<div class="h-0.5 w-6 bg-indigo-500"></div>

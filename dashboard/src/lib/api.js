@@ -6,7 +6,7 @@ const API_BASE_URL = 'http://localhost:8080/api';
  * @param {string} startDate - Start date in YYYY-MM-DD format
  * @param {string} endDate - End date in YYYY-MM-DD format
  * @param {number} limit - Limit for top results (default 50)
- * @param {Object} filters - Optional filters {source, country, browser, device, os, event, project, metric, botFilter}
+ * @param {Object} filters - Optional filters {source, country, browser, device, os, event, project, metric, botFilter, page}
  * @returns {Promise<Object>} Analytics stats
  */
 export async function fetchStats(startDate, endDate, limit = 50, filters = {}) {
@@ -25,6 +25,7 @@ export async function fetchStats(startDate, endDate, limit = 50, filters = {}) {
     if (filters.project) params.append('project', filters.project);
     if (filters.metric) params.append('metric', filters.metric);
     if (filters.botFilter) params.append('botFilter', filters.botFilter);
+    if (filters.page) params.append('page', filters.page);
 
     const response = await fetch(`${API_BASE_URL}/stats?${params}`);
     if (!response.ok) {
@@ -46,14 +47,14 @@ export async function fetchComparisonStats(startDate, endDate, limit = 50, filte
     const start = new Date(startDate);
     const end = new Date(endDate);
     const duration = end.getTime() - start.getTime();
-    
+
     // Calculate previous period dates
     const prevEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000); // Day before start
     const prevStart = new Date(prevEnd.getTime() - duration);
-    
+
     const prevStartStr = prevStart.toISOString().split('T')[0];
     const prevEndStr = prevEnd.toISOString().split('T')[0];
-    
+
     // Fetch stats for previous period
     return fetchStats(prevStartStr, prevEndStr, limit, filters);
 }

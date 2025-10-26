@@ -143,6 +143,9 @@ func (h *EventHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	if botFilter := r.URL.Query().Get("botFilter"); botFilter != "" {
 		filters["botFilter"] = botFilter
 	}
+	if page := r.URL.Query().Get("page"); page != "" {
+		filters["page"] = page
+	}
 
 	stats, err := h.service.GetStats(startDate, endDate, limit, filters)
 	if err != nil {
