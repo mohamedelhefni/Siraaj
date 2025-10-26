@@ -13,6 +13,10 @@ RUN npm install -g pnpm && \
 # Copy dashboard source
 COPY dashboard/ ./
 
+# Accept PUBLIC_API_URL as build argument (defaults to empty for relative path)
+ARG PUBLIC_API_URL=
+ENV PUBLIC_API_URL=${PUBLIC_API_URL}
+
 # Build dashboard
 RUN pnpm build
 
@@ -38,7 +42,8 @@ RUN go mod download
 COPY . .
 
 # Copy built dashboard from previous stage
-COPY --from=dashboard-builder /app/dashboard ./ui/dashboard
+# SvelteKit builds to ../ui/dashboard, so we copy from the build location
+COPY --from=dashboard-builder /app/ui/dashboard ./ui/dashboard
 
 # Build the Go application
 RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o siraaj .
