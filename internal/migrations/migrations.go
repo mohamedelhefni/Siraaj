@@ -24,6 +24,7 @@ var migrations = []Migration{
 			event_name VARCHAR NOT NULL,
 			user_id VARCHAR,
 			session_id VARCHAR,
+			session_duration INTEGER,
 			url VARCHAR,
 			referrer VARCHAR,
 			user_agent VARCHAR,
@@ -32,7 +33,6 @@ var migrations = []Migration{
 			browser VARCHAR,
 			os VARCHAR,
 			device VARCHAR,
-			properties JSON,
 			project_id VARCHAR DEFAULT 'default'
 		)`,
 		Down: `DROP TABLE IF EXISTS events`,
@@ -46,18 +46,20 @@ var migrations = []Migration{
 	{
 		Version:     3,
 		Description: "Create indexes",
-		Up: `CREATE INDEX IF NOT EXISTS idx_timestamp ON events(timestamp);
+		Up: `CREATE INDEX IF NOT EXISTS idx_timestamp ON events(timestamp DESC);
 		CREATE INDEX IF NOT EXISTS idx_event_name ON events(event_name);
 		CREATE INDEX IF NOT EXISTS idx_user_id ON events(user_id);
 		CREATE INDEX IF NOT EXISTS idx_country ON events(country);
 		CREATE INDEX IF NOT EXISTS idx_referrer ON events(referrer);
-		CREATE INDEX IF NOT EXISTS idx_project_id ON events(project_id)`,
+		CREATE INDEX IF NOT EXISTS idx_project_id ON events(project_id);
+		CREATE INDEX IF NOT EXISTS idx_session_id ON events(session_id)`,
 		Down: `DROP INDEX IF EXISTS idx_timestamp;
 		DROP INDEX IF EXISTS idx_event_name;
 		DROP INDEX IF EXISTS idx_user_id;
 		DROP INDEX IF EXISTS idx_country;
 		DROP INDEX IF EXISTS idx_referrer;
-		DROP INDEX IF EXISTS idx_project_id`,
+		DROP INDEX IF EXISTS idx_project_id;
+		DROP INDEX IF EXISTS idx_session_id`,
 	},
 	{
 		Version:     4,
@@ -70,54 +72,6 @@ var migrations = []Migration{
 		Description: "Create index on is_bot column",
 		Up:          `CREATE INDEX IF NOT EXISTS idx_is_bot ON events(is_bot)`,
 		Down:        `DROP INDEX IF EXISTS idx_is_bot`,
-	},
-	{
-		Version:     6,
-		Description: "Drop properties column from events table",
-		Up: `
-		-- Create new table without properties column
-		CREATE TABLE events_new AS SELECT 
-			id, timestamp, event_name, user_id, session_id, url, referrer,
-			user_agent, ip, country, browser, os, device, is_bot, project_id
-		FROM events;
-		
-		-- Drop old table
-		DROP TABLE events;
-		
-		-- Rename new table
-		ALTER TABLE events_new RENAME TO events;
-		
-		-- Recreate all indexes
-		CREATE INDEX idx_timestamp ON events(timestamp);
-		CREATE INDEX idx_event_name ON events(event_name);
-		CREATE INDEX idx_user_id ON events(user_id);
-		CREATE INDEX idx_country ON events(country);
-		CREATE INDEX idx_referrer ON events(referrer);
-		CREATE INDEX idx_project_id ON events(project_id);
-		CREATE INDEX idx_is_bot ON events(is_bot);
-		`,
-		Down: `
-		-- Create new table with properties column
-		CREATE TABLE events_new AS SELECT 
-			id, timestamp, event_name, user_id, session_id, url, referrer,
-			user_agent, ip, country, browser, os, device, is_bot, NULL::JSON as properties, project_id
-		FROM events;
-		
-		-- Drop old table
-		DROP TABLE events;
-		
-		-- Rename new table
-		ALTER TABLE events_new RENAME TO events;
-		
-		-- Recreate all indexes
-		CREATE INDEX idx_timestamp ON events(timestamp);
-		CREATE INDEX idx_event_name ON events(event_name);
-		CREATE INDEX idx_user_id ON events(user_id);
-		CREATE INDEX idx_country ON events(country);
-		CREATE INDEX idx_referrer ON events(referrer);
-		CREATE INDEX idx_project_id ON events(project_id);
-		CREATE INDEX idx_is_bot ON events(is_bot);
-		`,
 	},
 }
 

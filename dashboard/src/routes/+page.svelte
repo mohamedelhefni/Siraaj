@@ -26,6 +26,7 @@
 		total_visits: 0,
 		page_views: 0,
 		bounce_rate: 0,
+		avg_session_duration: 0,
 		bot_events: 0,
 		human_events: 0,
 		bot_users: 0,
@@ -763,6 +764,24 @@
 				<CardContent>
 					<div class="text-2xl font-bold">{stats.bounce_rate?.toFixed(1) || '0'}%</div>
 					<p class="text-muted-foreground mt-1 text-xs">Single page sessions</p>
+				</CardContent>
+			</Card>
+
+			<Card>
+				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+					<CardTitle class="text-sm font-medium">Avg Session Duration</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<div class="text-2xl font-bold">
+						{#if stats.avg_session_duration < 60}
+							{Math.floor(stats.avg_session_duration || 0)}s
+						{:else if stats.avg_session_duration < 3600}
+							{Math.floor((stats.avg_session_duration || 0) / 60)}m {Math.floor((stats.avg_session_duration || 0) % 60)}s
+						{:else}
+							{Math.floor((stats.avg_session_duration || 0) / 3600)}h {Math.floor(((stats.avg_session_duration || 0) % 3600) / 60)}m
+						{/if}
+					</div>
+					<p class="text-muted-foreground mt-1 text-xs">Average time per session</p>
 				</CardContent>
 			</Card>
 

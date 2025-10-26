@@ -28,9 +28,9 @@ func NewEventRepository(db *sql.DB) EventRepository {
 
 func (r *eventRepository) Create(event domain.Event) error {
 	query := `
-		INSERT INTO events (id, timestamp, event_name, user_id, session_id, url, referrer, 
+		INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration, url, referrer, 
 			user_agent, ip, country, browser, os, device, is_bot, project_id)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	if event.ProjectID == "" {
@@ -42,6 +42,7 @@ func (r *eventRepository) Create(event domain.Event) error {
 		event.EventName,
 		event.UserID,
 		event.SessionID,
+		event.SessionDuration,
 		event.URL,
 		event.Referrer,
 		event.UserAgent,
@@ -77,9 +78,9 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 	}()
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO events (id, timestamp, event_name, user_id, session_id, url, referrer, 
+		INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration, url, referrer, 
 			user_agent, ip, country, browser, os, device, is_bot, project_id)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -100,6 +101,7 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 			event.EventName,
 			event.UserID,
 			event.SessionID,
+			event.SessionDuration,
 			event.URL,
 			event.Referrer,
 			event.UserAgent,
@@ -122,7 +124,7 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 
 func (r *eventRepository) GetEvents(startDate, endDate time.Time, limit, offset int) (map[string]interface{}, error) {
 	query := `
-		SELECT id, timestamp, event_name, user_id, session_id, url, referrer,
+		SELECT id, timestamp, event_name, user_id, session_id, session_duration, url, referrer,
 			user_agent, ip, country, browser, os, device, is_bot, project_id
 		FROM events
 		WHERE timestamp BETWEEN ? AND ?
@@ -144,7 +146,7 @@ func (r *eventRepository) GetEvents(startDate, endDate time.Time, limit, offset 
 	for rows.Next() {
 		var e domain.Event
 		err := rows.Scan(
-			&e.ID, &e.Timestamp, &e.EventName, &e.UserID, &e.SessionID,
+			&e.ID, &e.Timestamp, &e.EventName, &e.UserID, &e.SessionID, &e.SessionDuration,
 			&e.URL, &e.Referrer, &e.UserAgent, &e.IP, &e.Country,
 			&e.Browser, &e.OS, &e.Device, &e.IsBot, &e.ProjectID,
 		)
@@ -230,14 +232,16 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 			COUNT(DISTINCT user_id) as unique_users,
 			COUNT(DISTINCT session_id) as total_visits,
 			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views,
-			COUNT(DISTINCT CASE WHEN event_name = 'page_view' THEN session_id END) as sessions_with_views
+			COUNT(DISTINCT CASE WHEN event_name = 'page_view' THEN session_id END) as sessions_with_views,
+			AVG(CASE WHEN session_duration > 0 THEN session_duration END) as avg_session_duration
 		FROM date_filtered
 	)
-	SELECT total_events, unique_users, total_visits, page_views, sessions_with_views FROM event_stats;
+	SELECT total_events, unique_users, total_visits, page_views, sessions_with_views, avg_session_duration FROM event_stats;
 	`, whereClause)
 
 	var totalEvents, uniqueUsers, totalVisits, pageViews, sessionsWithViews int
-	err := r.db.QueryRow(aggregateQuery, args...).Scan(&totalEvents, &uniqueUsers, &totalVisits, &pageViews, &sessionsWithViews)
+	var avgSessionDuration sql.NullFloat64
+	err := r.db.QueryRow(aggregateQuery, args...).Scan(&totalEvents, &uniqueUsers, &totalVisits, &pageViews, &sessionsWithViews, &avgSessionDuration)
 	if err != nil {
 		return nil, err
 	}
@@ -245,6 +249,13 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	stats["unique_users"] = uniqueUsers
 	stats["total_visits"] = totalVisits
 	stats["page_views"] = pageViews
+	
+	// Add average session duration (default to 0 if NULL)
+	if avgSessionDuration.Valid {
+		stats["avg_session_duration"] = avgSessionDuration.Float64
+	} else {
+		stats["avg_session_duration"] = 0.0
+	}
 
 	// Calculate bounce rate: sessions with only 1 page view / total sessions
 	var bounceRate float64

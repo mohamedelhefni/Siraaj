@@ -3,21 +3,22 @@ package domain
 import "time"
 
 type Event struct {
-	ID         uint64    `json:"id"`
-	Timestamp  time.Time `json:"timestamp"`
-	EventName  string    `json:"event_name"`
-	UserID     string    `json:"user_id"`
-	SessionID  string    `json:"session_id"`
-	URL        string    `json:"url"`
-	Referrer   string    `json:"referrer"`
-	UserAgent  string    `json:"user_agent"`
-	IP         string    `json:"ip"`
-	Country    string    `json:"country"`
-	Browser    string    `json:"browser"`
-	OS         string    `json:"os"`
-	Device     string    `json:"device"`
-	IsBot      bool      `json:"is_bot"`
-	ProjectID  string    `json:"project_id"`
+	ID              uint64    `json:"id"`
+	Timestamp       time.Time `json:"timestamp"`
+	EventName       string    `json:"event_name"`
+	UserID          string    `json:"user_id"`
+	SessionID       string    `json:"session_id"`
+	SessionDuration int       `json:"session_duration"` // Duration in seconds
+	URL             string    `json:"url"`
+	Referrer        string    `json:"referrer"`
+	UserAgent       string    `json:"user_agent"`
+	IP              string    `json:"ip"`
+	Country         string    `json:"country"`
+	Browser         string    `json:"browser"`
+	OS              string    `json:"os"`
+	Device          string    `json:"device"`
+	IsBot           bool      `json:"is_bot"`
+	ProjectID       string    `json:"project_id"`
 }
 
 type Stats struct {

@@ -13,20 +13,21 @@ func BenchmarkEventCreation(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		_ = domain.Event{
-			Timestamp: time.Now(),
-			EventName: "benchmark_event",
-			UserID:    fmt.Sprintf("user_%d", i),
-			SessionID: fmt.Sprintf("session_%d", i),
-			URL:       "/benchmark",
-			Referrer:  "https://benchmark.com",
-			UserAgent: "BenchmarkAgent/1.0",
-			IP:        "192.168.1.1",
-			Country:   "Palestine",
-			Browser:   "Chrome",
-			OS:        "Linux",
-			Device:    "Desktop",
-			IsBot:     false,
-			ProjectID: "benchmark",
+			Timestamp:       time.Now(),
+			EventName:       "benchmark_event",
+			UserID:          fmt.Sprintf("user_%d", i),
+			SessionID:       fmt.Sprintf("session_%d", i),
+			SessionDuration: 120,
+			URL:             "/benchmark",
+			Referrer:        "https://benchmark.com",
+			UserAgent:       "BenchmarkAgent/1.0",
+			IP:              "192.168.1.1",
+			Country:         "Palestine",
+			Browser:         "Chrome",
+			OS:              "Linux",
+			Device:          "Desktop",
+			IsBot:           false,
+			ProjectID:       "benchmark",
 		}
 	}
 }

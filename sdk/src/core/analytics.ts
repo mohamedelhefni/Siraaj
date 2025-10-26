@@ -10,6 +10,7 @@ class AnalyticsCore {
     private sessionId: string;
     private userId: string;
     private flushTimer: number | null = null;
+    private sessionStartTime: number;
 
     constructor(config: AnalyticsConfig = {}) {
         this.config = {
@@ -25,6 +26,7 @@ class AnalyticsCore {
 
         this.sessionId = this.getSessionId();
         this.userId = this.getUserId();
+        this.sessionStartTime = Date.now();
 
         if (typeof window !== 'undefined') {
             if (this.config.autoTrack) {
@@ -54,6 +56,7 @@ class AnalyticsCore {
             event_name: eventName,
             user_id: this.userId,
             session_id: this.sessionId,
+            session_duration: Math.floor((Date.now() - this.sessionStartTime) / 1000), // Duration in seconds
             url: window.location.href,
             referrer: document.referrer,
             user_agent: navigator.userAgent,
@@ -61,7 +64,6 @@ class AnalyticsCore {
             browser: this.getBrowser(),
             os: this.getOS(),
             device: this.getDevice(),
-            properties: JSON.stringify(properties),
             project_id: this.config.projectId,
         };
 
@@ -291,10 +293,18 @@ class AnalyticsCore {
         if (typeof window === 'undefined') return this.generateId();
 
         let sessionId = sessionStorage.getItem('analytics_session_id');
-        if (!sessionId) {
+        const sessionStart = sessionStorage.getItem('analytics_session_start');
+        
+        // Create new session if doesn't exist or if it's been more than 30 minutes
+        if (!sessionId || !sessionStart || (Date.now() - parseInt(sessionStart)) > 30 * 60 * 1000) {
             sessionId = this.generateId();
             sessionStorage.setItem('analytics_session_id', sessionId);
+            sessionStorage.setItem('analytics_session_start', Date.now().toString());
+            this.sessionStartTime = Date.now();
+        } else {
+            this.sessionStartTime = parseInt(sessionStart);
         }
+        
         return sessionId;
     }
 

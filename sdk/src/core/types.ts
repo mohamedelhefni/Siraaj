@@ -14,6 +14,7 @@ export interface EventData {
   event_name: string;
   user_id: string;
   session_id: string;
+  session_duration: number;
   url: string;
   referrer: string;
   user_agent: string;
@@ -21,7 +22,6 @@ export interface EventData {
   browser: string;
   os: string;
   device: string;
-  properties: string;
   project_id: string;
 }
 
