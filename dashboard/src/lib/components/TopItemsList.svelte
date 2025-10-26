@@ -1,7 +1,9 @@
 <script>
 	import {
 		getCountryFlag,
-		getBrowserName,
+		getBrowserIcon,
+		getDeviceIcon,
+		getOSIcon,
 		getFaviconUrl,
 		getSourceDisplayName
 	} from '$lib/utils/icons';
@@ -24,54 +26,6 @@
 	const hasMore = $derived(items.length > maxItems);
 	const total = $derived(items.reduce((sum, item) => sum + (item[valueKey] || 0), 0));
 
-	// Browser icon map
-	const browserIcons = {
-		chrome: '🌐',
-		firefox: '🦊',
-		safari: '🧭',
-		edge: '🌊',
-		opera: '⭕',
-		brave: '🦁',
-		unknown: '🌍'
-	};
-
-	// Device icon map
-	const deviceIcons = {
-		desktop: '🖥️',
-		mobile: '📱',
-		tablet: '📱',
-		unknown: '💻'
-	};
-
-	// OS icon map
-	const osIcons = {
-		windows: '🪟',
-		macos: '🍎',
-		linux: '🐧',
-		android: '🤖',
-		ios: '📱',
-		unknown: '💻'
-	};
-
-	function getDeviceIcon(device) {
-		const deviceLower = (device || '').toLowerCase();
-		if (deviceLower.includes('desktop')) return deviceIcons.desktop;
-		if (deviceLower.includes('mobile') || deviceLower.includes('phone')) return deviceIcons.mobile;
-		if (deviceLower.includes('tablet')) return deviceIcons.tablet;
-		return deviceIcons.unknown;
-	}
-
-	function getOSIcon(os) {
-		const osLower = (os || '').toLowerCase();
-		if (osLower.includes('windows')) return osIcons.windows;
-		if (osLower.includes('mac') || osLower.includes('darwin')) return osIcons.macos;
-		if (osLower.includes('linux')) return osIcons.linux;
-		if (osLower.includes('android')) return osIcons.android;
-		if (osLower.includes('ios') || osLower.includes('iphone') || osLower.includes('ipad'))
-			return osIcons.ios;
-		return osIcons.unknown;
-	}
-
 	function handleClick(item) {
 		if (onclick) {
 			onclick(item);
@@ -87,9 +41,17 @@
 		const displayLabel = type === 'source' ? getSourceDisplayName(item[labelKey]) : item[labelKey];
 		const faviconUrl = type === 'source' ? getFaviconUrl(item[labelKey]) : null;
 		const countryFlag = type === 'country' ? getCountryFlag(item[labelKey]) : null;
-		const browserIcon = type === 'browser' ? browserIcons[getBrowserName(item[labelKey])] : null;
+		
+		// Get icon (could be URL or emoji)
+		const browserIcon = type === 'browser' ? getBrowserIcon(item[labelKey]) : null;
 		const deviceIcon = type === 'device' ? getDeviceIcon(item[labelKey]) : null;
 		const osIcon = type === 'os' ? getOSIcon(item[labelKey]) : null;
+		
+		// Check if icon is emoji or image URL
+		// URLs will start with /, http, or data: (base64), emoji won't
+		const isBrowserEmoji = browserIcon && !browserIcon.startsWith('/') && !browserIcon.startsWith('http') && !browserIcon.startsWith('data:');
+		const isDeviceEmoji = deviceIcon && !deviceIcon.startsWith('/') && !deviceIcon.startsWith('http') && !deviceIcon.startsWith('data:');
+		const isOSEmoji = osIcon && !osIcon.startsWith('/') && !osIcon.startsWith('http') && !osIcon.startsWith('data:');
 
 		return {
 			item,
@@ -100,7 +62,10 @@
 			countryFlag,
 			browserIcon,
 			deviceIcon,
-			osIcon
+			osIcon,
+			isBrowserEmoji,
+			isDeviceEmoji,
+			isOSEmoji
 		};
 	}
 </script>
@@ -117,7 +82,10 @@
 				countryFlag,
 				browserIcon,
 				deviceIcon,
-				osIcon
+				osIcon,
+				isBrowserEmoji,
+				isDeviceEmoji,
+				isOSEmoji
 			} = renderItem(item, i)}
 
 			<div
@@ -135,11 +103,23 @@
 							{#if countryFlag}
 								<span class="shrink-0 text-lg">{countryFlag}</span>
 							{:else if browserIcon}
-								<span class="shrink-0 text-base">{browserIcon}</span>
+								{#if isBrowserEmoji}
+									<span class="shrink-0 text-base">{browserIcon}</span>
+								{:else}
+									<img src={browserIcon} alt={displayLabel} class="h-4 w-4 shrink-0" />
+								{/if}
 							{:else if deviceIcon}
-								<span class="shrink-0 text-base">{deviceIcon}</span>
+								{#if isDeviceEmoji}
+									<span class="shrink-0 text-base">{deviceIcon}</span>
+								{:else}
+									<img src={deviceIcon} alt={displayLabel} class="h-4 w-4 shrink-0" />
+								{/if}
 							{:else if osIcon}
-								<span class="shrink-0 text-base">{osIcon}</span>
+								{#if isOSEmoji}
+									<span class="shrink-0 text-base">{osIcon}</span>
+								{:else}
+									<img src={osIcon} alt={displayLabel} class="h-4 w-4 shrink-0" />
+								{/if}
 							{:else if faviconUrl}
 								<img src={faviconUrl} alt="" class="h-4 w-4 shrink-0" />
 							{:else if type === 'source' && item[labelKey] === 'Direct'}
@@ -187,7 +167,10 @@
 					countryFlag,
 					browserIcon,
 					deviceIcon,
-					osIcon
+					osIcon,
+					isBrowserEmoji,
+					isDeviceEmoji,
+					isOSEmoji
 				} = renderItem(item, i)}
 
 				<div
@@ -213,11 +196,23 @@
 								{#if countryFlag}
 									<span class="shrink-0 text-lg">{countryFlag}</span>
 								{:else if browserIcon}
-									<span class="shrink-0 text-base">{browserIcon}</span>
+									{#if isBrowserEmoji}
+										<span class="shrink-0 text-base">{browserIcon}</span>
+									{:else}
+										<img src={browserIcon} alt={displayLabel} class="h-4 w-4 shrink-0" />
+									{/if}
 								{:else if deviceIcon}
-									<span class="shrink-0 text-base">{deviceIcon}</span>
+									{#if isDeviceEmoji}
+										<span class="shrink-0 text-base">{deviceIcon}</span>
+									{:else}
+										<img src={deviceIcon} alt={displayLabel} class="h-4 w-4 shrink-0" />
+									{/if}
 								{:else if osIcon}
-									<span class="shrink-0 text-base">{osIcon}</span>
+									{#if isOSEmoji}
+										<span class="shrink-0 text-base">{osIcon}</span>
+									{:else}
+										<img src={osIcon} alt={displayLabel} class="h-4 w-4 shrink-0" />
+									{/if}
 								{:else if faviconUrl}
 									<img src={faviconUrl} alt="" class="h-4 w-4 shrink-0" />
 								{:else if type === 'source' && item[labelKey] === 'Direct'}
