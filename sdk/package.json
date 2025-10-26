@@ -1,0 +1,168 @@
+{
+  "name": "@siraaj/analytics",
+  "version": "1.0.0",
+  "description": "Lightweight analytics SDK for all JavaScript frameworks",
+  "main": "dist/analytics.umd.js",
+  "module": "dist/analytics.esm.js",
+  "types": "dist/analytics.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/analytics.esm.js",
+      "require": "./dist/analytics.umd.js",
+      "types": "./dist/analytics.d.ts"
+    },
+    "./react": {
+      "import": "./dist/react.esm.js",
+      "require": "./dist/react.umd.js",
+      "types": "./dist/react.d.ts"
+    },
+    "./vue": {
+      "import": "./dist/vue.esm.js",
+      "require": "./dist/vue.umd.js",
+      "types": "./dist/vue.d.ts"
+    },
+    "./svelte": {
+      "import": "./dist/svelte.esm.js",
+      "require": "./dist/svelte.umd.js",
+      "types": "./dist/svelte.d.ts"
+    },
+    "./preact": {
+      "import": "./dist/preact.esm.js",
+      "require": "./dist/preact.umd.js",
+      "types": "./dist/preact.d.ts"
+    },
+    "./next": {
+      "import": "./dist/next.esm.js",
+      "require": "./dist/next.umd.js",
+      "types": "./dist/next.d.ts"
+    },
+    "./nuxt": {
+      "import": "./dist/nuxt.esm.js",
+      "require": "./dist/nuxt.umd.js",
+      "types": "./dist/nuxt.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "pnpm run clean && pnpm run build:core && pnpm run build:frameworks && pnpm run minify",
+    "build:core": "rollup -c rollup.config.js",
+    "build:frameworks": "rollup -c rollup.frameworks.config.js",
+    "minify": "node scripts/minify.js",
+    "clean": "rm -rf dist",
+    "dev": "rollup -c rollup.config.js -w",
+    "typecheck": "tsc --noEmit",
+    "size": "size-limit",
+    "analyze": "source-map-explorer dist/*.js"
+  },
+  "keywords": [
+    "analytics",
+    "tracking",
+    "react",
+    "vue",
+    "svelte",
+    "preact",
+    "nextjs",
+    "nuxt",
+    "javascript",
+    "typescript"
+  ],
+  "author": "Mohamed Elhefni",
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.1",
+    "@rollup/plugin-node-resolve": "^15.3.0",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^12.1.1",
+    "@size-limit/preset-small-lib": "^11.1.6",
+    "@types/node": "^22.18.12",
+    "@types/react": "^18.3.12",
+    "esbuild": "^0.24.0",
+    "next": "^14.2.33",
+    "nuxt": "^3.19.3",
+    "preact": "^10.24.3",
+    "react": "^18.3.1",
+    "rollup": "^4.24.4",
+    "rollup-plugin-dts": "^6.1.1",
+    "rollup-plugin-esbuild": "^6.1.1",
+    "size-limit": "^11.1.6",
+    "source-map-explorer": "^2.5.3",
+    "svelte": "^5.1.16",
+    "terser": "^5.36.0",
+    "typescript": "^5.6.3",
+    "vue": "^3.5.12",
+    "vue-router": "^4.6.3"
+  },
+  "peerDependencies": {
+    "next": ">=13.0.0",
+    "nuxt": ">=3.0.0",
+    "preact": ">=10.0.0",
+    "react": ">=16.8.0",
+    "svelte": ">=3.0.0 || >=4.0.0 || >=5.0.0",
+    "vue": ">=3.0.0",
+    "vue-router": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    },
+    "nuxt": {
+      "optional": true
+    },
+    "preact": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    },
+    "vue-router": {
+      "optional": true
+    }
+  },
+  "size-limit": [
+    {
+      "name": "Core",
+      "path": "dist/analytics.esm.min.js",
+      "limit": "3 KB"
+    },
+    {
+      "name": "React",
+      "path": "dist/react.esm.min.js",
+      "limit": "4 KB"
+    },
+    {
+      "name": "Vue",
+      "path": "dist/vue.esm.min.js",
+      "limit": "4 KB"
+    },
+    {
+      "name": "Svelte",
+      "path": "dist/svelte.esm.min.js",
+      "limit": "4 KB"
+    },
+    {
+      "name": "Preact",
+      "path": "dist/preact.esm.min.js",
+      "limit": "4 KB"
+    },
+    {
+      "name": "Next.js",
+      "path": "dist/next.esm.min.js",
+      "limit": "4 KB"
+    },
+    {
+      "name": "Nuxt",
+      "path": "dist/nuxt.esm.min.js",
+      "limit": "4 KB"
+    }
+  ]
+}

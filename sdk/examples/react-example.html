@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Siraaj Analytics - React Example</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+
+        .card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        // This would normally be: import { AnalyticsProvider, useAnalytics } from '@siraaj/analytics/react';
+        // For demo purposes, we'll simulate the hooks
+
+        const { useState, useEffect } = React;
+
+        function App() {
+            const [userId, setUserId] = useState('');
+            const [events, setEvents] = useState([]);
+
+            const track = (event, properties) => {
+                const eventData = {
+                    event,
+                    properties,
+                    timestamp: new Date().toISOString(),
+                };
+                setEvents(prev => [...prev, eventData]);
+                console.log('Event tracked:', eventData);
+            };
+
+            const identify = (id) => {
+                setUserId(id);
+                track('identify', { userId: id });
+            };
+
+            return (
+                <div>
+                    <h1>🎯 Siraaj Analytics - React Example</h1>
+
+                    <div className="card">
+                        <h2>User Identity</h2>
+                        <div className="info">
+                            User ID: {userId || 'Not set'}
+                        </div>
+                        <button onClick={() => identify('user-' + Math.random().toString(36).substr(2, 9))}>
+                            Identify User
+                        </button>
+                    </div>
+
+                    <div className="card">
+                        <h2>Track Events</h2>
+                        <button onClick={() => track('button_clicked', { button: 'primary' })}>
+                            Track Click
+                        </button>
+                        <button onClick={() => track('feature_used', { feature: 'analytics' })}>
+                            Track Feature Use
+                        </button>
+                        <button onClick={() => track('purchase', { amount: 99.99, currency: 'USD' })}>
+                            Track Purchase
+                        </button>
+                    </div>
+
+                    <div className="card">
+                        <h2>Recent Events</h2>
+                        {events.length === 0 ? (
+                            <p>No events tracked yet</p>
+                        ) : (
+                            <div>
+                                {events.slice(-5).reverse().map((event, i) => (
+                                    <div key={i} className="info" style={{ marginBottom: '10px' }}>
+                                        <strong>{event.event}</strong><br />
+                                        {JSON.stringify(event.properties, null, 2)}<br />
+                                        <small>{event.timestamp}</small>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>
