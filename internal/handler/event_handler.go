@@ -125,6 +125,12 @@ func (h *EventHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	if country := r.URL.Query().Get("country"); country != "" {
 		filters["country"] = country
 	}
+	if device := r.URL.Query().Get("device"); device != "" {
+		filters["device"] = device
+	}
+	if os := r.URL.Query().Get("os"); os != "" {
+		filters["os"] = os
+	}
 	if browser := r.URL.Query().Get("browser"); browser != "" {
 		filters["browser"] = browser
 	}

@@ -7,15 +7,29 @@
 		browsers = [],
 		devices = [],
 		operatingSystems = [],
-		onclick = null,
+		onBrowserClick = null,
+		onDeviceClick = null,
+		onOsClick = null,
 		loading = false
 	} = $props();
 
 	let activeTab = $state('browsers'); // Default to 'browsers' view
 
-	function handleClick(item: { name: string; count: number }) {
-		if (onclick) {
-			onclick(item);
+	function handleBrowserClick(item: { name: string; count: number }) {
+		if (onBrowserClick) {
+			onBrowserClick(item);
+		}
+	}
+
+	function handleDeviceClick(item: { name: string; count: number }) {
+		if (onDeviceClick) {
+			onDeviceClick(item);
+		}
+	}
+
+	function handleOsClick(item: { name: string; count: number }) {
+		if (onOsClick) {
+			onOsClick(item);
 		}
 	}
 </script>
@@ -70,7 +84,7 @@
 			maxItems={5}
 			type="browser"
 			showMoreTitle="All Browsers ({browsers.length} total)"
-			onclick={handleClick}
+			onclick={handleBrowserClick}
 		/>
 	{:else if activeTab === 'devices'}
 		<TopItemsList
@@ -80,7 +94,7 @@
 			maxItems={5}
 			type="device"
 			showMoreTitle="All Devices ({devices.length} total)"
-			onclick={handleClick}
+			onclick={handleDeviceClick}
 		/>
 	{:else if activeTab === 'os'}
 		<TopItemsList
@@ -90,7 +104,7 @@
 			maxItems={5}
 			type="os"
 			showMoreTitle="All Operating Systems ({operatingSystems.length} total)"
-			onclick={handleClick}
+			onclick={handleOsClick}
 		/>
 	{/if}
 </div>

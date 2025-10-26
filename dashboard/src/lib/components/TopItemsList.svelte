@@ -41,17 +41,29 @@
 		const displayLabel = type === 'source' ? getSourceDisplayName(item[labelKey]) : item[labelKey];
 		const faviconUrl = type === 'source' ? getFaviconUrl(item[labelKey]) : null;
 		const countryFlag = type === 'country' ? getCountryFlag(item[labelKey]) : null;
-		
+
 		// Get icon (could be URL or emoji)
 		const browserIcon = type === 'browser' ? getBrowserIcon(item[labelKey]) : null;
 		const deviceIcon = type === 'device' ? getDeviceIcon(item[labelKey]) : null;
 		const osIcon = type === 'os' ? getOSIcon(item[labelKey]) : null;
-		
+
 		// Check if icon is emoji or image URL
 		// URLs will start with /, http, or data: (base64), emoji won't
-		const isBrowserEmoji = browserIcon && !browserIcon.startsWith('/') && !browserIcon.startsWith('http') && !browserIcon.startsWith('data:');
-		const isDeviceEmoji = deviceIcon && !deviceIcon.startsWith('/') && !deviceIcon.startsWith('http') && !deviceIcon.startsWith('data:');
-		const isOSEmoji = osIcon && !osIcon.startsWith('/') && !osIcon.startsWith('http') && !osIcon.startsWith('data:');
+		const isBrowserEmoji =
+			browserIcon &&
+			!browserIcon.startsWith('/') &&
+			!browserIcon.startsWith('http') &&
+			!browserIcon.startsWith('data:');
+		const isDeviceEmoji =
+			deviceIcon &&
+			!deviceIcon.startsWith('/') &&
+			!deviceIcon.startsWith('http') &&
+			!deviceIcon.startsWith('data:');
+		const isOSEmoji =
+			osIcon &&
+			!osIcon.startsWith('/') &&
+			!osIcon.startsWith('http') &&
+			!osIcon.startsWith('data:');
 
 		return {
 			item,

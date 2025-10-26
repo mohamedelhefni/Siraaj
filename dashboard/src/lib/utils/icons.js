@@ -179,7 +179,7 @@ export function getBrowserName(browser) {
  */
 export function getBrowserIcon(browser) {
     const browserName = getBrowserName(browser);
-    
+
     const browserIcons = {
         chrome: chromeIcon,
         chromium: chromiumIcon,
@@ -194,17 +194,17 @@ export function getBrowserIcon(browser) {
         curl: curlIcon,
         brave: chromeIcon, // Use chrome icon as fallback for brave
     };
-    
+
     // Return icon if found, otherwise return emoji or fallback
     if (browserIcons[browserName]) {
         return browserIcons[browserName];
     }
-    
+
     // Browser emoji fallbacks
     const browserEmojis = {
         unknown: '🌍'
     };
-    
+
     return browserEmojis[browserName] || browserFallbackIcon;
 }
 
@@ -215,12 +215,12 @@ export function getBrowserIcon(browser) {
  */
 export function getDeviceIcon(device) {
     const deviceLower = (device || '').toLowerCase();
-    
+
     // Device emoji fallbacks
     if (deviceLower.includes('desktop')) return '🖥️';
     if (deviceLower.includes('mobile') || deviceLower.includes('phone')) return '📱';
     if (deviceLower.includes('tablet')) return '📱';
-    
+
     return '💻'; // Default device emoji
 }
 
@@ -231,7 +231,7 @@ export function getDeviceIcon(device) {
  */
 export function getOSIcon(os) {
     const osLower = (os || '').toLowerCase();
-    
+
     // First try to match with imported icons
     if (osLower.includes('windows')) return windowsIcon;
     if (osLower.includes('mac') || osLower.includes('darwin')) return macIcon;
@@ -248,18 +248,18 @@ export function getOSIcon(os) {
     if (osLower.includes('fire')) return fireOsIcon;
     if (osLower.includes('freebsd')) return freebsdIcon;
     if (osLower.includes('playstation')) return playstationIcon;
-    
+
     // OS emoji fallbacks for uncommon systems
     const osEmojis = {
         'bsd': '😈',
         'solaris': '☀️',
         'unix': '🖥️',
     };
-    
+
     for (const [key, emoji] of Object.entries(osEmojis)) {
         if (osLower.includes(key)) return emoji;
     }
-    
+
     return osFallbackIcon;
 }/**
  * Get favicon URL from source/referrer

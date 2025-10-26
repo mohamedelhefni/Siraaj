@@ -83,6 +83,8 @@
 		source: string | null;
 		country: string | null;
 		browser: string | null;
+		device: string | null;
+		os: string | null;
 		event: string | null;
 		project: string | null;
 		metric: string | null;
@@ -93,6 +95,8 @@
 		source: null,
 		country: null,
 		browser: null,
+		device: null,
+		os: null,
 		event: null,
 		project: null,
 		metric: null, // For filtering by clicked metric card
@@ -126,6 +130,8 @@
 		if (activeFilters.source) params.set('source', activeFilters.source);
 		if (activeFilters.country) params.set('country', activeFilters.country);
 		if (activeFilters.browser) params.set('browser', activeFilters.browser);
+		if (activeFilters.device) params.set('device', activeFilters.device);
+		if (activeFilters.os) params.set('os', activeFilters.os);
 		if (activeFilters.event) params.set('event', activeFilters.event);
 		if (activeFilters.metric) params.set('metric', activeFilters.metric);
 		if (activeFilters.propertyKey) params.set('propKey', activeFilters.propertyKey);
@@ -159,6 +165,8 @@
 		const source = params.get('source');
 		const country = params.get('country');
 		const browser = params.get('browser');
+		const device = params.get('device');
+		const os = params.get('os');
 		const event = params.get('event');
 		const metric = params.get('metric');
 		const propKey = params.get('propKey');
@@ -170,6 +178,8 @@
 		if (source) activeFilters.source = source;
 		if (country) activeFilters.country = country;
 		if (browser) activeFilters.browser = browser;
+		if (device) activeFilters.device = device;
+		if (os) activeFilters.os = os;
 		if (event) activeFilters.event = event;
 		if (metric) activeFilters.metric = metric;
 		if (propKey) activeFilters.propertyKey = propKey;
@@ -335,6 +345,8 @@
 			source: null,
 			country: null,
 			browser: null,
+			device: null,
+			os: null,
 			event: null,
 			project: null,
 			metric: null,
@@ -565,6 +577,22 @@
 				<Badge variant="secondary" class="gap-1">
 					Browser: {activeFilters.browser}
 					<button onclick={() => removeFilter('browser')} class="hover:text-destructive ml-1">
+						<X class="h-3 w-3" />
+					</button>
+				</Badge>
+			{/if}
+			{#if activeFilters.device}
+				<Badge variant="secondary" class="gap-1">
+					Device: {activeFilters.device}
+					<button onclick={() => removeFilter('device')} class="hover:text-destructive ml-1">
+						<X class="h-3 w-3" />
+					</button>
+				</Badge>
+			{/if}
+			{#if activeFilters.os}
+				<Badge variant="secondary" class="gap-1">
+					OS: {activeFilters.os}
+					<button onclick={() => removeFilter('os')} class="hover:text-destructive ml-1">
 						<X class="h-3 w-3" />
 					</button>
 				</Badge>
@@ -918,8 +946,10 @@
 					<BrowserPanel
 						browsers={stats.browsers || []}
 						devices={stats.devices || []}
-						operatingSystems={stats.operating_systems || []}
-						onclick={(item: any) => addFilter('browser', item.name)}
+						operatingSystems={stats.os || []}
+						onBrowserClick={(item: any) => addFilter('browser', item.name)}
+						onDeviceClick={(item: any) => addFilter('device', item.name)}
+						onOsClick={(item: any) => addFilter('os', item.name)}
 						loading={statsLoading}
 					/>
 				</CardContent>

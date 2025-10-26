@@ -201,6 +201,14 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		whereClause += " AND browser = ?"
 		args = append(args, browser)
 	}
+	if device, ok := filters["device"]; ok && device != "" {
+		whereClause += " AND device = ?"
+		args = append(args, device)
+	}
+	if os, ok := filters["os"]; ok && os != "" {
+		whereClause += " AND os = ?"
+		args = append(args, os)
+	}
 	if eventName, ok := filters["event"]; ok && eventName != "" {
 		whereClause += " AND event_name = ?"
 		args = append(args, eventName)
@@ -541,7 +549,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 			"count": count,
 		})
 	}
-	stats["operating_systems"] = operatingSystems
+	stats["os"] = operatingSystems
 
 	// Top Countries
 	query = fmt.Sprintf(`
@@ -641,6 +649,14 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		prevWhereClause += " AND browser = ?"
 		prevArgs = append(prevArgs, browser)
 	}
+	if device, ok := filters["device"]; ok && device != "" {
+		prevWhereClause += " AND device = ?"
+		prevArgs = append(prevArgs, device)
+	}
+	if os, ok := filters["os"]; ok && os != "" {
+		prevWhereClause += " AND os = ?"
+		prevArgs = append(prevArgs, os)
+	}
 	if eventName, ok := filters["event"]; ok && eventName != "" {
 		prevWhereClause += " AND event_name = ?"
 		prevArgs = append(prevArgs, eventName)
@@ -706,6 +722,14 @@ func (r *eventRepository) GetTopProperties(startDate, endDate time.Time, limit i
 	if browser, ok := filters["browser"]; ok && browser != "" {
 		whereClause += " AND browser = ?"
 		args = append(args, browser)
+	}
+	if device, ok := filters["device"]; ok && device != "" {
+		whereClause += " AND device = ?"
+		args = append(args, device)
+	}
+	if os, ok := filters["os"]; ok && os != "" {
+		whereClause += " AND os = ?"
+		args = append(args, os)
 	}
 	if eventName, ok := filters["event"]; ok && eventName != "" {
 		whereClause += " AND event_name = ?"

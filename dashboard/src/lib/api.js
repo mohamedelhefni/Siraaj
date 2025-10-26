@@ -6,7 +6,7 @@ const API_BASE_URL = 'http://localhost:8080/api';
  * @param {string} startDate - Start date in YYYY-MM-DD format
  * @param {string} endDate - End date in YYYY-MM-DD format
  * @param {number} limit - Limit for top results (default 50)
- * @param {Object} filters - Optional filters {source, country, browser, event, project, metric, botFilter}
+ * @param {Object} filters - Optional filters {source, country, browser, device, os, event, project, metric, botFilter}
  * @returns {Promise<Object>} Analytics stats
  */
 export async function fetchStats(startDate, endDate, limit = 50, filters = {}) {
@@ -19,6 +19,8 @@ export async function fetchStats(startDate, endDate, limit = 50, filters = {}) {
     if (filters.source) params.append('source', filters.source);
     if (filters.country) params.append('country', filters.country);
     if (filters.browser) params.append('browser', filters.browser);
+    if (filters.device) params.append('device', filters.device);
+    if (filters.os) params.append('os', filters.os);
     if (filters.event) params.append('event', filters.event);
     if (filters.project) params.append('project', filters.project);
     if (filters.metric) params.append('metric', filters.metric);
@@ -86,7 +88,7 @@ export async function fetchProjects() {
  * @param {string} startDate - Start date in YYYY-MM-DD format
  * @param {string} endDate - End date in YYYY-MM-DD format
  * @param {number} limit - Limit for top results (default 20)
- * @param {Object} filters - Optional filters {source, country, browser, event, project}
+ * @param {Object} filters - Optional filters {source, country, browser, device, os, event, project}
  * @returns {Promise<Array>} Top properties
  */
 export async function fetchTopProperties(startDate, endDate, limit = 20, filters = {}) {
@@ -99,6 +101,8 @@ export async function fetchTopProperties(startDate, endDate, limit = 20, filters
     if (filters.source) params.append('source', filters.source);
     if (filters.country) params.append('country', filters.country);
     if (filters.browser) params.append('browser', filters.browser);
+    if (filters.device) params.append('device', filters.device);
+    if (filters.os) params.append('os', filters.os);
     if (filters.event) params.append('event', filters.event);
     if (filters.project) params.append('project', filters.project);
 
