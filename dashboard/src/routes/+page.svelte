@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { format, subDays, startOfMonth, startOfYear, subMonths } from 'date-fns';
-	import { fetchStats, fetchOnlineUsers, fetchProjects } from '$lib/api';
+	import { fetchStats, fetchOnlineUsers, fetchProjects, fetchComparisonStats } from '$lib/api';
 	import { RefreshCw, X, TrendingUp, TrendingDown, Minus } from 'lucide-svelte';
 	import {
 		Card,
@@ -46,6 +46,10 @@
 		operating_systems: [],
 		top_countries: [],
 		top_sources: []
+	});
+
+	let comparisonStats: any = $state({
+		timeline: []
 	});
 
 	let onlineData = $state({
@@ -274,6 +278,18 @@
 					throw err;
 				});
 
+			// Load comparison stats
+			const comparisonPromise = fetchComparisonStats(startDate, endDate, 50, activeFilters)
+				.then((data: any) => {
+					comparisonStats = data;
+					return data;
+				})
+				.catch((err) => {
+					// Silent fail for comparison data
+					comparisonStats = { timeline: [] };
+					return null;
+				});
+
 			// Load online users
 			const onlinePromise = fetchOnlineUsers(5)
 				.then((data: any) => {
@@ -298,7 +314,7 @@
 			// 		throw err;
 			// 	});
 
-			await Promise.all([statsPromise, onlinePromise]);
+			await Promise.all([statsPromise, comparisonPromise, onlinePromise]);
 
 			lastRefresh = new Date();
 			updateURLParams();
@@ -867,6 +883,7 @@
 				{:else}
 					<TimelineChart
 						data={stats.timeline || []}
+						comparisonData={comparisonStats.timeline || []}
 						format={stats.timeline_format || 'day'}
 						metric={activeFilters.metric || 'users'}
 					/>

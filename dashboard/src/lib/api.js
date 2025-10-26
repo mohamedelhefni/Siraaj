@@ -34,6 +34,31 @@ export async function fetchStats(startDate, endDate, limit = 50, filters = {}) {
 }
 
 /**
+ * Fetch comparison stats for previous period
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {number} limit - Limit for top results (default 50)
+ * @param {Object} filters - Optional filters {source, country, browser, device, os, event, project, metric, botFilter}
+ * @returns {Promise<Object>} Analytics stats for comparison period
+ */
+export async function fetchComparisonStats(startDate, endDate, limit = 50, filters = {}) {
+    // Calculate the date range duration
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const duration = end.getTime() - start.getTime();
+    
+    // Calculate previous period dates
+    const prevEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000); // Day before start
+    const prevStart = new Date(prevEnd.getTime() - duration);
+    
+    const prevStartStr = prevStart.toISOString().split('T')[0];
+    const prevEndStr = prevEnd.toISOString().split('T')[0];
+    
+    // Fetch stats for previous period
+    return fetchStats(prevStartStr, prevEndStr, limit, filters);
+}
+
+/**
  * Fetch all events with pagination
  * @param {string} startDate - Start date
  * @param {string} endDate - End date

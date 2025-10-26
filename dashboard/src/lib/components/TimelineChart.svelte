@@ -1,10 +1,13 @@
 <script>
 	import { onMount } from 'svelte';
 	import * as d3 from 'd3';
+	import { Button } from '$lib/components/ui/button';
+	import { Eye, EyeOff } from 'lucide-svelte';
 
-	let { data = [], format = 'day', metric = 'events' } = $props();
+	let { data = [], comparisonData = [], format = 'day', metric = 'events' } = $props();
 	let svgElement = $state();
 	let chartContainer = $state();
+	let showComparison = $state(true);
 
 	// Get label based on metric type
 	const metricLabels = {
@@ -89,15 +92,27 @@
 			count: d.count
 		}));
 
+		// Parse comparison data if available
+		const parsedComparisonData = comparisonData.map((d) => ({
+			date: new Date(d.date),
+			count: d.count
+		}));
+
 		// Create scales
 		const x = d3
 			.scaleTime()
 			.domain(d3.extent(parsedData, (d) => d.date))
 			.range([0, width]);
 
+		// Calculate max value from both datasets for consistent y-axis
+		const maxValue = d3.max([
+			d3.max(parsedData, (d) => d.count),
+			showComparison && parsedComparisonData.length > 0 ? d3.max(parsedComparisonData, (d) => d.count) : 0
+		]);
+
 		const y = d3
 			.scaleLinear()
-			.domain([0, d3.max(parsedData, (d) => d.count)])
+			.domain([0, maxValue])
 			.nice()
 			.range([height, 0]);
 
@@ -193,6 +208,84 @@
 			.ease(d3.easeQuadInOut)
 			.attr('stroke-dashoffset', 0);
 
+		// Add comparison line (dotted, previous period)
+		if (showComparison && parsedComparisonData.length > 0) {
+			// Shift comparison dates to align with current period
+			const timeDiff = parsedData[0].date.getTime() - parsedComparisonData[0].date.getTime();
+			const alignedComparisonData = parsedComparisonData.map((d) => ({
+				date: new Date(d.date.getTime() + timeDiff),
+				count: d.count,
+				originalDate: d.date
+			}));
+
+			const comparisonLine = d3
+				.line()
+				.x((d) => x(d.date))
+				.y((d) => y(d.count))
+				.curve(d3.curveMonotoneX);
+
+			const comparisonPath = svg
+				.append('path')
+				.datum(alignedComparisonData)
+				.attr('fill', 'none')
+				.attr('stroke', 'rgb(156, 163, 175)') // gray-400
+				.attr('stroke-width', 2)
+				.attr('stroke-dasharray', '5,5') // dotted line
+				.attr('opacity', 0.6)
+				.attr('d', comparisonLine);
+
+			const comparisonLength = comparisonPath.node().getTotalLength();
+
+			comparisonPath
+				.attr('stroke-dasharray', comparisonLength + ' ' + comparisonLength)
+				.attr('stroke-dashoffset', comparisonLength)
+				.transition()
+				.duration(750)
+				.ease(d3.easeQuadInOut)
+				.attr('stroke-dashoffset', 0)
+				.attr('stroke-dasharray', '5,5'); // Reset to dotted after animation
+
+			// Add comparison dots
+			const comparisonDots = svg
+				.selectAll('.comparison-dot')
+				.data(alignedComparisonData)
+				.enter()
+				.append('circle')
+				.attr('class', 'comparison-dot')
+				.attr('cx', (d) => x(d.date))
+				.attr('cy', (d) => y(d.count))
+				.attr('r', 0)
+				.attr('fill', 'rgb(156, 163, 175)')
+				.attr('opacity', 0.6)
+				.style('cursor', 'pointer');
+
+			comparisonDots
+				.transition()
+				.delay((d, i) => i * 50)
+				.duration(300)
+				.attr('r', 3);
+
+			// Add hover effects for comparison dots
+			comparisonDots
+				.on('mouseover', function (event, d) {
+					d3.select(this).transition().duration(200).attr('r', 5);
+
+					tooltip.transition().duration(200).style('opacity', 1);
+
+					tooltip
+						.html(
+							`<strong>Previous Period</strong><br/>${formatTooltipDate(d.originalDate.toISOString())}<br/>${metricLabels[metric] || 'Count'}: <strong>${formatCount(d.count, metric)}</strong>`
+						)
+						.style('left', event.pageX + 10 + 'px')
+						.style('top', event.pageY - 10 + 'px');
+				})
+				.on('mouseout', function () {
+					d3.select(this).transition().duration(200).attr('r', 3);
+
+					tooltip.transition().duration(200).style('opacity', 0);
+				});
+		}
+
 		// Add dots
 		const dots = svg
 			.selectAll('.dot')
@@ -274,14 +367,52 @@
 			drawChart();
 		}
 	});
+
+	$effect(() => {
+		// Redraw when showComparison changes
+		if (showComparison !== undefined) {
+			drawChart();
+		}
+	});
 </script>
 
-<div bind:this={chartContainer} class="h-auto w-full">
-	{#if data.length === 0}
-		<div class="text-muted-foreground flex h-full items-center justify-center">
-			<p>No data available for the selected period</p>
+<div class="relative">
+	{#if data.length > 0 && comparisonData.length > 0}
+		<div class="absolute right-0 top-0 z-10 flex items-center gap-4">
+			<div class="flex items-center gap-3 text-sm">
+				<div class="flex items-center gap-2">
+					<div class="h-0.5 w-6 bg-indigo-500"></div>
+					<span class="text-muted-foreground">Current Period</span>
+				</div>
+				<div class="flex items-center gap-2">
+					<div class="h-0.5 w-6 border-t-2 border-dashed border-gray-400"></div>
+					<span class="text-muted-foreground">Previous Period</span>
+				</div>
+			</div>
+			<Button
+				variant="ghost"
+				size="sm"
+				onclick={() => (showComparison = !showComparison)}
+				class="gap-2"
+			>
+				{#if showComparison}
+					<Eye class="h-4 w-4" />
+					Hide Comparison
+				{:else}
+					<EyeOff class="h-4 w-4" />
+					Show Comparison
+				{/if}
+			</Button>
 		</div>
-	{:else}
-		<svg bind:this={svgElement} class="w-full"></svg>
 	{/if}
+
+	<div bind:this={chartContainer} class="h-auto w-full">
+		{#if data.length === 0}
+			<div class="text-muted-foreground flex h-full items-center justify-center">
+				<p>No data available for the selected period</p>
+			</div>
+		{:else}
+			<svg bind:this={svgElement} class="w-full"></svg>
+		{/if}
+	</div>
 </div>
