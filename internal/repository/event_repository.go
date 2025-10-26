@@ -14,7 +14,6 @@ type EventRepository interface {
 	CreateBatch(events []domain.Event) error
 	GetEvents(startDate, endDate time.Time, limit, offset int) (map[string]interface{}, error)
 	GetStats(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error)
-	GetTopProperties(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error)
 	GetOnlineUsers(timeWindow int) (map[string]interface{}, error)
 	GetProjects() ([]string, error)
 }
@@ -30,8 +29,8 @@ func NewEventRepository(db *sql.DB) EventRepository {
 func (r *eventRepository) Create(event domain.Event) error {
 	query := `
 		INSERT INTO events (id, timestamp, event_name, user_id, session_id, url, referrer, 
-			user_agent, ip, country, browser, os, device, is_bot, properties, project_id)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			user_agent, ip, country, browser, os, device, is_bot, project_id)
+		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	if event.ProjectID == "" {
@@ -52,7 +51,6 @@ func (r *eventRepository) Create(event domain.Event) error {
 		event.OS,
 		event.Device,
 		event.IsBot,
-		event.Properties,
 		event.ProjectID,
 	)
 
@@ -80,8 +78,8 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO events (id, timestamp, event_name, user_id, session_id, url, referrer, 
-			user_agent, ip, country, browser, os, device, is_bot, properties, project_id)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			user_agent, ip, country, browser, os, device, is_bot, project_id)
+		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -111,7 +109,6 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 			event.OS,
 			event.Device,
 			event.IsBot,
-			event.Properties,
 			event.ProjectID,
 		)
 		if err != nil {
@@ -126,7 +123,7 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 func (r *eventRepository) GetEvents(startDate, endDate time.Time, limit, offset int) (map[string]interface{}, error) {
 	query := `
 		SELECT id, timestamp, event_name, user_id, session_id, url, referrer,
-			user_agent, ip, country, browser, os, device, is_bot, properties, project_id
+			user_agent, ip, country, browser, os, device, is_bot, project_id
 		FROM events
 		WHERE timestamp BETWEEN ? AND ?
 		ORDER BY timestamp DESC
@@ -149,7 +146,7 @@ func (r *eventRepository) GetEvents(startDate, endDate time.Time, limit, offset 
 		err := rows.Scan(
 			&e.ID, &e.Timestamp, &e.EventName, &e.UserID, &e.SessionID,
 			&e.URL, &e.Referrer, &e.UserAgent, &e.IP, &e.Country,
-			&e.Browser, &e.OS, &e.Device, &e.IsBot, &e.Properties, &e.ProjectID,
+			&e.Browser, &e.OS, &e.Device, &e.IsBot, &e.ProjectID,
 		)
 		if err != nil {
 			log.Printf("Error scanning event: %v", err)
@@ -696,97 +693,6 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	}
 
 	return stats, nil
-}
-
-func (r *eventRepository) GetTopProperties(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error) {
-	if limit <= 0 {
-		limit = 20
-	}
-
-	// Build WHERE clause based on filters
-	whereClause := "timestamp BETWEEN ? AND ?"
-	args := []interface{}{startDate, endDate}
-
-	if projectID, ok := filters["project"]; ok && projectID != "" {
-		whereClause += " AND project_id = ?"
-		args = append(args, projectID)
-	}
-	if source, ok := filters["source"]; ok && source != "" {
-		whereClause += " AND referrer = ?"
-		args = append(args, source)
-	}
-	if country, ok := filters["country"]; ok && country != "" {
-		whereClause += " AND country = ?"
-		args = append(args, country)
-	}
-	if browser, ok := filters["browser"]; ok && browser != "" {
-		whereClause += " AND browser = ?"
-		args = append(args, browser)
-	}
-	if device, ok := filters["device"]; ok && device != "" {
-		whereClause += " AND device = ?"
-		args = append(args, device)
-	}
-	if os, ok := filters["os"]; ok && os != "" {
-		whereClause += " AND os = ?"
-		args = append(args, os)
-	}
-	if eventName, ok := filters["event"]; ok && eventName != "" {
-		whereClause += " AND event_name = ?"
-		args = append(args, eventName)
-	}
-
-	// Only get events that have valid JSON properties
-	whereClause += " AND properties IS NOT NULL AND TRY_CAST(properties AS JSON) IS NOT NULL AND json_valid(properties)"
-
-	// Query to get all property key-value pairs with their counts
-	// Use json_extract_string to safely convert values to strings
-	query := fmt.Sprintf(`
-		SELECT 
-			je.key::VARCHAR as prop_key,
-			CASE 
-				WHEN je.type = 'VARCHAR' THEN je.value::VARCHAR
-				WHEN je.type = 'BIGINT' THEN je.value::BIGINT::VARCHAR
-				WHEN je.type = 'DOUBLE' THEN je.value::DOUBLE::VARCHAR
-				WHEN je.type = 'BOOLEAN' THEN je.value::BOOLEAN::VARCHAR
-				ELSE je.value::VARCHAR
-			END as prop_value,
-			COUNT(*) as count,
-			COUNT(DISTINCT e.event_name) as event_types
-		FROM events e, json_each(CAST(e.properties AS JSON)) je
-		WHERE %s
-		GROUP BY je.key::VARCHAR, prop_value
-		ORDER BY count DESC
-		LIMIT ?
-	`, whereClause)
-
-	queryArgs := append(args, limit)
-	rows, err := r.db.Query(query, queryArgs...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Printf("Warning: failed to close rows: %v", err)
-		}
-	}()
-
-	properties := []map[string]interface{}{}
-	for rows.Next() {
-		var key, value string
-		var count, eventTypes int
-		if err := rows.Scan(&key, &value, &count, &eventTypes); err != nil {
-			continue
-		}
-		properties = append(properties, map[string]interface{}{
-			"key":         key,
-			"value":       value,
-			"count":       count,
-			"event_types": eventTypes,
-		})
-	}
-
-	return properties, nil
 }
 
 func (r *eventRepository) GetOnlineUsers(timeWindow int) (map[string]interface{}, error) {

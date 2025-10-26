@@ -13,20 +13,20 @@ func BenchmarkEventCreation(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		_ = domain.Event{
-			Timestamp:  time.Now(),
-			EventName:  "benchmark_event",
-			UserID:     fmt.Sprintf("user_%d", i),
-			SessionID:  fmt.Sprintf("session_%d", i),
-			URL:        "/benchmark",
-			Referrer:   "https://benchmark.com",
-			UserAgent:  "BenchmarkAgent/1.0",
-			IP:         "192.168.1.1",
-			Country:    "Palestine",
-			Browser:    "Chrome",
-			OS:         "Linux",
-			Device:     "Desktop",
-			Properties: `{"test":"value"}`,
-			ProjectID:  "benchmark",
+			Timestamp: time.Now(),
+			EventName: "benchmark_event",
+			UserID:    fmt.Sprintf("user_%d", i),
+			SessionID: fmt.Sprintf("session_%d", i),
+			URL:       "/benchmark",
+			Referrer:  "https://benchmark.com",
+			UserAgent: "BenchmarkAgent/1.0",
+			IP:        "192.168.1.1",
+			Country:   "Palestine",
+			Browser:   "Chrome",
+			OS:        "Linux",
+			Device:    "Desktop",
+			IsBot:     false,
+			ProjectID: "benchmark",
 		}
 	}
 }
@@ -75,25 +75,4 @@ func BenchmarkStatsCreation(b *testing.B) {
 	}
 }
 
-func BenchmarkJSONPropertyParsing(b *testing.B) {
-	properties := []string{
-		`{"key":"value"}`,
-		`{"browser":"Chrome","os":"Windows","screen":"1920x1080"}`,
-		`{"user_type":"premium","subscription":"monthly","amount":29.99}`,
-		`{"deep":{"nested":{"object":{"with":"value"}}}}`,
-	}
-
-	for _, prop := range properties {
-		b.Run(fmt.Sprintf("PropLen-%d", len(prop)), func(b *testing.B) {
-			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				event := domain.Event{
-					EventName:  "test",
-					UserID:     "user1",
-					Properties: prop,
-				}
-				_ = event.Properties
-			}
-		})
-	}
-}
+// BenchmarkJSONPropertyParsing removed - properties feature deprecated

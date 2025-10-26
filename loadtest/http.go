@@ -48,7 +48,6 @@ type Event struct {
 	Browser    string    `json:"browser"`
 	OS         string    `json:"os"`
 	Device     string    `json:"device"`
-	Properties string    `json:"properties"` // JSON-encoded properties
 }
 
 // HTTPLoadTester handles HTTP-based load testing
@@ -207,28 +206,23 @@ func (hlt *HTTPLoadTester) GenerateRandomEvent(userPool []string) Event {
 	ipBase := ipRanges[rand.Intn(len(ipRanges))]
 	ip := fmt.Sprintf("%s.%d", ipBase, rand.Intn(255)+1)
 
-	// Generate properties based on event type
-	properties := hlt.generateProperties(eventName)
-	encodedProps, _ := json.Marshal(properties)
-
 	return Event{
-		Timestamp:  timestamp,
-		EventName:  eventName,
-		UserID:     userID,
-		SessionID:  sessionID,
-		URL:        url,
-		Referrer:   referrer,
-		UserAgent:  userAgent,
-		IP:         ip,
-		Country:    country,
-		Browser:    browser,
-		OS:         os,
-		Device:     device,
-		Properties: string(encodedProps),
+		Timestamp: timestamp,
+		EventName: eventName,
+		UserID:    userID,
+		SessionID: sessionID,
+		URL:       url,
+		Referrer:  referrer,
+		UserAgent: userAgent,
+		IP:        ip,
+		Country:   country,
+		Browser:   browser,
+		OS:        os,
+		Device:    device,
 	}
 }
 
-// generateProperties creates realistic properties based on event type
+// generateProperties creates realistic properties based on event type (deprecated - no longer used)
 func (hlt *HTTPLoadTester) generateProperties(eventName string) map[string]interface{} {
 	props := make(map[string]interface{})
 

@@ -128,18 +128,3 @@ func (mr *MockEventRepositoryMockRecorder) GetStats(startDate, endDate, limit, f
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStats", reflect.TypeOf((*MockEventRepository)(nil).GetStats), startDate, endDate, limit, filters)
 }
-
-// GetTopProperties mocks base method.
-func (m *MockEventRepository) GetTopProperties(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]any, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTopProperties", startDate, endDate, limit, filters)
-	ret0, _ := ret[0].([]map[string]any)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTopProperties indicates an expected call of GetTopProperties.
-func (mr *MockEventRepositoryMockRecorder) GetTopProperties(startDate, endDate, limit, filters any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTopProperties", reflect.TypeOf((*MockEventRepository)(nil).GetTopProperties), startDate, endDate, limit, filters)
-}

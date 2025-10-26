@@ -1,4 +1,11 @@
-.PHONY: test test-unit test-integration test-coverage test-race test-verbose clean
+.PHONY: test test-unit test-integration test-coverage test-race test-verbose clean mocks
+
+# Generate mocks
+mocks:
+	@echo "🔨 Generating mocks..."
+	@mockgen -source=internal/service/event_service.go -destination=internal/mocks/mock_service.go -package=mocks
+	@mockgen -source=internal/repository/event_repository.go -destination=internal/mocks/mock_repository.go -package=mocks
+	@echo "✅ Mocks generated successfully"
 
 # Run all tests
 test:
@@ -85,6 +92,7 @@ help:
 	@echo "  make test-race          - Run tests with race detection"
 	@echo "  make test-verbose       - Run verbose tests"
 	@echo "  make bench              - Run benchmarks"
+	@echo "  make mocks              - Generate mock files"
 	@echo "  make clean              - Clean test artifacts"
 	@echo "  make deps               - Install test dependencies"
 	@echo "  make test-ci            - Run CI tests"

@@ -71,6 +71,54 @@ var migrations = []Migration{
 		Up:          `CREATE INDEX IF NOT EXISTS idx_is_bot ON events(is_bot)`,
 		Down:        `DROP INDEX IF EXISTS idx_is_bot`,
 	},
+	{
+		Version:     6,
+		Description: "Drop properties column from events table",
+		Up: `
+		-- Create new table without properties column
+		CREATE TABLE events_new AS SELECT 
+			id, timestamp, event_name, user_id, session_id, url, referrer,
+			user_agent, ip, country, browser, os, device, is_bot, project_id
+		FROM events;
+		
+		-- Drop old table
+		DROP TABLE events;
+		
+		-- Rename new table
+		ALTER TABLE events_new RENAME TO events;
+		
+		-- Recreate all indexes
+		CREATE INDEX idx_timestamp ON events(timestamp);
+		CREATE INDEX idx_event_name ON events(event_name);
+		CREATE INDEX idx_user_id ON events(user_id);
+		CREATE INDEX idx_country ON events(country);
+		CREATE INDEX idx_referrer ON events(referrer);
+		CREATE INDEX idx_project_id ON events(project_id);
+		CREATE INDEX idx_is_bot ON events(is_bot);
+		`,
+		Down: `
+		-- Create new table with properties column
+		CREATE TABLE events_new AS SELECT 
+			id, timestamp, event_name, user_id, session_id, url, referrer,
+			user_agent, ip, country, browser, os, device, is_bot, NULL::JSON as properties, project_id
+		FROM events;
+		
+		-- Drop old table
+		DROP TABLE events;
+		
+		-- Rename new table
+		ALTER TABLE events_new RENAME TO events;
+		
+		-- Recreate all indexes
+		CREATE INDEX idx_timestamp ON events(timestamp);
+		CREATE INDEX idx_event_name ON events(event_name);
+		CREATE INDEX idx_user_id ON events(user_id);
+		CREATE INDEX idx_country ON events(country);
+		CREATE INDEX idx_referrer ON events(referrer);
+		CREATE INDEX idx_project_id ON events(project_id);
+		CREATE INDEX idx_is_bot ON events(is_bot);
+		`,
+	},
 }
 
 func initMigrationTable(db *sql.DB) error {

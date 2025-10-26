@@ -17,7 +17,6 @@ type Event struct {
 	OS         string    `json:"os"`
 	Device     string    `json:"device"`
 	IsBot      bool      `json:"is_bot"`
-	Properties string    `json:"properties"` // JSON string
 	ProjectID  string    `json:"project_id"`
 }
 

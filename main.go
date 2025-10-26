@@ -106,7 +106,6 @@ func main() {
 	mux.HandleFunc("/api/events", eventHandler.GetEvents)
 	mux.HandleFunc("/api/online", eventHandler.GetOnlineUsers)
 	mux.HandleFunc("/api/projects", eventHandler.GetProjects)
-	mux.HandleFunc("/api/properties", eventHandler.GetTopProperties)
 	mux.HandleFunc("/api/health", eventHandler.Health)
 	mux.HandleFunc("/api/geo", eventHandler.GeoTest)
 
