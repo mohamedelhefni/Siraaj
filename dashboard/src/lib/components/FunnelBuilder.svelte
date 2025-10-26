@@ -18,11 +18,7 @@
 		availablePages?: string[];
 	}
 
-	let { 
-		steps = $bindable([]),
-		availableEvents = [],
-		availablePages = []
-	}: Props = $props();
+	let { steps = $bindable([]), availableEvents = [], availablePages = [] }: Props = $props();
 
 	function addStep() {
 		const newStep: FunnelStep = {
@@ -40,15 +36,11 @@
 	}
 
 	function updateStep(index: number, field: keyof FunnelStep, value: any) {
-		steps = steps.map((step, i) => 
-			i === index ? { ...step, [field]: value } : step
-		);
+		steps = steps.map((step, i) => (i === index ? { ...step, [field]: value } : step));
 	}
 
 	function toggleExpanded(index: number) {
-		steps = steps.map((step, i) => 
-			i === index ? { ...step, expanded: !step.expanded } : step
-		);
+		steps = steps.map((step, i) => (i === index ? { ...step, expanded: !step.expanded } : step));
 	}
 
 	function moveStep(index: number, direction: 'up' | 'down') {
@@ -126,12 +118,12 @@
 			</div>
 			{#if steps.length > 0}
 				<Button variant="ghost" size="sm" onclick={clearAll}>
-					<Trash2 class="h-4 w-4 mr-1" />
+					<Trash2 class="mr-1 h-4 w-4" />
 					Clear All
 				</Button>
 			{/if}
 			<Button onclick={addStep} size="sm">
-				<Plus class="h-4 w-4 mr-1" />
+				<Plus class="mr-1 h-4 w-4" />
 				Add Step
 			</Button>
 		</div>
@@ -142,11 +134,11 @@
 		<Card class="border-dashed">
 			<CardContent class="flex flex-col items-center justify-center py-12">
 				<div class="text-muted-foreground mb-4 text-center">
-					<p class="text-lg font-medium mb-2">No funnel steps defined</p>
+					<p class="mb-2 text-lg font-medium">No funnel steps defined</p>
 					<p class="text-sm">Add steps to analyze user journey through your funnel</p>
 				</div>
 				<Button onclick={addStep}>
-					<Plus class="h-4 w-4 mr-2" />
+					<Plus class="mr-2 h-4 w-4" />
 					Add First Step
 				</Button>
 			</CardContent>
@@ -159,7 +151,9 @@
 						<!-- Step Header -->
 						<div class="flex items-start gap-3">
 							<!-- Step Number -->
-							<div class="bg-primary text-primary-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold">
+							<div
+								class="bg-primary text-primary-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+							>
 								{index + 1}
 							</div>
 
@@ -171,11 +165,14 @@
 										<input
 											type="text"
 											value={step.name}
-											oninput={(e) => updateStep(index, 'name', (e.target as HTMLInputElement).value)}
+											oninput={(e) =>
+												updateStep(index, 'name', (e.target as HTMLInputElement).value)}
 											placeholder="Step name"
-											class="bg-transparent text-base font-medium border-none focus:outline-none focus:ring-0 p-0 w-full"
+											class="w-full border-none bg-transparent p-0 text-base font-medium focus:outline-none focus:ring-0"
 										/>
-										<div class="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-sm">
+										<div
+											class="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-sm"
+										>
 											{#if step.event_name}
 												<Badge variant="outline" class="text-xs">
 													Event: {step.event_name}
@@ -194,11 +191,7 @@
 
 									<div class="flex items-center gap-1">
 										<!-- Expand/Collapse -->
-										<Button 
-											variant="ghost" 
-											size="sm"
-											onclick={() => toggleExpanded(index)}
-										>
+										<Button variant="ghost" size="sm" onclick={() => toggleExpanded(index)}>
 											{#if step.expanded}
 												<ChevronUp class="h-4 w-4" />
 											{:else}
@@ -208,8 +201,8 @@
 
 										<!-- Move buttons -->
 										{#if index > 0}
-											<Button 
-												variant="ghost" 
+											<Button
+												variant="ghost"
 												size="sm"
 												onclick={() => moveStep(index, 'up')}
 												title="Move up"
@@ -218,8 +211,8 @@
 											</Button>
 										{/if}
 										{#if index < steps.length - 1}
-											<Button 
-												variant="ghost" 
+											<Button
+												variant="ghost"
 												size="sm"
 												onclick={() => moveStep(index, 'down')}
 												title="Move down"
@@ -229,19 +222,15 @@
 										{/if}
 
 										<!-- Delete button -->
-										<Button 
-											variant="ghost" 
-											size="sm"
-											onclick={() => removeStep(index)}
-										>
-											<X class="h-4 w-4 text-destructive" />
+										<Button variant="ghost" size="sm" onclick={() => removeStep(index)}>
+											<X class="text-destructive h-4 w-4" />
 										</Button>
 									</div>
 								</div>
 
 								<!-- Expanded View -->
 								{#if step.expanded}
-									<div class="border-t pt-3 space-y-3">
+									<div class="space-y-3 border-t pt-3">
 										<!-- Event Name -->
 										<div>
 											<label class="text-muted-foreground mb-1.5 block text-xs font-medium">
@@ -250,7 +239,8 @@
 											{#if availableEvents.length > 0}
 												<select
 													value={step.event_name}
-													onchange={(e) => updateStep(index, 'event_name', (e.target as HTMLSelectElement).value)}
+													onchange={(e) =>
+														updateStep(index, 'event_name', (e.target as HTMLSelectElement).value)}
 													class="border-input bg-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1"
 												>
 													<option value="">Select event...</option>
@@ -262,7 +252,8 @@
 												<input
 													type="text"
 													value={step.event_name}
-													oninput={(e) => updateStep(index, 'event_name', (e.target as HTMLInputElement).value)}
+													oninput={(e) =>
+														updateStep(index, 'event_name', (e.target as HTMLInputElement).value)}
 													placeholder="e.g., page_view, button_clicked"
 													class="border-input bg-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1"
 												/>
@@ -277,7 +268,8 @@
 											{#if availablePages.length > 0}
 												<select
 													value={step.url || ''}
-													onchange={(e) => updateStep(index, 'url', (e.target as HTMLSelectElement).value)}
+													onchange={(e) =>
+														updateStep(index, 'url', (e.target as HTMLSelectElement).value)}
 													class="border-input bg-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1"
 												>
 													<option value="">Any URL</option>
@@ -289,7 +281,8 @@
 												<input
 													type="text"
 													value={step.url || ''}
-													oninput={(e) => updateStep(index, 'url', (e.target as HTMLInputElement).value)}
+													oninput={(e) =>
+														updateStep(index, 'url', (e.target as HTMLInputElement).value)}
 													placeholder="e.g., /signup, /checkout"
 													class="border-input bg-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1"
 												/>
@@ -305,22 +298,26 @@
 
 						<!-- Connection Line to Next Step -->
 						{#if index < steps.length - 1}
-							<div class="ml-4 mt-2 flex items-center gap-2 text-muted-foreground">
-								<div class="h-8 w-px bg-border ml-3.5"></div>
+							<div class="text-muted-foreground ml-4 mt-2 flex items-center gap-2">
+								<div class="bg-border ml-3.5 h-8 w-px"></div>
 								<span class="text-xs">↓ Then</span>
 							</div>
 						{/if}
 					</CardContent>
 				</Card>
 			{/each}
+			<Button onclick={addStep} size="sm" class="w-full cursor-pointer">
+				<Plus class="mr-1 h-4 w-4" />
+				Add Step
+			</Button>
 		</div>
 	{/if}
 
 	{#if steps.length > 0}
 		<div class="bg-muted/50 rounded-lg p-3 text-sm">
 			<p class="text-muted-foreground">
-				💡 <strong>Tip:</strong> Funnel analysis tracks users who complete steps in order. 
-				Each step must occur after the previous one for the same user.
+				💡 <strong>Tip:</strong> Funnel analysis tracks users who complete steps in order. Each step
+				must occur after the previous one for the same user.
 			</p>
 		</div>
 	{/if}

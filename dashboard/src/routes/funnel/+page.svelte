@@ -384,8 +384,8 @@
 				</CardContent>
 			</Card>
 
-					<!-- Results -->
-					<FunnelChart result={funnelResult} {loading} />
+			<!-- Results -->
+			<FunnelChart result={funnelResult} {loading} />
 		</div>
 	</div>
 </div>
