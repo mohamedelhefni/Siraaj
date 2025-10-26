@@ -175,11 +175,33 @@
 			.attr('opacity', 0.1)
 			.call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
 
-		// Add area with animation
+		// Define linear gradient for area fill
+		const gradient = svg
+			.append('defs')
+			.append('linearGradient')
+			.attr('id', 'area-gradient')
+			.attr('x1', '0%')
+			.attr('x2', '0%')
+			.attr('y1', '0%')
+			.attr('y2', '100%');
+
+		gradient
+			.append('stop')
+			.attr('offset', '0%')
+			.attr('stop-color', 'rgb(99, 102, 241)')
+			.attr('stop-opacity', 0.1);
+
+		gradient
+			.append('stop')
+			.attr('offset', '100%')
+			.attr('stop-color', 'rgb(99, 102, 241)')
+			.attr('stop-opacity', 0);
+
+		// Add area with animation and gradient
 		svg
 			.append('path')
 			.datum(parsedData)
-			.attr('fill', 'rgba(99, 102, 241, 0.1)')
+			.attr('fill', 'url(#area-gradient)')
 			.attr('d', area)
 			.style('opacity', 0)
 			.transition()
