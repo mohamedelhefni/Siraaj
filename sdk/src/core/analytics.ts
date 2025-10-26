@@ -294,7 +294,7 @@ class AnalyticsCore {
 
         let sessionId = sessionStorage.getItem('analytics_session_id');
         const sessionStart = sessionStorage.getItem('analytics_session_start');
-        
+
         // Create new session if doesn't exist or if it's been more than 30 minutes
         if (!sessionId || !sessionStart || (Date.now() - parseInt(sessionStart)) > 30 * 60 * 1000) {
             sessionId = this.generateId();
@@ -304,7 +304,7 @@ class AnalyticsCore {
         } else {
             this.sessionStartTime = parseInt(sessionStart);
         }
-        
+
         return sessionId;
     }
 

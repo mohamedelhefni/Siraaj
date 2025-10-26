@@ -249,7 +249,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	stats["unique_users"] = uniqueUsers
 	stats["total_visits"] = totalVisits
 	stats["page_views"] = pageViews
-	
+
 	// Add average session duration (default to 0 if NULL)
 	if avgSessionDuration.Valid {
 		stats["avg_session_duration"] = avgSessionDuration.Float64
@@ -355,8 +355,27 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		selectClause = "COUNT(DISTINCT session_id) as count"
 	case "page_views":
 		selectClause = "COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as count"
-	default: // "events" or empty
+	case "events":
 		selectClause = "COUNT(*) as count"
+	case "views_per_visit":
+		selectClause = "CAST(COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) AS FLOAT) / NULLIF(COUNT(DISTINCT session_id), 0) as count"
+	case "bounce_rate":
+		// Calculate bounce rate: percentage of sessions with only 1 page view
+		selectClause = `
+			CAST(COUNT(DISTINCT CASE 
+				WHEN session_id IN (
+					SELECT session_id 
+					FROM events e2 
+					WHERE e2.timestamp BETWEEN events.timestamp - INTERVAL '1 hour' AND events.timestamp + INTERVAL '1 hour'
+					AND e2.event_name = 'page_view'
+					GROUP BY session_id 
+					HAVING COUNT(*) = 1
+				) THEN session_id 
+			END) AS FLOAT) * 100 / NULLIF(COUNT(DISTINCT CASE WHEN event_name = 'page_view' THEN session_id END), 0) as count`
+	case "visit_duration":
+		selectClause = "AVG(CASE WHEN session_duration > 0 THEN session_duration END) as count"
+	default: // Default to users
+		selectClause = "COUNT(DISTINCT user_id) as count"
 	}
 
 	// Determine granularity based on date range
@@ -411,13 +430,21 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	timeline := []map[string]interface{}{}
 	for rows.Next() {
 		var date string
-		var count int
+		var count sql.NullFloat64
 		if err := rows.Scan(&date, &count); err != nil {
+			log.Printf("Error scanning timeline row: %v", err)
 			continue
 		}
+
+		// Use float64 value if valid, otherwise 0
+		countValue := 0.0
+		if count.Valid {
+			countValue = count.Float64
+		}
+
 		timeline = append(timeline, map[string]interface{}{
 			"date":  date,
-			"count": count,
+			"count": countValue,
 		})
 	}
 	stats["timeline"] = timeline
@@ -456,6 +483,88 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		})
 	}
 	stats["top_pages"] = topPages
+
+	// Entry Pages (first page in each session)
+	entryPagesQuery := fmt.Sprintf(`
+		WITH entry_pages AS (
+			SELECT DISTINCT ON (session_id) 
+				session_id, 
+				url
+			FROM events 
+			WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
+			ORDER BY session_id, timestamp ASC
+		)
+		SELECT url, COUNT(*) as count
+		FROM entry_pages
+		GROUP BY url
+		ORDER BY count DESC
+		LIMIT ?
+	`, whereClause)
+
+	rows, err = r.db.Query(entryPagesQuery, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	entryPages := []map[string]interface{}{}
+	for rows.Next() {
+		var url string
+		var count int
+		if err := rows.Scan(&url, &count); err != nil {
+			continue
+		}
+		entryPages = append(entryPages, map[string]interface{}{
+			"url":   url,
+			"count": count,
+		})
+	}
+	stats["entry_pages"] = entryPages
+
+	// Exit Pages (last page in each session)
+	exitPagesQuery := fmt.Sprintf(`
+		WITH exit_pages AS (
+			SELECT DISTINCT ON (session_id) 
+				session_id, 
+				url
+			FROM events 
+			WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
+			ORDER BY session_id, timestamp DESC
+		)
+		SELECT url, COUNT(*) as count
+		FROM exit_pages
+		GROUP BY url
+		ORDER BY count DESC
+		LIMIT ?
+	`, whereClause)
+
+	rows, err = r.db.Query(exitPagesQuery, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	exitPages := []map[string]interface{}{}
+	for rows.Next() {
+		var url string
+		var count int
+		if err := rows.Scan(&url, &count); err != nil {
+			continue
+		}
+		exitPages = append(exitPages, map[string]interface{}{
+			"url":   url,
+			"count": count,
+		})
+	}
+	stats["exit_pages"] = exitPages
 
 	// Browsers
 	query = fmt.Sprintf(`

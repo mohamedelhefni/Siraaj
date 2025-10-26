@@ -81,7 +81,7 @@
 			items={browsers}
 			labelKey="name"
 			valueKey="count"
-			maxItems={5}
+			maxItems={8}
 			type="browser"
 			showMoreTitle="All Browsers ({browsers.length} total)"
 			onclick={handleBrowserClick}

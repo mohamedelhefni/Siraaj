@@ -53,7 +53,7 @@
 			items={countries}
 			labelKey="name"
 			valueKey="count"
-			maxItems={5}
+			maxItems={8}
 			type="country"
 			showMoreTitle="All Countries ({countries.length} total)"
 			{onclick}

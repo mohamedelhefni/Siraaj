@@ -39,6 +39,8 @@
 		top_events: [],
 		timeline: [],
 		top_pages: [],
+		entry_pages: [],
+		exit_pages: [],
 		browsers: [],
 		devices: [],
 		operating_systems: [],
@@ -63,6 +65,9 @@
 	let refreshInterval = $state<number | null>(null);
 	let refreshIntervalTime = $state(30000); // 30 seconds default
 	let lastRefresh = $state(new Date());
+
+	// Pages tab state
+	let pagesTab = $state<'all' | 'entry' | 'exit'>('all');
 
 	// Date range presets
 	let dateRangePreset = $state('last_7_days');
@@ -426,12 +431,22 @@
 	}
 </script>
 
-<div class="container mx-auto space-y-6 p-6">
+<div class="container mx-auto space-y-4 p-6">
 	<!-- Header -->
+	<h1 class="text-3xl font-black">🏮 Siraaj</h1>
 	<div class="flex flex-wrap items-center justify-between gap-4">
-		<div>
-			<h1 class="text-4xl font-bold tracking-tight">Siraaj Dashboard</h1>
-			<p class="text-muted-foreground mt-2">Real-time insights and analytics powered by DuckDB</p>
+		<div class="flex items-center gap-4">
+			<h1 class="text-2xl font-bold">📊 {activeFilters.project || 'Siraaj'}</h1>
+			{#if !loading}
+				<Badge variant="secondary" class="gap-1">
+					<span
+						class="inline-block h-2 w-2 rounded-full {onlineData.online_users > 0
+							? 'bg-green-500'
+							: 'bg-gray-400'}"
+					></span>
+					{onlineData.online_users?.toLocaleString() || '0'} current visitors
+				</Badge>
+			{/if}
 		</div>
 	</div>
 
@@ -657,260 +672,302 @@
 			</CardHeader>
 		</Card>
 	{:else}
-		<!-- Overview Stats -->
-		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-			<Card
-				class="cursor-pointer transition-all hover:shadow-md {isMetricSelected('events')
-					? 'ring-primary ring-2'
-					: ''}"
-				onclick={() => handleMetricClick('events')}
-			>
-				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<CardTitle class="text-sm font-medium">Total Events</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<div class="text-2xl font-bold">{stats.total_events?.toLocaleString() || '0'}</div>
-					{#if stats.events_change !== undefined && stats.events_change !== 0}
-						{@const TrendIcon = getTrendIcon(stats.events_change)}
-						<p class="text-xs {getTrendColor(stats.events_change)} mt-1 flex items-center gap-1">
-							<TrendIcon class="h-3 w-3" />
-							{Math.abs(stats.events_change).toFixed(1)}% vs previous period
-						</p>
-					{:else}
-						<p class="text-muted-foreground mt-1 text-xs">All tracked events</p>
-					{/if}
-				</CardContent>
-			</Card>
-
-			<Card
-				class="cursor-pointer transition-all hover:shadow-md {isMetricSelected('users')
-					? 'ring-primary ring-2'
-					: ''}"
-				onclick={() => handleMetricClick('users')}
-			>
-				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<CardTitle class="text-sm font-medium">Unique Visitors</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<div class="text-2xl font-bold">{stats.unique_users?.toLocaleString() || '0'}</div>
-					{#if stats.users_change !== undefined && stats.users_change !== 0}
-						{@const TrendIcon = getTrendIcon(stats.users_change)}
-						<p class="text-xs {getTrendColor(stats.users_change)} mt-1 flex items-center gap-1">
-							<TrendIcon class="h-3 w-3" />
-							{Math.abs(stats.users_change).toFixed(1)}% vs previous period
-						</p>
-					{:else}
-						<p class="text-muted-foreground mt-1 text-xs">Unique users</p>
-					{/if}
-				</CardContent>
-			</Card>
-
-			<Card
-				class="cursor-pointer transition-all hover:shadow-md {isMetricSelected('visits')
-					? 'ring-primary ring-2'
-					: ''}"
-				onclick={() => handleMetricClick('visits')}
-			>
-				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<CardTitle class="text-sm font-medium">Total Visits</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<div class="text-2xl font-bold">{stats.total_visits?.toLocaleString() || '0'}</div>
-					{#if stats.visits_change !== undefined && stats.visits_change !== 0}
-						{@const TrendIcon = getTrendIcon(stats.visits_change)}
-						<p class="text-xs {getTrendColor(stats.visits_change)} mt-1 flex items-center gap-1">
-							<TrendIcon class="h-3 w-3" />
-							{Math.abs(stats.visits_change).toFixed(1)}% vs previous period
-						</p>
-					{:else}
-						<p class="text-muted-foreground mt-1 text-xs">Unique sessions</p>
-					{/if}
-				</CardContent>
-			</Card>
-
-			<Card
-				class="cursor-pointer transition-all hover:shadow-md {isMetricSelected('page_views')
-					? 'ring-primary ring-2'
-					: ''}"
-				onclick={() => handleMetricClick('page_views')}
-			>
-				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<CardTitle class="text-sm font-medium">Page Views</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<div class="text-2xl font-bold">{stats.page_views?.toLocaleString() || '0'}</div>
-					{#if stats.page_views_change !== undefined && stats.page_views_change !== 0}
-						{@const TrendIcon = getTrendIcon(stats.page_views_change)}
-						<p
-							class="text-xs {getTrendColor(stats.page_views_change)} mt-1 flex items-center gap-1"
-						>
-							<TrendIcon class="h-3 w-3" />
-							{Math.abs(stats.page_views_change).toFixed(1)}% vs previous period
-						</p>
-					{:else}
-						<p class="text-muted-foreground mt-1 text-xs">Total page views</p>
-					{/if}
-				</CardContent>
-			</Card>
-
-			<Card
-				class=" transition-all hover:shadow-md {isMetricSelected('bounce_rate')
-					? 'ring-primary ring-2'
-					: ''}"
-			>
-				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<CardTitle class="text-sm font-medium">Bounce Rate</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<div class="text-2xl font-bold">{stats.bounce_rate?.toFixed(1) || '0'}%</div>
-					<p class="text-muted-foreground mt-1 text-xs">Single page sessions</p>
-				</CardContent>
-			</Card>
-
-			<Card>
-				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<CardTitle class="text-sm font-medium">Avg Session Duration</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<div class="text-2xl font-bold">
-						{#if stats.avg_session_duration < 60}
-							{Math.floor(stats.avg_session_duration || 0)}s
-						{:else if stats.avg_session_duration < 3600}
-							{Math.floor((stats.avg_session_duration || 0) / 60)}m {Math.floor((stats.avg_session_duration || 0) % 60)}s
-						{:else}
-							{Math.floor((stats.avg_session_duration || 0) / 3600)}h {Math.floor(((stats.avg_session_duration || 0) % 3600) / 60)}m
-						{/if}
-					</div>
-					<p class="text-muted-foreground mt-1 text-xs">Average time per session</p>
-				</CardContent>
-			</Card>
-
-			<Card>
-				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<CardTitle class="text-sm font-medium">Online Now</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<div class="text-2xl font-bold">{onlineData.online_users?.toLocaleString() || '0'}</div>
-					<p class="text-muted-foreground mt-1 text-xs">Active in last 5 min</p>
-				</CardContent>
-			</Card>
-		</div>
-
-		<!-- Bot vs Human Traffic -->
-		<div class="grid gap-4 md:grid-cols-3">
-			<Card
-				class="cursor-pointer transition-all hover:shadow-md {activeFilters.botFilter === 'bot'
-					? 'ring-primary ring-2'
-					: ''}"
-				onclick={() => {
-					if (activeFilters.botFilter === 'bot') {
-						removeFilter('botFilter');
-					} else {
-						addFilter('botFilter', 'bot');
-					}
-				}}
-			>
-				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<CardTitle class="text-sm font-medium">🤖 Bot Traffic</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<div class="text-2xl font-bold">{stats.bot_events?.toLocaleString() || '0'}</div>
-					<p class="text-muted-foreground mt-1 text-xs">
-						{stats.bot_percentage?.toFixed(1) || '0'}% of total traffic
-					</p>
-				</CardContent>
-			</Card>
-
-			<Card
-				class="cursor-pointer transition-all hover:shadow-md {activeFilters.botFilter === 'human'
-					? 'ring-primary ring-2'
-					: ''}"
-				onclick={() => {
-					if (activeFilters.botFilter === 'human') {
-						removeFilter('botFilter');
-					} else {
-						addFilter('botFilter', 'human');
-					}
-				}}
-			>
-				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<CardTitle class="text-sm font-medium">👤 Human Traffic</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<div class="text-2xl font-bold">{stats.human_events?.toLocaleString() || '0'}</div>
-					<p class="text-muted-foreground mt-1 text-xs">
-						{(100 - (stats.bot_percentage || 0)).toFixed(1)}% of total traffic
-					</p>
-				</CardContent>
-			</Card>
-
-			<Card>
-				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<CardTitle class="text-sm font-medium">Bot vs Human Users</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<div class="text-2xl font-bold">
-						{stats.bot_users?.toLocaleString() || '0'} /
-						{stats.human_users?.toLocaleString() || '0'}
-					</div>
-					<p class="text-muted-foreground mt-1 text-xs">Bots / Humans</p>
-				</CardContent>
-			</Card>
-		</div>
-
 		<!-- Timeline Chart -->
 		<Card>
-			<CardHeader>
-				<CardTitle>
-					{#if activeFilters.metric === 'users'}
-						Unique Visitors Over Time
-					{:else if activeFilters.metric === 'visits'}
-						Total Visits Over Time
-					{:else if activeFilters.metric === 'page_views'}
-						Page Views Over Time
-					{:else}
-						Events Over Time
-					{/if}
-				</CardTitle>
-				<CardDescription>
-					{#if stats.timeline_format === 'hour'}
-						Hourly tracking
-					{:else if stats.timeline_format === 'month'}
-						Monthly tracking
-					{:else}
-						Daily tracking
-					{/if}
-					{#if activeFilters.metric}
-						· Click the metric card again to show all events
-					{/if}
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
+			<CardContent class="pb-2">
+				<div class="mb-8 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8">
+					<!-- Unique Visitors -->
+					<button
+						class="hover:bg-accent border-b border-r px-2 text-left transition-colors lg:border-b-0 {isMetricSelected(
+							'users'
+						)
+							? 'bg-accent'
+							: ''}"
+						onclick={() => handleMetricClick('users')}
+					>
+						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+							Unique Visitors
+						</div>
+						<div class="text-2xl font-bold">{stats.unique_users?.toLocaleString() || '0'}</div>
+						{#if stats.users_change !== undefined && stats.users_change !== 0}
+							{@const TrendIcon = getTrendIcon(stats.users_change)}
+							<div class="text-xs {getTrendColor(stats.users_change)} mt-1 flex items-center gap-1">
+								<TrendIcon class="h-3 w-3" />
+								{Math.abs(stats.users_change).toFixed(0)}%
+							</div>
+						{/if}
+					</button>
+
+					<!-- Total Visits -->
+					<button
+						class="hover:bg-accent border-b border-r p-4 text-left transition-colors lg:border-b-0 {isMetricSelected(
+							'visits'
+						)
+							? 'bg-accent'
+							: ''}"
+						onclick={() => handleMetricClick('visits')}
+					>
+						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+							Total Visits
+						</div>
+						<div class="text-2xl font-bold">{stats.total_visits?.toLocaleString() || '0'}</div>
+						{#if stats.visits_change !== undefined && stats.visits_change !== 0}
+							{@const TrendIcon = getTrendIcon(stats.visits_change)}
+							<div
+								class="text-xs {getTrendColor(stats.visits_change)} mt-1 flex items-center gap-1"
+							>
+								<TrendIcon class="h-3 w-3" />
+								{Math.abs(stats.visits_change).toFixed(0)}%
+							</div>
+						{/if}
+					</button>
+
+					<!-- Total Pageviews -->
+					<button
+						class="hover:bg-accent border-b border-r p-4 text-left transition-colors lg:border-b-0 {isMetricSelected(
+							'page_views'
+						)
+							? 'bg-accent'
+							: ''}"
+						onclick={() => handleMetricClick('page_views')}
+					>
+						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+							Total Pageviews
+						</div>
+						<div class="text-2xl font-bold">{stats.page_views?.toLocaleString() || '0'}</div>
+						{#if stats.page_views_change !== undefined && stats.page_views_change !== 0}
+							{@const TrendIcon = getTrendIcon(stats.page_views_change)}
+							<div
+								class="text-xs {getTrendColor(
+									stats.page_views_change
+								)} mt-1 flex items-center gap-1"
+							>
+								<TrendIcon class="h-3 w-3" />
+								{Math.abs(stats.page_views_change).toFixed(0)}%
+							</div>
+						{/if}
+					</button>
+
+					<!-- Total Events -->
+					<button
+						class="hover:bg-accent border-b border-r p-4 text-left transition-colors lg:border-b-0 {isMetricSelected(
+							'events'
+						)
+							? 'bg-accent'
+							: ''}"
+						onclick={() => handleMetricClick('events')}
+					>
+						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+							Total Events
+						</div>
+						<div class="text-2xl font-bold">{stats.total_events?.toLocaleString() || '0'}</div>
+						{#if stats.events_change !== undefined && stats.events_change !== 0}
+							{@const TrendIcon = getTrendIcon(stats.events_change)}
+							<div
+								class="text-xs {getTrendColor(stats.events_change)} mt-1 flex items-center gap-1"
+							>
+								<TrendIcon class="h-3 w-3" />
+								{Math.abs(stats.events_change).toFixed(0)}%
+							</div>
+						{/if}
+					</button>
+
+					<!-- Views per Visit -->
+					<button
+						class="hover:bg-accent border-b border-r p-4 text-left transition-colors lg:border-b-0 {isMetricSelected(
+							'views_per_visit'
+						)
+							? 'bg-accent'
+							: ''}"
+						onclick={() => handleMetricClick('views_per_visit')}
+					>
+						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+							Views per Visit
+						</div>
+						<div class="text-2xl font-bold">
+							{stats.total_visits > 0 ? (stats.page_views / stats.total_visits).toFixed(2) : '0.00'}
+						</div>
+					</button>
+
+					<!-- Bounce Rate -->
+					<button
+						class="hover:bg-accent border-r p-4 text-left transition-colors {isMetricSelected(
+							'bounce_rate'
+						)
+							? 'bg-accent'
+							: ''}"
+						onclick={() => handleMetricClick('bounce_rate')}
+					>
+						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+							Bounce Rate
+						</div>
+						<div class="text-2xl font-bold">{stats.bounce_rate?.toFixed(0) || '0'}%</div>
+					</button>
+
+					<!-- Visit Duration -->
+					<button
+						class="hover:bg-accent border-r p-4 text-left transition-colors {isMetricSelected(
+							'visit_duration'
+						)
+							? 'bg-accent'
+							: ''}"
+						onclick={() => handleMetricClick('visit_duration')}
+					>
+						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+							Visit Duration
+						</div>
+						<div class="text-2xl font-bold">
+							{#if stats.avg_session_duration < 60}
+								{Math.floor(stats.avg_session_duration || 0)}s
+							{:else if stats.avg_session_duration < 3600}
+								{Math.floor((stats.avg_session_duration || 0) / 60)}m {Math.floor(
+									(stats.avg_session_duration || 0) % 60
+								)}s
+							{:else}
+								{Math.floor((stats.avg_session_duration || 0) / 3600)}h {Math.floor(
+									((stats.avg_session_duration || 0) % 3600) / 60
+								)}m
+							{/if}
+						</div>
+					</button>
+
+					<!-- Bot Percentage -->
+					<button
+						class="hover:bg-accent p-4 text-left transition-colors {activeFilters.botFilter ===
+						'bot'
+							? 'bg-accent'
+							: ''}"
+						onclick={() => {
+							if (activeFilters.botFilter === 'bot') {
+								removeFilter('botFilter');
+							} else {
+								addFilter('botFilter', 'bot');
+							}
+						}}
+					>
+						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+							🤖 Bot Traffic
+						</div>
+						<div class="text-2xl font-bold">{stats.bot_percentage?.toFixed(0) || '0'}%</div>
+						<div class="text-muted-foreground mt-1 text-xs">
+							{stats.bot_events?.toLocaleString() || '0'} events
+						</div>
+					</button>
+				</div>
+
 				{#if statsLoading}
 					<div class="text-muted-foreground flex h-[300px] items-center justify-center">
 						<div class="flex flex-col items-center gap-2">
 							<div
 								class="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
 							></div>
-							<p class="text-sm">Loading timeline...</p>
+							<p class="text-sm">Loading...</p>
 						</div>
 					</div>
 				{:else}
 					<TimelineChart
 						data={stats.timeline || []}
 						format={stats.timeline_format || 'day'}
-						metric={activeFilters.metric || 'events'}
+						metric={activeFilters.metric || 'users'}
 					/>
 				{/if}
 			</CardContent>
 		</Card>
 
-		<!-- Top Events and Pages -->
-		<div class="grid gap-4 md:grid-cols-2">
+		<!-- Data Grid -->
+		<div class="grid gap-4 lg:grid-cols-2">
+			<!-- Left Column -->
+			<div class="space-y-4">
+				<Card>
+					<CardHeader class="pb-3">
+						<div class="flex items-center justify-between">
+							<CardTitle class="text-base">Pages</CardTitle>
+							<div class="bg-muted flex gap-1 rounded-lg p-1">
+								<button
+									class="rounded px-3 py-1 text-xs font-medium transition-colors {pagesTab === 'all'
+										? 'bg-background shadow-sm'
+										: 'hover:bg-background/50'}"
+									onclick={() => (pagesTab = 'all')}
+								>
+									All
+								</button>
+								<button
+									class="rounded px-3 py-1 text-xs font-medium transition-colors {pagesTab ===
+									'entry'
+										? 'bg-background shadow-sm'
+										: 'hover:bg-background/50'}"
+									onclick={() => (pagesTab = 'entry')}
+								>
+									Entry
+								</button>
+								<button
+									class="rounded px-3 py-1 text-xs font-medium transition-colors {pagesTab ===
+									'exit'
+										? 'bg-background shadow-sm'
+										: 'hover:bg-background/50'}"
+									onclick={() => (pagesTab = 'exit')}
+								>
+									Exit
+								</button>
+							</div>
+						</div>
+					</CardHeader>
+					<CardContent>
+						{#if statsLoading}
+							<div class="text-muted-foreground flex min-h-[200px] items-center justify-center">
+								<div class="flex flex-col items-center gap-2">
+									<div
+										class="border-primary h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
+									></div>
+									<p class="text-xs">Loading...</p>
+								</div>
+							</div>
+						{:else if pagesTab === 'all'}
+							<TopItemsList
+								items={stats.top_pages || []}
+								labelKey="url"
+								maxItems={10}
+								valueKey="count"
+								showMoreTitle="All Pages"
+							/>
+						{:else if pagesTab === 'entry'}
+							<TopItemsList
+								items={stats.entry_pages || []}
+								labelKey="url"
+								maxItems={10}
+								valueKey="count"
+								showMoreTitle="All Entry Pages"
+							/>
+						{:else if pagesTab === 'exit'}
+							<TopItemsList
+								items={stats.exit_pages || []}
+								labelKey="url"
+								maxItems={10}
+								valueKey="count"
+								showMoreTitle="All Exit Pages"
+							/>
+						{/if}
+					</CardContent>
+				</Card>
+			</div>
 			<Card>
-				<CardHeader>
-					<CardTitle>Top Events</CardTitle>
-					<CardDescription>Most tracked events</CardDescription>
+				<CardHeader class="pb-3">
+					<CardTitle class="text-base">Locations</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<CountriesPanel
+						countries={stats.top_countries || []}
+						onclick={(item: any) => addFilter('country', item.name)}
+						loading={statsLoading}
+					/>
+				</CardContent>
+			</Card>
+		</div>
+
+		<div class="grid gap-4 lg:grid-cols-3">
+			<Card>
+				<CardHeader class="pb-3">
+					<CardTitle class="text-base">Top Events</CardTitle>
 				</CardHeader>
 				<CardContent>
 					{#if statsLoading}
@@ -928,83 +985,17 @@
 							labelKey="name"
 							valueKey="count"
 							maxItems={8}
-							showMoreTitle="All Events ({(stats.top_events || []).length} total)"
+							type="event"
+							showMoreTitle="All Events"
 							onclick={(item: any) => addFilter('event', item.name)}
 						/>
 					{/if}
 				</CardContent>
 			</Card>
-			<Card>
-				<CardHeader>
-					<CardTitle>Top Countries</CardTitle>
-					<CardDescription>
-						Geographic distribution
-						{#if stats.top_countries && stats.top_countries.length > 0}
-							· {stats.top_countries.length} countries
-						{/if}
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<CountriesPanel
-						countries={stats.top_countries || []}
-						onclick={(item: any) => addFilter('country', item.name)}
-						loading={statsLoading}
-					/>
-				</CardContent>
-			</Card>
-		</div>
-
-		<!-- Browsers, Devices, and OS -->
-		<div class="grid gap-4 md:grid-cols-3">
-			<Card>
-				<CardHeader>
-					<CardTitle>Browser & Device</CardTitle>
-					<CardDescription>Browser, device, and OS distribution</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<BrowserPanel
-						browsers={stats.browsers || []}
-						devices={stats.devices || []}
-						operatingSystems={stats.os || []}
-						onBrowserClick={(item: any) => addFilter('browser', item.name)}
-						onDeviceClick={(item: any) => addFilter('device', item.name)}
-						onOsClick={(item: any) => addFilter('os', item.name)}
-						loading={statsLoading}
-					/>
-				</CardContent>
-			</Card>
 
 			<Card>
-				<CardHeader>
-					<CardTitle>Top Pages</CardTitle>
-					<CardDescription>Most visited pages</CardDescription>
-				</CardHeader>
-				<CardContent>
-					{#if statsLoading}
-						<div class="text-muted-foreground flex min-h-[150px] items-center justify-center">
-							<div class="flex flex-col items-center gap-2">
-								<div
-									class="border-primary h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
-								></div>
-								<p class="text-xs">Loading...</p>
-							</div>
-						</div>
-					{:else}
-						<TopItemsList
-							items={stats.top_pages || []}
-							labelKey="url"
-							maxItems={5}
-							valueKey="count"
-							showMoreTitle="All Pages ({(stats.top_pages || []).length} total)"
-						/>
-					{/if}
-				</CardContent>
-			</Card>
-
-			<Card>
-				<CardHeader>
-					<CardTitle>Top Sources</CardTitle>
-					<CardDescription>Traffic sources</CardDescription>
+				<CardHeader class="pb-3">
+					<CardTitle class="text-base">Top Sources</CardTitle>
 				</CardHeader>
 				<CardContent>
 					{#if statsLoading}
@@ -1021,41 +1012,31 @@
 							items={stats.top_sources || []}
 							labelKey="name"
 							valueKey="count"
-							maxItems={5}
+							maxItems={8}
 							type="source"
-							showMoreTitle="All Sources ({(stats.top_sources || []).length} total)"
+							showMoreTitle="All Sources"
 							onclick={(item: any) => addFilter('source', item.name)}
 						/>
 					{/if}
 				</CardContent>
 			</Card>
-		</div>
 
-		<!-- Custom Properties Panel -->
-		<!-- <Card>
-			<CardHeader>
-				<CardTitle>Custom Event Properties</CardTitle>
-				<CardDescription>
-					Top property key-value pairs from tracked events
-					{#if topProperties.length > 0}
-						· {topProperties.length} unique properties
-					{/if}
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
-				{#if propertiesLoading}
-					<div class="text-muted-foreground flex min-h-[200px] items-center justify-center">
-						<div class="flex flex-col items-center gap-2">
-							<div
-								class="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
-							></div>
-							<p class="text-sm">Loading properties...</p>
-						</div>
-					</div>
-				{:else}
-					<PropertiesPanel properties={topProperties} onPropertyClick={addPropertyFilter} />
-				{/if}
-			</CardContent>
-		</Card> -->
+			<Card>
+				<CardHeader class="pb-3">
+					<CardTitle class="text-base">Devices</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<BrowserPanel
+						browsers={stats.browsers || []}
+						devices={stats.devices || []}
+						operatingSystems={stats.os || []}
+						onBrowserClick={(item: any) => addFilter('browser', item.name)}
+						onDeviceClick={(item: any) => addFilter('device', item.name)}
+						onOsClick={(item: any) => addFilter('os', item.name)}
+						loading={statsLoading}
+					/>
+				</CardContent>
+			</Card>
+		</div>
 	{/if}
 </div>

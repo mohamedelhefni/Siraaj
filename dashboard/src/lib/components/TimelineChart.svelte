@@ -11,8 +11,35 @@
 		events: 'Events',
 		users: 'Unique Visitors',
 		visits: 'Total Visits',
-		page_views: 'Page Views'
+		page_views: 'Page Views',
+		views_per_visit: 'Views per Visit',
+		bounce_rate: 'Bounce Rate',
+		visit_duration: 'Visit Duration'
 	};
+
+	// Format the count value based on metric type
+	function formatCount(count, metricType) {
+		if (metricType === 'bounce_rate') {
+			return count.toFixed(1) + '%';
+		} else if (metricType === 'visit_duration') {
+			// Format seconds into readable duration
+			if (count < 60) {
+				return Math.floor(count) + 's';
+			} else if (count < 3600) {
+				const minutes = Math.floor(count / 60);
+				const seconds = Math.floor(count % 60);
+				return `${minutes}m ${seconds}s`;
+			} else {
+				const hours = Math.floor(count / 3600);
+				const minutes = Math.floor((count % 3600) / 60);
+				return `${hours}h ${minutes}m`;
+			}
+		} else if (metricType === 'views_per_visit') {
+			return count.toFixed(2);
+		} else {
+			return Math.round(count).toLocaleString();
+		}
+	}
 
 	// Format date labels based on granularity
 	function formatLabel(dateStr) {
@@ -104,9 +131,26 @@
 			.style('fill', '#6b7280');
 
 		// Add Y axis
+		const yAxis = d3.axisLeft(y).ticks(5);
+
+		// Format Y axis based on metric type
+		if (metric === 'bounce_rate') {
+			yAxis.tickFormat((d) => d.toFixed(0) + '%');
+		} else if (metric === 'visit_duration') {
+			yAxis.tickFormat((d) => {
+				if (d < 60) return Math.floor(d) + 's';
+				const minutes = Math.floor(d / 60);
+				return minutes + 'm';
+			});
+		} else if (metric === 'views_per_visit') {
+			yAxis.tickFormat((d) => d.toFixed(1));
+		} else {
+			yAxis.tickFormat((d) => d.toLocaleString());
+		}
+
 		svg
 			.append('g')
-			.call(d3.axisLeft(y).ticks(5))
+			.call(yAxis)
 			.selectAll('text')
 			.style('font-size', '12px')
 			.style('fill', '#6b7280');
@@ -191,7 +235,7 @@
 
 				tooltip
 					.html(
-						`<strong>${formatTooltipDate(d.date.toISOString())}</strong><br/>${metricLabels[metric]}: <strong>${d.count}</strong>`
+						`<strong>${formatTooltipDate(d.date.toISOString())}</strong><br/>${metricLabels[metric] || 'Count'}: <strong>${formatCount(d.count, metric)}</strong>`
 					)
 					.style('left', event.pageX + 10 + 'px')
 					.style('top', event.pageY - 10 + 'px');
@@ -232,7 +276,7 @@
 	});
 </script>
 
-<div bind:this={chartContainer} class="h-[300px] w-full">
+<div bind:this={chartContainer} class="h-auto w-full">
 	{#if data.length === 0}
 		<div class="text-muted-foreground flex h-full items-center justify-center">
 			<p>No data available for the selected period</p>
