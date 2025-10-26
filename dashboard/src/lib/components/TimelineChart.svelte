@@ -329,15 +329,16 @@
 		const tooltip = d3
 			.select('body')
 			.append('div')
+			.attr('class', 'chart-tooltip')
 			.style('position', 'absolute')
-			.style('background', 'rgba(0, 0, 0, 0.8)')
-			.style('color', 'white')
-			.style('padding', '8px 12px')
-			.style('border-radius', '4px')
+			.style('background', 'transparent')
+			.style('padding', '0')
+			.style('border-radius', '0')
 			.style('font-size', '14px')
 			.style('pointer-events', 'none')
 			.style('opacity', 0)
-			.style('z-index', '1000');
+			.style('z-index', '1000')
+			.style('transition', 'opacity 0.1s ease');
 
 		// Add hover effects
 		dots
@@ -356,6 +357,155 @@
 			.on('mouseout', function () {
 				d3.select(this).transition().duration(200).attr('r', 4);
 
+				tooltip.transition().duration(200).style('opacity', 0);
+			});
+
+		// Add invisible overlay for hover-anywhere tooltip
+		const bisect = d3.bisector((d) => d.date).left;
+
+		// Create vertical line and circles for hover indicator
+		const hoverLine = svg
+			.append('line')
+			.attr('class', 'hover-line')
+			.attr('stroke', '#9ca3af')
+			.attr('stroke-width', 1)
+			.attr('stroke-dasharray', '3,3')
+			.attr('opacity', 0);
+
+		const hoverCircleCurrent = svg
+			.append('circle')
+			.attr('class', 'hover-circle-current')
+			.attr('r', 5)
+			.attr('fill', 'rgb(99, 102, 241)')
+			.attr('stroke', 'white')
+			.attr('stroke-width', 2)
+			.attr('opacity', 0);
+
+		const hoverCirclePrev = svg
+			.append('circle')
+			.attr('class', 'hover-circle-prev')
+			.attr('r', 5)
+			.attr('fill', 'rgb(156, 163, 175)')
+			.attr('stroke', 'white')
+			.attr('stroke-width', 2)
+			.attr('opacity', 0);
+
+		// Align comparison data for lookup
+		let alignedComparisonLookup = new Map();
+		if (showComparison && parsedComparisonData.length > 0) {
+			const timeDiff = parsedData[0].date.getTime() - parsedComparisonData[0].date.getTime();
+			parsedComparisonData.forEach((d) => {
+				const alignedDate = new Date(d.date.getTime() + timeDiff);
+				alignedComparisonLookup.set(alignedDate.getTime(), {
+					date: d.date,
+					count: d.count,
+					alignedDate: alignedDate
+				});
+			});
+		}
+
+		svg
+			.append('rect')
+			.attr('class', 'overlay')
+			.attr('width', width)
+			.attr('height', height)
+			.attr('fill', 'none')
+			.attr('pointer-events', 'all')
+			.style('cursor', 'crosshair')
+			.on('mousemove', function (event) {
+				const [mouseX] = d3.pointer(event);
+				const xDate = x.invert(mouseX);
+				const index = bisect(parsedData, xDate);
+
+				// Get closest data point
+				let d0 = parsedData[index - 1];
+				let d1 = parsedData[index];
+				let d = d0;
+
+				if (d1 && d0) {
+					d = xDate - d0.date > d1.date - xDate ? d1 : d0;
+				} else if (d1) {
+					d = d1;
+				}
+
+				if (!d) return;
+
+				// Find corresponding comparison data
+				let compD = null;
+				if (showComparison && alignedComparisonLookup.size > 0) {
+					// Find closest comparison point
+					let closestDiff = Infinity;
+					alignedComparisonLookup.forEach((value) => {
+						const diff = Math.abs(value.alignedDate.getTime() - d.date.getTime());
+						if (diff < closestDiff) {
+							closestDiff = diff;
+							compD = value;
+						}
+					});
+				}
+
+				// Update hover indicators
+				const xPos = x(d.date);
+				const yPos = y(d.count);
+
+				hoverLine
+					.attr('x1', xPos)
+					.attr('x2', xPos)
+					.attr('y1', 0)
+					.attr('y2', height)
+					.attr('opacity', 0.5);
+
+				hoverCircleCurrent.attr('cx', xPos).attr('cy', yPos).attr('opacity', 1);
+
+				if (compD && showComparison) {
+					const yPosComp = y(compD.count);
+					hoverCirclePrev.attr('cx', xPos).attr('cy', yPosComp).attr('opacity', 1);
+				} else {
+					hoverCirclePrev.attr('opacity', 0);
+				}
+
+				// Calculate percentage change
+				let changePercent = null;
+				let changeIcon = '';
+				if (compD) {
+					changePercent = ((d.count - compD.count) / compD.count) * 100;
+					changeIcon = changePercent >= 0 ? '↗' : '↘';
+				}
+
+				// Build tooltip HTML
+				let tooltipHTML = `
+					<div style="background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(8px); border-radius: 8px; padding: 12px; min-width: 200px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+						<div style="font-weight: 600; font-size: 13px; color: #e2e8f0; margin-bottom: 8px;">${metricLabels[metric] || 'Metric'}</div>
+						${changePercent !== null ? `<div style="color: ${changePercent >= 0 ? '#10b981' : '#ef4444'}; font-size: 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 4px;"><span>${changeIcon}</span><span>${Math.abs(changePercent).toFixed(1)}%</span></div>` : ''}
+						<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+							<div style="width: 8px; height: 8px; border-radius: 50%; background: rgb(99, 102, 241);"></div>
+							<div style="color: #cbd5e1; font-size: 12px;">${formatTooltipDate(d.date.toISOString())}</div>
+							<div style="color: white; font-weight: 600; font-size: 14px; margin-left: auto;">${formatCount(d.count, metric)}</div>
+						</div>
+						${
+							compD
+								? `
+							<div style="display: flex; align-items: center; gap: 8px; opacity: 0.7;">
+								<div style="width: 8px; height: 8px; border-radius: 50%; background: rgb(156, 163, 175);"></div>
+								<div style="color: #cbd5e1; font-size: 12px;">${formatTooltipDate(compD.date.toISOString())}</div>
+								<div style="color: white; font-weight: 600; font-size: 14px; margin-left: auto;">${formatCount(compD.count, metric)}</div>
+							</div>
+						`
+								: ''
+						}
+					</div>
+				`;
+
+				tooltip.transition().duration(100).style('opacity', 1);
+				tooltip
+					.html(tooltipHTML)
+					.style('left', event.pageX + 15 + 'px')
+					.style('top', event.pageY - 15 + 'px');
+			})
+			.on('mouseout', function () {
+				hoverLine.attr('opacity', 0);
+				hoverCircleCurrent.attr('opacity', 0);
+				hoverCirclePrev.attr('opacity', 0);
 				tooltip.transition().duration(200).style('opacity', 0);
 			});
 

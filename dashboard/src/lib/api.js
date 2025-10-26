@@ -1,5 +1,6 @@
 // API configuration
-const API_BASE_URL = 'http://localhost:8080/api';
+// Use environment variable or fallback to relative path for production
+const API_BASE_URL = import.meta.env.VITE_PUBLIC_API_URL || '/api';
 
 /**
  * Fetch analytics stats from the backend

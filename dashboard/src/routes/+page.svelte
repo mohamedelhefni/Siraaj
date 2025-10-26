@@ -19,6 +19,7 @@
 	import CountriesPanel from '$lib/components/CountriesPanel.svelte';
 	import BrowserPanel from '$lib/components/BrowserPanel.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
+	import MetricCard from '$lib/components/MetricCard.svelte';
 
 	let stats: any = $state({
 		total_events: 0,
@@ -121,6 +122,22 @@
 	let startDate = $state(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
 	let endDate = $state(format(new Date(), 'yyyy-MM-dd'));
 	let showCustomDateInputs = $state(false);
+
+	// Computed period labels for display
+	const currentPeriodLabel = $derived(() => {
+		const start = new Date(startDate);
+		const end = new Date(endDate);
+		return `${format(start, 'd MMM')} - ${format(end, 'd MMM')}`;
+	});
+
+	const previousPeriodLabel = $derived(() => {
+		const start = new Date(startDate);
+		const end = new Date(endDate);
+		const duration = end.getTime() - start.getTime();
+		const prevEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000);
+		const prevStart = new Date(prevEnd.getTime() - duration);
+		return `${format(prevStart, 'd MMM')} - ${format(prevEnd, 'd MMM')}`;
+	});
 
 	// Apply date range preset
 	function applyDateRangePreset(preset: string) {
@@ -706,166 +723,109 @@
 			<CardContent class="pb-2">
 				<div class="mb-8 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8">
 					<!-- Unique Visitors -->
-					<button
-						class="hover:bg-accent border-b border-r px-2 text-left transition-colors lg:border-b-0 {isMetricSelected(
-							'users'
-						)
-							? 'bg-accent'
-							: ''}"
+					<MetricCard
+						label="Unique Visitors"
+						currentValue={stats.unique_users || 0}
+						previousValue={comparisonStats.unique_users || 0}
+						currentPeriod={currentPeriodLabel()}
+						previousPeriod={previousPeriodLabel()}
+						isSelected={isMetricSelected('users')}
 						onclick={() => handleMetricClick('users')}
-					>
-						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
-							Unique Visitors
-						</div>
-						<div class="text-2xl font-bold">{stats.unique_users?.toLocaleString() || '0'}</div>
-						{#if stats.users_change !== undefined && stats.users_change !== 0}
-							{@const TrendIcon = getTrendIcon(stats.users_change)}
-							<div class="text-xs {getTrendColor(stats.users_change)} mt-1 flex items-center gap-1">
-								<TrendIcon class="h-3 w-3" />
-								{Math.abs(stats.users_change).toFixed(0)}%
-							</div>
-						{/if}
-					</button>
+					/>
 
 					<!-- Total Visits -->
-					<button
-						class="hover:bg-accent border-b border-r p-4 text-left transition-colors lg:border-b-0 {isMetricSelected(
-							'visits'
-						)
-							? 'bg-accent'
-							: ''}"
+					<MetricCard
+						label="Total Visits"
+						currentValue={stats.total_visits || 0}
+						previousValue={comparisonStats.total_visits || 0}
+						currentPeriod={currentPeriodLabel()}
+						previousPeriod={previousPeriodLabel()}
+						isSelected={isMetricSelected('visits')}
 						onclick={() => handleMetricClick('visits')}
-					>
-						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
-							Total Visits
-						</div>
-						<div class="text-2xl font-bold">{stats.total_visits?.toLocaleString() || '0'}</div>
-						{#if stats.visits_change !== undefined && stats.visits_change !== 0}
-							{@const TrendIcon = getTrendIcon(stats.visits_change)}
-							<div
-								class="text-xs {getTrendColor(stats.visits_change)} mt-1 flex items-center gap-1"
-							>
-								<TrendIcon class="h-3 w-3" />
-								{Math.abs(stats.visits_change).toFixed(0)}%
-							</div>
-						{/if}
-					</button>
+					/>
 
 					<!-- Total Pageviews -->
-					<button
-						class="hover:bg-accent border-b border-r p-4 text-left transition-colors lg:border-b-0 {isMetricSelected(
-							'page_views'
-						)
-							? 'bg-accent'
-							: ''}"
+					<MetricCard
+						label="Total Pageviews"
+						currentValue={stats.page_views || 0}
+						previousValue={comparisonStats.page_views || 0}
+						currentPeriod={currentPeriodLabel()}
+						previousPeriod={previousPeriodLabel()}
+						isSelected={isMetricSelected('page_views')}
 						onclick={() => handleMetricClick('page_views')}
-					>
-						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
-							Total Pageviews
-						</div>
-						<div class="text-2xl font-bold">{stats.page_views?.toLocaleString() || '0'}</div>
-						{#if stats.page_views_change !== undefined && stats.page_views_change !== 0}
-							{@const TrendIcon = getTrendIcon(stats.page_views_change)}
-							<div
-								class="text-xs {getTrendColor(
-									stats.page_views_change
-								)} mt-1 flex items-center gap-1"
-							>
-								<TrendIcon class="h-3 w-3" />
-								{Math.abs(stats.page_views_change).toFixed(0)}%
-							</div>
-						{/if}
-					</button>
+					/>
 
 					<!-- Total Events -->
-					<button
-						class="hover:bg-accent border-b border-r p-4 text-left transition-colors lg:border-b-0 {isMetricSelected(
-							'events'
-						)
-							? 'bg-accent'
-							: ''}"
+					<MetricCard
+						label="Total Events"
+						currentValue={stats.total_events || 0}
+						previousValue={comparisonStats.total_events || 0}
+						currentPeriod={currentPeriodLabel()}
+						previousPeriod={previousPeriodLabel()}
+						isSelected={isMetricSelected('events')}
 						onclick={() => handleMetricClick('events')}
-					>
-						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
-							Total Events
-						</div>
-						<div class="text-2xl font-bold">{stats.total_events?.toLocaleString() || '0'}</div>
-						{#if stats.events_change !== undefined && stats.events_change !== 0}
-							{@const TrendIcon = getTrendIcon(stats.events_change)}
-							<div
-								class="text-xs {getTrendColor(stats.events_change)} mt-1 flex items-center gap-1"
-							>
-								<TrendIcon class="h-3 w-3" />
-								{Math.abs(stats.events_change).toFixed(0)}%
-							</div>
-						{/if}
-					</button>
+					/>
 
 					<!-- Views per Visit -->
-					<button
-						class="hover:bg-accent border-b border-r p-4 text-left transition-colors lg:border-b-0 {isMetricSelected(
-							'views_per_visit'
-						)
-							? 'bg-accent'
-							: ''}"
+					<MetricCard
+						label="Views per Visit"
+						currentValue={stats.total_visits > 0 ? stats.page_views / stats.total_visits : 0}
+						previousValue={comparisonStats.total_visits > 0
+							? comparisonStats.page_views / comparisonStats.total_visits
+							: 0}
+						currentPeriod={currentPeriodLabel()}
+						previousPeriod={previousPeriodLabel()}
+						formatValue={(val) => (val ? val.toFixed(2) : '0.00')}
+						isSelected={isMetricSelected('views_per_visit')}
 						onclick={() => handleMetricClick('views_per_visit')}
-					>
-						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
-							Views per Visit
-						</div>
-						<div class="text-2xl font-bold">
-							{stats.total_visits > 0 ? (stats.page_views / stats.total_visits).toFixed(2) : '0.00'}
-						</div>
-					</button>
+					/>
 
 					<!-- Bounce Rate -->
-					<button
-						class="hover:bg-accent border-r p-4 text-left transition-colors {isMetricSelected(
-							'bounce_rate'
-						)
-							? 'bg-accent'
-							: ''}"
+					<MetricCard
+						label="Bounce Rate"
+						currentValue={stats.bounce_rate || 0}
+						previousValue={comparisonStats.bounce_rate || 0}
+						currentPeriod={currentPeriodLabel()}
+						previousPeriod={previousPeriodLabel()}
+						formatValue={(val) => (val ? val.toFixed(0) + '%' : '0%')}
+						isNegativeBetter={true}
+						isSelected={isMetricSelected('bounce_rate')}
 						onclick={() => handleMetricClick('bounce_rate')}
-					>
-						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
-							Bounce Rate
-						</div>
-						<div class="text-2xl font-bold">{stats.bounce_rate?.toFixed(0) || '0'}%</div>
-					</button>
+					/>
 
 					<!-- Visit Duration -->
-					<button
-						class="hover:bg-accent border-r p-4 text-left transition-colors {isMetricSelected(
-							'visit_duration'
-						)
-							? 'bg-accent'
-							: ''}"
+					<MetricCard
+						label="Visit Duration"
+						currentValue={stats.avg_session_duration || 0}
+						previousValue={comparisonStats.avg_session_duration || 0}
+						currentPeriod={currentPeriodLabel()}
+						previousPeriod={previousPeriodLabel()}
+						formatValue={(val) => {
+							if (!val) return '0s';
+							if (val < 60) return Math.floor(val) + 's';
+							if (val < 3600) {
+								const minutes = Math.floor(val / 60);
+								const seconds = Math.floor(val % 60);
+								return `${minutes}m ${seconds}s`;
+							}
+							const hours = Math.floor(val / 3600);
+							const minutes = Math.floor((val % 3600) / 60);
+							return `${hours}h ${minutes}m`;
+						}}
+						isSelected={isMetricSelected('visit_duration')}
 						onclick={() => handleMetricClick('visit_duration')}
-					>
-						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
-							Visit Duration
-						</div>
-						<div class="text-2xl font-bold">
-							{#if stats.avg_session_duration < 60}
-								{Math.floor(stats.avg_session_duration || 0)}s
-							{:else if stats.avg_session_duration < 3600}
-								{Math.floor((stats.avg_session_duration || 0) / 60)}m {Math.floor(
-									(stats.avg_session_duration || 0) % 60
-								)}s
-							{:else}
-								{Math.floor((stats.avg_session_duration || 0) / 3600)}h {Math.floor(
-									((stats.avg_session_duration || 0) % 3600) / 60
-								)}m
-							{/if}
-						</div>
-					</button>
+					/>
 
 					<!-- Bot Percentage -->
-					<button
-						class="hover:bg-accent p-4 text-left transition-colors {activeFilters.botFilter ===
-						'bot'
-							? 'bg-accent'
-							: ''}"
+					<MetricCard
+						label="🤖 Bot Traffic"
+						currentValue={stats.bot_percentage || 0}
+						previousValue={comparisonStats.bot_percentage || 0}
+						currentPeriod={currentPeriodLabel()}
+						previousPeriod={previousPeriodLabel()}
+						formatValue={(val) => (val ? val.toFixed(0) + '%' : '0%')}
+						isNegativeBetter={true}
+						isSelected={activeFilters.botFilter === 'bot'}
 						onclick={() => {
 							if (activeFilters.botFilter === 'bot') {
 								removeFilter('botFilter');
@@ -873,15 +833,7 @@
 								addFilter('botFilter', 'bot');
 							}
 						}}
-					>
-						<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
-							🤖 Bot Traffic
-						</div>
-						<div class="text-2xl font-bold">{stats.bot_percentage?.toFixed(0) || '0'}%</div>
-						<div class="text-muted-foreground mt-1 text-xs">
-							{stats.bot_events?.toLocaleString() || '0'} events
-						</div>
-					</button>
+					/>
 				</div>
 
 				{#if statsLoading}
