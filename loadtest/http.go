@@ -107,6 +107,26 @@ var (
 		"Mozilla/5.0 (Linux; Android 14; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
 	}
 
+	// Bot user agents for simulation (about 20% bot traffic)
+	botUserAgents = []string{
+		"Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+		"Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+		"Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)",
+		"facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+		"Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)",
+		"Mozilla/5.0 (compatible; SemrushBot/7~bl; +http://www.semrush.com/bot.html)",
+		"Mozilla/5.0 (compatible; DuckDuckBot-Https/1.1; https://duckduckgo.com/duckduckbot)",
+		"Twitterbot/1.0",
+		"LinkedInBot/1.0 (compatible; Mozilla/5.0; Apache-HttpClient +http://www.linkedin.com)",
+		"curl/7.84.0",
+		"python-requests/2.28.1",
+		"Go-http-client/1.1",
+		"Mozilla/5.0 (compatible; UptimeRobot/2.0; http://www.uptimerobot.com/)",
+		"Mozilla/5.0 (compatible; PingdomBot/1.0; +http://www.pingdom.com/)",
+		"Wget/1.21.3",
+		"WhatsApp/2.0",
+	}
+
 	countries = []string{
 		"United States", "Canada", "United Kingdom", "Germany", "France", "Spain",
 		"Italy", "Netherlands", "Sweden", "Norway", "Denmark", "Finland",
@@ -169,7 +189,15 @@ func (hlt *HTTPLoadTester) GenerateRandomEvent(userPool []string) Event {
 	eventName := eventNames[rand.Intn(len(eventNames))]
 	url := urls[rand.Intn(len(urls))]
 	referrer := referrers[rand.Intn(len(referrers))]
-	userAgent := userAgents[rand.Intn(len(userAgents))]
+
+	// 20% chance of bot traffic
+	var userAgent string
+	if rand.Float32() < 0.20 {
+		userAgent = botUserAgents[rand.Intn(len(botUserAgents))]
+	} else {
+		userAgent = userAgents[rand.Intn(len(userAgents))]
+	}
+
 	country := countries[rand.Intn(len(countries))]
 	browser := browsers[rand.Intn(len(browsers))]
 	os := operatingSystems[rand.Intn(len(operatingSystems))]

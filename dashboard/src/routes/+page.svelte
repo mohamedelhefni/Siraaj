@@ -339,7 +339,8 @@
 			project: null,
 			metric: null,
 			propertyKey: null,
-			propertyValue: null
+			propertyValue: null,
+			botFilter: null
 		};
 		updateURLParams();
 		loadStats();
@@ -750,9 +751,20 @@
 
 		<!-- Bot vs Human Traffic -->
 		<div class="grid gap-4 md:grid-cols-3">
-			<Card>
+			<Card
+				class="cursor-pointer transition-all hover:shadow-md {activeFilters.botFilter === 'bot'
+					? 'ring-primary ring-2'
+					: ''}"
+				onclick={() => {
+					if (activeFilters.botFilter === 'bot') {
+						removeFilter('botFilter');
+					} else {
+						addFilter('botFilter', 'bot');
+					}
+				}}
+			>
 				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<CardTitle class="text-sm font-medium">Bot Traffic</CardTitle>
+					<CardTitle class="text-sm font-medium">🤖 Bot Traffic</CardTitle>
 				</CardHeader>
 				<CardContent>
 					<div class="text-2xl font-bold">{stats.bot_events?.toLocaleString() || '0'}</div>
@@ -762,9 +774,20 @@
 				</CardContent>
 			</Card>
 
-			<Card>
+			<Card
+				class="cursor-pointer transition-all hover:shadow-md {activeFilters.botFilter === 'human'
+					? 'ring-primary ring-2'
+					: ''}"
+				onclick={() => {
+					if (activeFilters.botFilter === 'human') {
+						removeFilter('botFilter');
+					} else {
+						addFilter('botFilter', 'human');
+					}
+				}}
+			>
 				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<CardTitle class="text-sm font-medium">Human Traffic</CardTitle>
+					<CardTitle class="text-sm font-medium">👤 Human Traffic</CardTitle>
 				</CardHeader>
 				<CardContent>
 					<div class="text-2xl font-bold">{stats.human_events?.toLocaleString() || '0'}</div>
