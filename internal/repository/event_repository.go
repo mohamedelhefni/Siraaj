@@ -322,21 +322,23 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	`, whereClause)
 	queryArgs := append(args, limit)
 
-	rows, err := r.db.Query(query, queryArgs...)
+	topEventsRows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Printf("Warning: failed to close rows: %v", err)
+		if topEventsRows != nil {
+			if err := topEventsRows.Close(); err != nil {
+				log.Printf("Warning: failed to close rows: %v", err)
+			}
 		}
 	}()
 
 	topEvents := []map[string]interface{}{}
-	for rows.Next() {
+	for topEventsRows.Next() {
 		var name string
 		var count int
-		if err := rows.Scan(&name, &count); err != nil {
+		if err := topEventsRows.Scan(&name, &count); err != nil {
 			continue
 		}
 		topEvents = append(topEvents, map[string]interface{}{
@@ -366,18 +368,14 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	case "views_per_visit":
 		selectClause = "CAST(COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) AS FLOAT) / NULLIF(COUNT(DISTINCT session_id), 0) as count"
 	case "bounce_rate":
-		// Calculate bounce rate: percentage of sessions with only 1 page view
+		// For bounce rate in timeline, we need to use a different approach
+		// We'll calculate it per time period using a window function or aggregation
+		// This is a simplified version that's much faster
 		selectClause = `
-			CAST(COUNT(DISTINCT CASE 
-				WHEN session_id IN (
-					SELECT session_id 
-					FROM events e2 
-					WHERE e2.timestamp BETWEEN events.timestamp - INTERVAL '1 hour' AND events.timestamp + INTERVAL '1 hour'
-					AND e2.event_name = 'page_view'
-					GROUP BY session_id 
-					HAVING COUNT(*) = 1
-				) THEN session_id 
-			END) AS FLOAT) * 100 / NULLIF(COUNT(DISTINCT CASE WHEN event_name = 'page_view' THEN session_id END), 0) as count`
+			CASE 
+				WHEN COUNT(DISTINCT session_id) = 0 THEN 0
+				ELSE CAST(SUM(CASE WHEN event_name = 'page_view' THEN 1 ELSE 0 END) AS FLOAT) * 100.0 / NULLIF(COUNT(DISTINCT session_id), 0)
+			END as count`
 	case "visit_duration":
 		selectClause = "AVG(CASE WHEN session_duration > 0 THEN session_duration END) as count"
 	default: // Default to users
@@ -387,57 +385,122 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	// Determine granularity based on date range
 	if timelineDuration <= 24*time.Hour {
 		// For today or single day: show hourly data
-		timelineQuery = fmt.Sprintf(`
-			SELECT 
-				strftime(DATE_TRUNC('hour', timestamp), '%%Y-%%m-%%d %%H:00:00') as date, 
-				%s
-			FROM events 
-			WHERE %s
-			GROUP BY date 
-			ORDER BY date
-		`, selectClause, whereClause)
+		if metric == "bounce_rate" {
+			// Special optimized query for bounce rate
+			timelineQuery = fmt.Sprintf(`
+				WITH session_page_counts AS (
+					SELECT 
+						strftime(DATE_TRUNC('hour', timestamp), '%%Y-%%m-%%d %%H:00:00') as date,
+						session_id,
+						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
+					FROM events 
+					WHERE %s
+					GROUP BY date, session_id
+				)
+				SELECT 
+					date,
+					CAST(COUNT(CASE WHEN page_view_count = 1 THEN 1 END) AS FLOAT) * 100.0 / NULLIF(COUNT(*), 0) as count
+				FROM session_page_counts
+				GROUP BY date
+				ORDER BY date
+			`, whereClause)
+		} else {
+			timelineQuery = fmt.Sprintf(`
+				SELECT 
+					strftime(DATE_TRUNC('hour', timestamp), '%%Y-%%m-%%d %%H:00:00') as date, 
+					%s
+				FROM events 
+				WHERE %s
+				GROUP BY date 
+				ORDER BY date
+			`, selectClause, whereClause)
+		}
 		timeFormat = "hour"
 	} else if timelineDuration <= 90*24*time.Hour {
 		// For up to 3 months: show daily data
-		timelineQuery = fmt.Sprintf(`
-			SELECT 
-				strftime(DATE_TRUNC('day', timestamp), '%%Y-%%m-%%d') as date, 
-				%s
-			FROM events 
-			WHERE %s
-			GROUP BY date 
-			ORDER BY date
-		`, selectClause, whereClause)
+		if metric == "bounce_rate" {
+			// Special optimized query for bounce rate
+			timelineQuery = fmt.Sprintf(`
+				WITH session_page_counts AS (
+					SELECT 
+						strftime(DATE_TRUNC('day', timestamp), '%%Y-%%m-%%d') as date,
+						session_id,
+						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
+					FROM events 
+					WHERE %s
+					GROUP BY date, session_id
+				)
+				SELECT 
+					date,
+					CAST(COUNT(CASE WHEN page_view_count = 1 THEN 1 END) AS FLOAT) * 100.0 / NULLIF(COUNT(*), 0) as count
+				FROM session_page_counts
+				GROUP BY date
+				ORDER BY date
+			`, whereClause)
+		} else {
+			timelineQuery = fmt.Sprintf(`
+				SELECT 
+					strftime(DATE_TRUNC('day', timestamp), '%%Y-%%m-%%d') as date, 
+					%s
+				FROM events 
+				WHERE %s
+				GROUP BY date 
+				ORDER BY date
+			`, selectClause, whereClause)
+		}
 		timeFormat = "day"
 	} else {
 		// For more than 3 months: show monthly data
-		timelineQuery = fmt.Sprintf(`
-			SELECT 
-				strftime(DATE_TRUNC('month', timestamp), '%%Y-%%m-01') as date, 
-				%s
-			FROM events 
-			WHERE %s
-			GROUP BY date 
-			ORDER BY date
-		`, selectClause, whereClause)
+		if metric == "bounce_rate" {
+			// Special optimized query for bounce rate
+			timelineQuery = fmt.Sprintf(`
+				WITH session_page_counts AS (
+					SELECT 
+						strftime(DATE_TRUNC('month', timestamp), '%%Y-%%m-01') as date,
+						session_id,
+						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
+					FROM events 
+					WHERE %s
+					GROUP BY date, session_id
+				)
+				SELECT 
+					date,
+					CAST(COUNT(CASE WHEN page_view_count = 1 THEN 1 END) AS FLOAT) * 100.0 / NULLIF(COUNT(*), 0) as count
+				FROM session_page_counts
+				GROUP BY date
+				ORDER BY date
+			`, whereClause)
+		} else {
+			timelineQuery = fmt.Sprintf(`
+				SELECT 
+					strftime(DATE_TRUNC('month', timestamp), '%%Y-%%m-01') as date, 
+					%s
+				FROM events 
+				WHERE %s
+				GROUP BY date 
+				ORDER BY date
+			`, selectClause, whereClause)
+		}
 		timeFormat = "month"
 	}
 
-	rows, err = r.db.Query(timelineQuery, args...)
+	timelineRows, err := r.db.Query(timelineQuery, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Printf("Warning: failed to close rows: %v", err)
+		if timelineRows != nil {
+			if err := timelineRows.Close(); err != nil {
+				log.Printf("Warning: failed to close rows: %v", err)
+			}
 		}
 	}()
 
 	timeline := []map[string]interface{}{}
-	for rows.Next() {
+	for timelineRows.Next() {
 		var date string
 		var count sql.NullFloat64
-		if err := rows.Scan(&date, &count); err != nil {
+		if err := timelineRows.Scan(&date, &count); err != nil {
 			log.Printf("Error scanning timeline row: %v", err)
 			continue
 		}
@@ -466,21 +529,23 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		LIMIT ?
 	`, whereClause)
 
-	rows, err = r.db.Query(query, queryArgs...)
+	topPagesRows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Printf("Warning: failed to close rows: %v", err)
+		if topPagesRows != nil {
+			if err := topPagesRows.Close(); err != nil {
+				log.Printf("Warning: failed to close rows: %v", err)
+			}
 		}
 	}()
 
 	topPages := []map[string]interface{}{}
-	for rows.Next() {
+	for topPagesRows.Next() {
 		var url string
 		var count int
-		if err := rows.Scan(&url, &count); err != nil {
+		if err := topPagesRows.Scan(&url, &count); err != nil {
 			continue
 		}
 		topPages = append(topPages, map[string]interface{}{
@@ -507,21 +572,23 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		LIMIT ?
 	`, whereClause)
 
-	rows, err = r.db.Query(entryPagesQuery, queryArgs...)
+	entryPagesRows, err := r.db.Query(entryPagesQuery, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Printf("Warning: failed to close rows: %v", err)
+		if entryPagesRows != nil {
+			if err := entryPagesRows.Close(); err != nil {
+				log.Printf("Warning: failed to close rows: %v", err)
+			}
 		}
 	}()
 
 	entryPages := []map[string]interface{}{}
-	for rows.Next() {
+	for entryPagesRows.Next() {
 		var url string
 		var count int
-		if err := rows.Scan(&url, &count); err != nil {
+		if err := entryPagesRows.Scan(&url, &count); err != nil {
 			continue
 		}
 		entryPages = append(entryPages, map[string]interface{}{
@@ -548,21 +615,23 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		LIMIT ?
 	`, whereClause)
 
-	rows, err = r.db.Query(exitPagesQuery, queryArgs...)
+	exitPagesRows, err := r.db.Query(exitPagesQuery, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Printf("Warning: failed to close rows: %v", err)
+		if exitPagesRows != nil {
+			if err := exitPagesRows.Close(); err != nil {
+				log.Printf("Warning: failed to close rows: %v", err)
+			}
 		}
 	}()
 
 	exitPages := []map[string]interface{}{}
-	for rows.Next() {
+	for exitPagesRows.Next() {
 		var url string
 		var count int
-		if err := rows.Scan(&url, &count); err != nil {
+		if err := exitPagesRows.Scan(&url, &count); err != nil {
 			continue
 		}
 		exitPages = append(exitPages, map[string]interface{}{
@@ -582,21 +651,23 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		LIMIT ?
 	`, whereClause)
 
-	rows, err = r.db.Query(query, queryArgs...)
+	browsersRows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Printf("Warning: failed to close rows: %v", err)
+		if browsersRows != nil {
+			if err := browsersRows.Close(); err != nil {
+				log.Printf("Warning: failed to close rows: %v", err)
+			}
 		}
 	}()
 
 	browsers := []map[string]interface{}{}
-	for rows.Next() {
+	for browsersRows.Next() {
 		var browser string
 		var count int
-		if err := rows.Scan(&browser, &count); err != nil {
+		if err := browsersRows.Scan(&browser, &count); err != nil {
 			continue
 		}
 		browsers = append(browsers, map[string]interface{}{
@@ -616,21 +687,23 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		LIMIT ?
 	`, whereClause)
 
-	rows, err = r.db.Query(query, queryArgs...)
+	devicesRows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Printf("Warning: failed to close rows: %v", err)
+		if devicesRows != nil {
+			if err := devicesRows.Close(); err != nil {
+				log.Printf("Warning: failed to close rows: %v", err)
+			}
 		}
 	}()
 
 	devices := []map[string]interface{}{}
-	for rows.Next() {
+	for devicesRows.Next() {
 		var device string
 		var count int
-		if err := rows.Scan(&device, &count); err != nil {
+		if err := devicesRows.Scan(&device, &count); err != nil {
 			continue
 		}
 		devices = append(devices, map[string]interface{}{
@@ -650,21 +723,23 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		LIMIT ?
 	`, whereClause)
 
-	rows, err = r.db.Query(query, queryArgs...)
+	osRows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Printf("Warning: failed to close rows: %v", err)
+		if osRows != nil {
+			if err := osRows.Close(); err != nil {
+				log.Printf("Warning: failed to close rows: %v", err)
+			}
 		}
 	}()
 
 	operatingSystems := []map[string]interface{}{}
-	for rows.Next() {
+	for osRows.Next() {
 		var os string
 		var count int
-		if err := rows.Scan(&os, &count); err != nil {
+		if err := osRows.Scan(&os, &count); err != nil {
 			continue
 		}
 		operatingSystems = append(operatingSystems, map[string]interface{}{
@@ -684,21 +759,23 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		LIMIT ?
 	`, whereClause)
 
-	rows, err = r.db.Query(query, queryArgs...)
+	countriesRows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Printf("Warning: failed to close rows: %v", err)
+		if countriesRows != nil {
+			if err := countriesRows.Close(); err != nil {
+				log.Printf("Warning: failed to close rows: %v", err)
+			}
 		}
 	}()
 
 	topCountries := []map[string]interface{}{}
-	for rows.Next() {
+	for countriesRows.Next() {
 		var country string
 		var count int
-		if err := rows.Scan(&country, &count); err != nil {
+		if err := countriesRows.Scan(&country, &count); err != nil {
 			continue
 		}
 		topCountries = append(topCountries, map[string]interface{}{
@@ -723,21 +800,23 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		LIMIT ?
 	`, whereClause)
 
-	rows, err = r.db.Query(query, queryArgs...)
+	sourcesRows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Printf("Warning: failed to close rows: %v", err)
+		if sourcesRows != nil {
+			if err := sourcesRows.Close(); err != nil {
+				log.Printf("Warning: failed to close rows: %v", err)
+			}
 		}
 	}()
 
 	topSources := []map[string]interface{}{}
-	for rows.Next() {
+	for sourcesRows.Next() {
 		var referrer string
 		var count int
-		if err := rows.Scan(&referrer, &count); err != nil {
+		if err := sourcesRows.Scan(&referrer, &count); err != nil {
 			continue
 		}
 		topSources = append(topSources, map[string]interface{}{
