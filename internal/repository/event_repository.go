@@ -30,8 +30,8 @@ func NewEventRepository(db *sql.DB) EventRepository {
 func (r *eventRepository) Create(event domain.Event) error {
 	query := `
 		INSERT INTO events (id, timestamp, event_name, user_id, session_id, url, referrer, 
-			user_agent, ip, country, browser, os, device, properties, project_id)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			user_agent, ip, country, browser, os, device, is_bot, properties, project_id)
+		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	if event.ProjectID == "" {
@@ -51,6 +51,7 @@ func (r *eventRepository) Create(event domain.Event) error {
 		event.Browser,
 		event.OS,
 		event.Device,
+		event.IsBot,
 		event.Properties,
 		event.ProjectID,
 	)
@@ -79,8 +80,8 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO events (id, timestamp, event_name, user_id, session_id, url, referrer, 
-			user_agent, ip, country, browser, os, device, properties, project_id)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			user_agent, ip, country, browser, os, device, is_bot, properties, project_id)
+		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -109,6 +110,7 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 			event.Browser,
 			event.OS,
 			event.Device,
+			event.IsBot,
 			event.Properties,
 			event.ProjectID,
 		)
@@ -124,7 +126,7 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 func (r *eventRepository) GetEvents(startDate, endDate time.Time, limit, offset int) (map[string]interface{}, error) {
 	query := `
 		SELECT id, timestamp, event_name, user_id, session_id, url, referrer,
-			user_agent, ip, country, browser, os, device, properties, project_id
+			user_agent, ip, country, browser, os, device, is_bot, properties, project_id
 		FROM events
 		WHERE timestamp BETWEEN ? AND ?
 		ORDER BY timestamp DESC
@@ -147,7 +149,7 @@ func (r *eventRepository) GetEvents(startDate, endDate time.Time, limit, offset 
 		err := rows.Scan(
 			&e.ID, &e.Timestamp, &e.EventName, &e.UserID, &e.SessionID,
 			&e.URL, &e.Referrer, &e.UserAgent, &e.IP, &e.Country,
-			&e.Browser, &e.OS, &e.Device, &e.Properties, &e.ProjectID,
+			&e.Browser, &e.OS, &e.Device, &e.IsBot, &e.Properties, &e.ProjectID,
 		)
 		if err != nil {
 			log.Printf("Error scanning event: %v", err)
@@ -203,6 +205,13 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		whereClause += " AND event_name = ?"
 		args = append(args, eventName)
 	}
+	if botFilter, ok := filters["botFilter"]; ok && botFilter != "" {
+		if botFilter == "bot" {
+			whereClause += " AND is_bot = TRUE"
+		} else if botFilter == "human" {
+			whereClause += " AND is_bot = FALSE"
+		}
+	}
 
 	// Use a single query with CTEs for better performance
 	aggregateQuery := fmt.Sprintf(`
@@ -253,7 +262,34 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	}
 	stats["bounce_rate"] = bounceRate
 
-	// Top events with optimized query
+	// Bot statistics
+	botQuery := fmt.Sprintf(`
+		SELECT 
+			COUNT(CASE WHEN is_bot = TRUE THEN 1 END) as bot_events,
+			COUNT(CASE WHEN is_bot = FALSE THEN 1 END) as human_events,
+			COUNT(DISTINCT CASE WHEN is_bot = TRUE THEN user_id END) as bot_users,
+			COUNT(DISTINCT CASE WHEN is_bot = FALSE THEN user_id END) as human_users
+		FROM events 
+		WHERE %s
+	`, whereClause)
+
+	var botEvents, humanEvents, botUsers, humanUsers int
+	err = r.db.QueryRow(botQuery, args...).Scan(&botEvents, &humanEvents, &botUsers, &humanUsers)
+	if err == nil {
+		stats["bot_events"] = botEvents
+		stats["human_events"] = humanEvents
+		stats["bot_users"] = botUsers
+		stats["human_users"] = humanUsers
+
+		// Calculate bot percentage
+		if totalEvents > 0 {
+			stats["bot_percentage"] = float64(botEvents) / float64(totalEvents) * 100
+		} else {
+			stats["bot_percentage"] = 0.0
+		}
+	}
+
+	// Top Events with optimized query
 	query := fmt.Sprintf(`
 		SELECT event_name, COUNT(*) as count 
 		FROM events 

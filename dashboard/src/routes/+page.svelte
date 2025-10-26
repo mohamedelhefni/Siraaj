@@ -26,6 +26,11 @@
 		total_visits: 0,
 		page_views: 0,
 		bounce_rate: 0,
+		bot_events: 0,
+		human_events: 0,
+		bot_users: 0,
+		human_users: 0,
+		bot_percentage: 0,
 		events_change: 0,
 		users_change: 0,
 		visits_change: 0,
@@ -83,6 +88,7 @@
 		metric: string | null;
 		propertyKey: string | null;
 		propertyValue: string | null;
+		botFilter: string | null; // 'human', 'bot', or null for all
 	}>({
 		source: null,
 		country: null,
@@ -91,7 +97,8 @@
 		project: null,
 		metric: null, // For filtering by clicked metric card
 		propertyKey: null,
-		propertyValue: null
+		propertyValue: null,
+		botFilter: null
 	});
 
 	// Default to last 7 days
@@ -123,6 +130,7 @@
 		if (activeFilters.metric) params.set('metric', activeFilters.metric);
 		if (activeFilters.propertyKey) params.set('propKey', activeFilters.propertyKey);
 		if (activeFilters.propertyValue) params.set('propValue', activeFilters.propertyValue);
+		if (activeFilters.botFilter) params.set('botFilter', activeFilters.botFilter);
 		if (refreshIntervalTime !== 30000) params.set('interval', refreshIntervalTime.toString());
 
 		const newURL = `${window.location.pathname}?${params.toString()}`;
@@ -155,6 +163,7 @@
 		const metric = params.get('metric');
 		const propKey = params.get('propKey');
 		const propValue = params.get('propValue');
+		const botFilter = params.get('botFilter');
 		const interval = params.get('interval');
 
 		if (project) activeFilters.project = project;
@@ -165,6 +174,7 @@
 		if (metric) activeFilters.metric = metric;
 		if (propKey) activeFilters.propertyKey = propKey;
 		if (propValue) activeFilters.propertyValue = propValue;
+		if (botFilter) activeFilters.botFilter = botFilter;
 		if (interval) {
 			refreshIntervalTime = parseInt(interval);
 		}
@@ -473,6 +483,27 @@
 			</div>
 		{/if}
 
+		<!-- Bot Filter -->
+		<div class="flex items-center gap-2">
+			<span class="text-sm font-medium">Traffic:</span>
+			<select
+				class="border-input bg-background focus-visible:ring-ring flex h-9 rounded-md border px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1"
+				value={activeFilters.botFilter || ''}
+				onchange={(e: Event) => {
+					const target = e.target as HTMLSelectElement;
+					if (target.value) {
+						addFilter('botFilter', target.value);
+					} else {
+						removeFilter('botFilter');
+					}
+				}}
+			>
+				<option value="">All Traffic</option>
+				<option value="human">👤 Human Only</option>
+				<option value="bot">🤖 Bots Only</option>
+			</select>
+		</div>
+
 		<!-- Auto-refresh controls -->
 		<div class="ml-auto flex items-center gap-2">
 			<span class="text-sm font-medium">Auto-refresh:</span>
@@ -563,6 +594,14 @@
 						}}
 						class="hover:text-destructive ml-1"
 					>
+						<X class="h-3 w-3" />
+					</button>
+				</Badge>
+			{/if}
+			{#if activeFilters.botFilter}
+				<Badge variant="secondary" class="gap-1">
+					Traffic: {activeFilters.botFilter === 'bot' ? '🤖 Bots Only' : '👤 Human Only'}
+					<button onclick={() => removeFilter('botFilter')} class="hover:text-destructive ml-1">
 						<X class="h-3 w-3" />
 					</button>
 				</Badge>
@@ -705,6 +744,46 @@
 				<CardContent>
 					<div class="text-2xl font-bold">{onlineData.online_users?.toLocaleString() || '0'}</div>
 					<p class="text-muted-foreground mt-1 text-xs">Active in last 5 min</p>
+				</CardContent>
+			</Card>
+		</div>
+
+		<!-- Bot vs Human Traffic -->
+		<div class="grid gap-4 md:grid-cols-3">
+			<Card>
+				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+					<CardTitle class="text-sm font-medium">Bot Traffic</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<div class="text-2xl font-bold">{stats.bot_events?.toLocaleString() || '0'}</div>
+					<p class="text-muted-foreground mt-1 text-xs">
+						{stats.bot_percentage?.toFixed(1) || '0'}% of total traffic
+					</p>
+				</CardContent>
+			</Card>
+
+			<Card>
+				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+					<CardTitle class="text-sm font-medium">Human Traffic</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<div class="text-2xl font-bold">{stats.human_events?.toLocaleString() || '0'}</div>
+					<p class="text-muted-foreground mt-1 text-xs">
+						{(100 - (stats.bot_percentage || 0)).toFixed(1)}% of total traffic
+					</p>
+				</CardContent>
+			</Card>
+
+			<Card>
+				<CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+					<CardTitle class="text-sm font-medium">Bot vs Human Users</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<div class="text-2xl font-bold">
+						{stats.bot_users?.toLocaleString() || '0'} /
+						{stats.human_users?.toLocaleString() || '0'}
+					</div>
+					<p class="text-muted-foreground mt-1 text-xs">Bots / Humans</p>
 				</CardContent>
 			</Card>
 		</div>

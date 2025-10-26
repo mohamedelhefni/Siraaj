@@ -59,6 +59,18 @@ var migrations = []Migration{
 		DROP INDEX IF EXISTS idx_referrer;
 		DROP INDEX IF EXISTS idx_project_id`,
 	},
+	{
+		Version:     4,
+		Description: "Add is_bot column to events table",
+		Up:          `ALTER TABLE events ADD COLUMN IF NOT EXISTS is_bot BOOLEAN DEFAULT FALSE`,
+		Down:        `ALTER TABLE events DROP COLUMN IF EXISTS is_bot`,
+	},
+	{
+		Version:     5,
+		Description: "Create index on is_bot column",
+		Up:          `CREATE INDEX IF NOT EXISTS idx_is_bot ON events(is_bot)`,
+		Down:        `DROP INDEX IF EXISTS idx_is_bot`,
+	},
 }
 
 func initMigrationTable(db *sql.DB) error {

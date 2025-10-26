@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mohamedelhefni/siraaj/geolocation"
+	"github.com/mohamedelhefni/siraaj/internal/botdetector"
 	"github.com/mohamedelhefni/siraaj/internal/domain"
 	"github.com/mohamedelhefni/siraaj/internal/service"
 )
@@ -57,6 +58,12 @@ func (h *EventHandler) TrackEvent(w http.ResponseWriter, r *http.Request) {
 				event.Country = geo.CountryCode
 			}
 		}
+	}
+
+	// Detect if user agent belongs to a bot
+	event.IsBot = botdetector.IsBot(event.UserAgent)
+	if event.IsBot {
+		log.Printf("🤖 Bot detected: %s", botdetector.GetBotName(event.UserAgent))
 	}
 
 	if err := h.service.TrackEvent(event); err != nil {
@@ -126,6 +133,9 @@ func (h *EventHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	}
 	if metric := r.URL.Query().Get("metric"); metric != "" {
 		filters["metric"] = metric
+	}
+	if botFilter := r.URL.Query().Get("botFilter"); botFilter != "" {
+		filters["botFilter"] = botFilter
 	}
 
 	stats, err := h.service.GetStats(startDate, endDate, limit, filters)

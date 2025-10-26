@@ -6,7 +6,7 @@ const API_BASE_URL = 'http://localhost:8080/api';
  * @param {string} startDate - Start date in YYYY-MM-DD format
  * @param {string} endDate - End date in YYYY-MM-DD format
  * @param {number} limit - Limit for top results (default 50)
- * @param {Object} filters - Optional filters {source, country, browser, event, project, metric}
+ * @param {Object} filters - Optional filters {source, country, browser, event, project, metric, botFilter}
  * @returns {Promise<Object>} Analytics stats
  */
 export async function fetchStats(startDate, endDate, limit = 50, filters = {}) {
@@ -22,6 +22,7 @@ export async function fetchStats(startDate, endDate, limit = 50, filters = {}) {
     if (filters.event) params.append('event', filters.event);
     if (filters.project) params.append('project', filters.project);
     if (filters.metric) params.append('metric', filters.metric);
+    if (filters.botFilter) params.append('botFilter', filters.botFilter);
 
     const response = await fetch(`${API_BASE_URL}/stats?${params}`);
     if (!response.ok) {
