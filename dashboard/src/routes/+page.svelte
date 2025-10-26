@@ -17,6 +17,7 @@
 	import TopItemsList from '$lib/components/TopItemsList.svelte';
 	import PropertiesPanel from '$lib/components/PropertiesPanel.svelte';
 	import CountriesPanel from '$lib/components/CountriesPanel.svelte';
+	import BrowserPanel from '$lib/components/BrowserPanel.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 
 	let stats: any = $state({
@@ -33,6 +34,8 @@
 		timeline: [],
 		top_pages: [],
 		browsers: [],
+		devices: [],
+		operating_systems: [],
 		top_countries: [],
 		top_sources: []
 	});
@@ -802,34 +805,21 @@
 			</Card>
 		</div>
 
-		<!-- Browsers, Countries, and Sources -->
+		<!-- Browsers, Devices, and OS -->
 		<div class="grid gap-4 md:grid-cols-3">
 			<Card>
 				<CardHeader>
-					<CardTitle>Browsers</CardTitle>
-					<CardDescription>Browser distribution</CardDescription>
+					<CardTitle>Browser & Device</CardTitle>
+					<CardDescription>Browser, device, and OS distribution</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{#if statsLoading}
-						<div class="text-muted-foreground flex min-h-[150px] items-center justify-center">
-							<div class="flex flex-col items-center gap-2">
-								<div
-									class="border-primary h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
-								></div>
-								<p class="text-xs">Loading...</p>
-							</div>
-						</div>
-					{:else}
-						<TopItemsList
-							items={stats.browsers || []}
-							labelKey="name"
-							valueKey="count"
-							maxItems={5}
-							type="browser"
-							showMoreTitle="All Browsers ({(stats.browsers || []).length} total)"
-							onclick={(item: any) => addFilter('browser', item.name)}
-						/>
-					{/if}
+					<BrowserPanel
+						browsers={stats.browsers || []}
+						devices={stats.devices || []}
+						operatingSystems={stats.operating_systems || []}
+						onclick={(item: any) => addFilter('browser', item.name)}
+						loading={statsLoading}
+					/>
 				</CardContent>
 			</Card>
 

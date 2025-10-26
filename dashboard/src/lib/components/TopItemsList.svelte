@@ -35,6 +35,43 @@
 		unknown: '🌍'
 	};
 
+	// Device icon map
+	const deviceIcons = {
+		desktop: '🖥️',
+		mobile: '📱',
+		tablet: '📱',
+		unknown: '💻'
+	};
+
+	// OS icon map
+	const osIcons = {
+		windows: '🪟',
+		macos: '🍎',
+		linux: '🐧',
+		android: '🤖',
+		ios: '📱',
+		unknown: '💻'
+	};
+
+	function getDeviceIcon(device) {
+		const deviceLower = (device || '').toLowerCase();
+		if (deviceLower.includes('desktop')) return deviceIcons.desktop;
+		if (deviceLower.includes('mobile') || deviceLower.includes('phone')) return deviceIcons.mobile;
+		if (deviceLower.includes('tablet')) return deviceIcons.tablet;
+		return deviceIcons.unknown;
+	}
+
+	function getOSIcon(os) {
+		const osLower = (os || '').toLowerCase();
+		if (osLower.includes('windows')) return osIcons.windows;
+		if (osLower.includes('mac') || osLower.includes('darwin')) return osIcons.macos;
+		if (osLower.includes('linux')) return osIcons.linux;
+		if (osLower.includes('android')) return osIcons.android;
+		if (osLower.includes('ios') || osLower.includes('iphone') || osLower.includes('ipad'))
+			return osIcons.ios;
+		return osIcons.unknown;
+	}
+
 	function handleClick(item) {
 		if (onclick) {
 			onclick(item);
@@ -51,8 +88,20 @@
 		const faviconUrl = type === 'source' ? getFaviconUrl(item[labelKey]) : null;
 		const countryFlag = type === 'country' ? getCountryFlag(item[labelKey]) : null;
 		const browserIcon = type === 'browser' ? browserIcons[getBrowserName(item[labelKey])] : null;
+		const deviceIcon = type === 'device' ? getDeviceIcon(item[labelKey]) : null;
+		const osIcon = type === 'os' ? getOSIcon(item[labelKey]) : null;
 
-		return { item, index, percentage, displayLabel, faviconUrl, countryFlag, browserIcon };
+		return {
+			item,
+			index,
+			percentage,
+			displayLabel,
+			faviconUrl,
+			countryFlag,
+			browserIcon,
+			deviceIcon,
+			osIcon
+		};
 	}
 </script>
 
@@ -61,10 +110,15 @@
 		<p class="text-muted-foreground py-4 text-center text-sm">No data available</p>
 	{:else}
 		{#each displayItems as item, i}
-			{@const { percentage, displayLabel, faviconUrl, countryFlag, browserIcon } = renderItem(
-				item,
-				i
-			)}
+			{@const {
+				percentage,
+				displayLabel,
+				faviconUrl,
+				countryFlag,
+				browserIcon,
+				deviceIcon,
+				osIcon
+			} = renderItem(item, i)}
 
 			<div
 				class="my-1 flex items-center justify-between space-x-2 p-2 {onclick
@@ -82,6 +136,10 @@
 								<span class="shrink-0 text-lg">{countryFlag}</span>
 							{:else if browserIcon}
 								<span class="shrink-0 text-base">{browserIcon}</span>
+							{:else if deviceIcon}
+								<span class="shrink-0 text-base">{deviceIcon}</span>
+							{:else if osIcon}
+								<span class="shrink-0 text-base">{osIcon}</span>
 							{:else if faviconUrl}
 								<img src={faviconUrl} alt="" class="h-4 w-4 shrink-0" />
 							{:else if type === 'source' && item[labelKey] === 'Direct'}
@@ -122,10 +180,15 @@
 	{#snippet children()}
 		<div class="space-y-2">
 			{#each items as item, i}
-				{@const { percentage, displayLabel, faviconUrl, countryFlag, browserIcon } = renderItem(
-					item,
-					i
-				)}
+				{@const {
+					percentage,
+					displayLabel,
+					faviconUrl,
+					countryFlag,
+					browserIcon,
+					deviceIcon,
+					osIcon
+				} = renderItem(item, i)}
 
 				<div
 					class="my-1 flex items-center justify-between space-x-2 p-2 {onclick
@@ -151,6 +214,10 @@
 									<span class="shrink-0 text-lg">{countryFlag}</span>
 								{:else if browserIcon}
 									<span class="shrink-0 text-base">{browserIcon}</span>
+								{:else if deviceIcon}
+									<span class="shrink-0 text-base">{deviceIcon}</span>
+								{:else if osIcon}
+									<span class="shrink-0 text-base">{osIcon}</span>
 								{:else if faviconUrl}
 									<img src={faviconUrl} alt="" class="h-4 w-4 shrink-0" />
 								{:else if type === 'source' && item[labelKey] === 'Direct'}

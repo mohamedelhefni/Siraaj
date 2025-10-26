@@ -439,6 +439,74 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	}
 	stats["browsers"] = browsers
 
+	// Devices
+	query = fmt.Sprintf(`
+		SELECT device, COUNT(*) as count 
+		FROM events 
+		WHERE %s AND device IS NOT NULL AND device != ''
+		GROUP BY device 
+		ORDER BY count DESC
+		LIMIT ?
+	`, whereClause)
+
+	rows, err = r.db.Query(query, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	devices := []map[string]interface{}{}
+	for rows.Next() {
+		var device string
+		var count int
+		if err := rows.Scan(&device, &count); err != nil {
+			continue
+		}
+		devices = append(devices, map[string]interface{}{
+			"name":  device,
+			"count": count,
+		})
+	}
+	stats["devices"] = devices
+
+	// Operating Systems
+	query = fmt.Sprintf(`
+		SELECT os, COUNT(*) as count 
+		FROM events 
+		WHERE %s AND os IS NOT NULL AND os != ''
+		GROUP BY os 
+		ORDER BY count DESC
+		LIMIT ?
+	`, whereClause)
+
+	rows, err = r.db.Query(query, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	operatingSystems := []map[string]interface{}{}
+	for rows.Next() {
+		var os string
+		var count int
+		if err := rows.Scan(&os, &count); err != nil {
+			continue
+		}
+		operatingSystems = append(operatingSystems, map[string]interface{}{
+			"name":  os,
+			"count": count,
+		})
+	}
+	stats["operating_systems"] = operatingSystems
+
 	// Top Countries
 	query = fmt.Sprintf(`
 		SELECT country, COUNT(*) as count 
