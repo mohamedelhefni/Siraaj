@@ -35,7 +35,7 @@
 
 	function formatTime(seconds: number | undefined): string {
 		if (!seconds || seconds === 0) return 'N/A';
-		
+
 		if (seconds < 60) {
 			return `${Math.round(seconds)}s`;
 		} else if (seconds < 3600) {
@@ -85,7 +85,9 @@
 		</div>
 	</div>
 {:else if !result}
-	<div class="bg-muted/30 flex min-h-[400px] flex-col items-center justify-center rounded-lg border-2 border-dashed">
+	<div
+		class="bg-muted/30 flex min-h-[400px] flex-col items-center justify-center rounded-lg border-2 border-dashed"
+	>
 		<div class="text-muted-foreground text-center">
 			<Activity class="mx-auto mb-3 h-12 w-12 opacity-50" />
 			<p class="mb-2 text-lg font-medium">No funnel data</p>
@@ -152,7 +154,9 @@
 							<!-- Step Header -->
 							<div class="flex items-center justify-between">
 								<div class="flex items-center gap-3">
-									<div class="bg-primary text-primary-foreground flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold">
+									<div
+										class="bg-primary text-primary-foreground flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+									>
 										{index + 1}
 									</div>
 									<div>
@@ -175,9 +179,11 @@
 							</div>
 
 							<!-- Funnel Bar -->
-							<div class="relative h-16 overflow-hidden rounded-lg bg-muted">
+							<div class="bg-muted relative h-16 overflow-hidden rounded-lg">
 								<div
-									class="{getConversionBg(stepResult.conversion_rate)} absolute inset-y-0 left-0 transition-all duration-500"
+									class="{getConversionBg(
+										stepResult.conversion_rate
+									)} absolute inset-y-0 left-0 transition-all duration-500"
 									style="width: {barWidth}%"
 								>
 									<div class="flex h-full items-center justify-between px-4 text-white">
@@ -235,8 +241,8 @@
 										{stepResult.dropoff_rate.toFixed(1)}% drop-off
 									</span>
 									<span class="text-muted-foreground text-xs">
-										({(result.steps[index + 1].user_count - stepResult.user_count).toLocaleString()} users
-										left)
+										({(result.steps[index + 1].user_count - stepResult.user_count).toLocaleString()}
+										users left)
 									</span>
 								</div>
 							{/if}
@@ -259,10 +265,14 @@
 			<CardContent>
 				<div class="space-y-3">
 					{#if result.steps.length > 0}
-						{@const biggestDropoff = result.steps.slice(0, -1).reduce((max, step, idx) => 
-							step.dropoff_rate > (result.steps[max]?.dropoff_rate || 0) ? idx : max
-						, 0)}
-						
+						{@const biggestDropoff = result.steps
+							.slice(0, -1)
+							.reduce(
+								(max, step, idx) =>
+									step.dropoff_rate > (result.steps[max]?.dropoff_rate || 0) ? idx : max,
+								0
+							)}
+
 						{#if result.steps[biggestDropoff]?.dropoff_rate > 0}
 							<div class="bg-destructive/10 border-destructive/20 rounded-lg border p-4">
 								<div class="mb-1 flex items-start gap-2">
@@ -270,7 +280,8 @@
 									<div>
 										<div class="font-semibold">Biggest Drop-off Point</div>
 										<p class="text-muted-foreground text-sm">
-											{result.steps[biggestDropoff].dropoff_rate.toFixed(1)}% of users drop off after
+											{result.steps[biggestDropoff].dropoff_rate.toFixed(1)}% of users drop off
+											after
 											<strong>"{result.steps[biggestDropoff].step.name}"</strong>
 										</p>
 									</div>
@@ -278,18 +289,27 @@
 							</div>
 						{/if}
 
-						{@const bestConversion = result.steps.slice(1).reduce((max, step, idx) => 
-							step.conversion_rate > (result.steps[max + 1]?.conversion_rate || 0) ? idx + 1 : max + 1
-						, 1)}
-						
+						{@const bestConversion = result.steps
+							.slice(1)
+							.reduce(
+								(max, step, idx) =>
+									step.conversion_rate > (result.steps[max + 1]?.conversion_rate || 0)
+										? idx + 1
+										: max + 1,
+								1
+							)}
+
 						{#if result.steps.length > 1 && result.steps[bestConversion]}
-							<div class="bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900 rounded-lg border p-4">
+							<div
+								class="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-900 dark:bg-green-950/20"
+							>
 								<div class="mb-1 flex items-start gap-2">
-									<TrendingUp class="text-green-600 dark:text-green-500 mt-0.5 h-5 w-5" />
+									<TrendingUp class="mt-0.5 h-5 w-5 text-green-600 dark:text-green-500" />
 									<div>
 										<div class="font-semibold">Best Performing Step</div>
 										<p class="text-muted-foreground text-sm">
-											{result.steps[bestConversion].conversion_rate.toFixed(1)}% conversion rate from previous step at
+											{result.steps[bestConversion].conversion_rate.toFixed(1)}% conversion rate
+											from previous step at
 											<strong>"{result.steps[bestConversion].step.name}"</strong>
 										</p>
 									</div>
@@ -298,14 +318,16 @@
 						{/if}
 
 						{#if result.completion_rate < 10}
-							<div class="bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900 rounded-lg border p-4">
+							<div
+								class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900 dark:bg-yellow-950/20"
+							>
 								<div class="mb-1 flex items-start gap-2">
 									<span class="text-xl">⚠️</span>
 									<div>
 										<div class="font-semibold">Low Completion Rate</div>
 										<p class="text-muted-foreground text-sm">
-											Only {result.completion_rate.toFixed(1)}% of users complete the entire funnel. Consider
-											simplifying the journey or reducing friction.
+											Only {result.completion_rate.toFixed(1)}% of users complete the entire funnel.
+											Consider simplifying the journey or reducing friction.
 										</p>
 									</div>
 								</div>

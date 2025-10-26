@@ -12,21 +12,25 @@
 
 <div class="min-h-screen">
 	<!-- Navigation -->
-	<nav class="border-b bg-background">
+	<nav class="bg-background border-b">
 		<div class="container mx-auto flex items-center gap-6 px-6 py-3">
-			<a href="/dashboard" class="flex items-center gap-2 text-lg font-bold">
-				🏮 Siraaj
-			</a>
+			<a href="/dashboard" class="flex items-center gap-2 text-lg font-bold"> 🏮 Siraaj </a>
 			<div class="flex gap-1">
-				<a 
-					href="/dashboard" 
-					class="rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent {$page.url.pathname === '/dashboard' || $page.url.pathname === '/' ? 'bg-accent' : ''}"
+				<a
+					href="/dashboard"
+					class="hover:bg-accent rounded-lg px-3 py-2 text-sm font-medium transition-colors {$page
+						.url.pathname === '/dashboard' || $page.url.pathname === '/'
+						? 'bg-accent'
+						: ''}"
 				>
 					📊 Dashboard
 				</a>
-				<a 
-					href="/dashboard/funnel" 
-					class="rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent {$page.url.pathname === '/dashboard/funnel' ? 'bg-accent' : ''}"
+				<a
+					href="/dashboard/funnel"
+					class="hover:bg-accent rounded-lg px-3 py-2 text-sm font-medium transition-colors {$page
+						.url.pathname === '/dashboard/funnel'
+						? 'bg-accent'
+						: ''}"
 				>
 					🎯 Funnels
 				</a>

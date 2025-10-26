@@ -9,16 +9,9 @@ package main
 // - Content: Homepage → Article → Newsletter → Download
 //
 // Usage:
-//   go run funnel_data.go <mode> <num_users> [db_path]
-//
-// Modes:
-//   db   - Insert directly into DuckDB (fastest)
-//   http - Send via HTTP API (realistic)
-//
-// Examples:
-//   go run funnel_data.go db 10000              # Generate 10k user journeys
-//   go run funnel_data.go http 5000             # 5k journeys via HTTP
-//   go run funnel_data.go db 50000 ../data/analytics.db
+//   go run main.go -mode=db -users=10000
+//   go run main.go -mode=http -users=5000
+//   go run main.go -mode=db -users=50000 -db=../../data/analytics.db
 
 import (
 	"bytes"
@@ -439,7 +432,7 @@ func main() {
 	mode := flag.String("mode", "db", "Mode: 'db' or 'http'")
 	numUsers := flag.Int("users", 10000, "Number of user journeys to generate")
 	projectID := flag.String("project", "funnel_test", "Project ID")
-	dbPath := flag.String("db", "../data/analytics.db", "Database path (for db mode)")
+	dbPath := flag.String("db", "../../data/analytics.db", "Database path (for db mode)")
 	endpoint := flag.String("endpoint", "http://localhost:8080/api/track", "API endpoint (for http mode)")
 	daysBack := flag.Int("days", 30, "Generate data for the last N days")
 

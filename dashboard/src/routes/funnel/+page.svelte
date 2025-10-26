@@ -4,7 +4,13 @@
 	import { fetchFunnelAnalysis, fetchStats, fetchProjects } from '$lib/api';
 	import { Play, Save, FolderOpen, Download, Share2 } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
+	import {
+		Card,
+		CardContent,
+		CardDescription,
+		CardHeader,
+		CardTitle
+	} from '$lib/components/ui/card';
 	import FunnelBuilder from '$lib/components/FunnelBuilder.svelte';
 	import FunnelChart from '$lib/components/FunnelChart.svelte';
 
@@ -149,11 +155,16 @@
 		if (botFilter) params.set('botFilter', botFilter);
 
 		if (steps.length > 0) {
-			params.set('steps', JSON.stringify(steps.map(s => ({
-				name: s.name,
-				event_name: s.event_name,
-				url: s.url || '',
-			}))));
+			params.set(
+				'steps',
+				JSON.stringify(
+					steps.map((s) => ({
+						name: s.name,
+						event_name: s.event_name,
+						url: s.url || ''
+					}))
+				)
+			);
 		}
 
 		const newURL = `${window.location.pathname}?${params.toString()}`;
@@ -215,11 +226,14 @@
 		if (typeof window === 'undefined') return;
 
 		const url = window.location.href;
-		navigator.clipboard.writeText(url).then(() => {
-			alert('Link copied to clipboard!');
-		}).catch((err) => {
-			console.error('Failed to copy link:', err);
-		});
+		navigator.clipboard
+			.writeText(url)
+			.then(() => {
+				alert('Link copied to clipboard!');
+			})
+			.catch((err) => {
+				console.error('Failed to copy link:', err);
+			});
 	}
 </script>
 
@@ -307,11 +321,7 @@
 					</div>
 
 					<!-- Run Button -->
-					<Button
-						onclick={runAnalysis}
-						disabled={loading || steps.length === 0}
-						class="w-full"
-					>
+					<Button onclick={runAnalysis} disabled={loading || steps.length === 0} class="w-full">
 						{#if loading}
 							<div
 								class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
@@ -370,16 +380,12 @@
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<FunnelBuilder
-						bind:steps={steps}
-						{availableEvents}
-						{availablePages}
-					/>
+					<FunnelBuilder bind:steps {availableEvents} {availablePages} />
 				</CardContent>
 			</Card>
 
-			<!-- Results -->
-			<FunnelChart {funnelResult} {loading} />
+					<!-- Results -->
+					<FunnelChart result={funnelResult} {loading} />
 		</div>
 	</div>
 </div>
