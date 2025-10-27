@@ -468,6 +468,9 @@
 		updateURLParams();
 		loadStats();
 	}
+
+	// Comparison visibility state
+	let showComparison = $state(true);
 </script>
 
 <div class="container mx-auto space-y-4 p-6">
@@ -726,7 +729,7 @@
 					<MetricCard
 						label="Unique Visitors"
 						currentValue={stats.unique_users || 0}
-						previousValue={comparisonStats.unique_users || 0}
+						previousValue={showComparison ? comparisonStats.unique_users || 0 : null}
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
 						isSelected={isMetricSelected('users')}
@@ -737,7 +740,7 @@
 					<MetricCard
 						label="Total Visits"
 						currentValue={stats.total_visits || 0}
-						previousValue={comparisonStats.total_visits || 0}
+						previousValue={showComparison ? comparisonStats.total_visits || 0 : null}
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
 						isSelected={isMetricSelected('visits')}
@@ -748,7 +751,7 @@
 					<MetricCard
 						label="Total Pageviews"
 						currentValue={stats.page_views || 0}
-						previousValue={comparisonStats.page_views || 0}
+						previousValue={showComparison ? comparisonStats.page_views || 0 : null}
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
 						isSelected={isMetricSelected('page_views')}
@@ -759,7 +762,7 @@
 					<MetricCard
 						label="Total Events"
 						currentValue={stats.total_events || 0}
-						previousValue={comparisonStats.total_events || 0}
+						previousValue={showComparison ? comparisonStats.total_events || 0 : null}
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
 						isSelected={isMetricSelected('events')}
@@ -770,9 +773,9 @@
 					<MetricCard
 						label="Views per Visit"
 						currentValue={stats.total_visits > 0 ? stats.page_views / stats.total_visits : 0}
-						previousValue={comparisonStats.total_visits > 0
+						previousValue={showComparison && comparisonStats.total_visits > 0
 							? comparisonStats.page_views / comparisonStats.total_visits
-							: 0}
+							: null}
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
 						formatValue={(val) => (val ? val.toFixed(2) : '0.00')}
@@ -784,7 +787,7 @@
 					<MetricCard
 						label="Bounce Rate"
 						currentValue={stats.bounce_rate || 0}
-						previousValue={comparisonStats.bounce_rate || 0}
+						previousValue={showComparison ? comparisonStats.bounce_rate || 0 : null}
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
 						formatValue={(val) => (val ? val.toFixed(0) + '%' : '0%')}
@@ -797,7 +800,7 @@
 					<MetricCard
 						label="Visit Duration"
 						currentValue={stats.avg_session_duration || 0}
-						previousValue={comparisonStats.avg_session_duration || 0}
+						previousValue={showComparison ? comparisonStats.avg_session_duration || 0 : null}
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
 						formatValue={(val) => {
@@ -820,7 +823,7 @@
 					<MetricCard
 						label="🤖 Bot Traffic"
 						currentValue={stats.bot_percentage || 0}
-						previousValue={comparisonStats.bot_percentage || 0}
+						previousValue={showComparison ? comparisonStats.bot_percentage || 0 : null}
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
 						formatValue={(val) => (val ? val.toFixed(0) + '%' : '0%')}
@@ -851,6 +854,7 @@
 						comparisonData={comparisonStats.timeline || []}
 						format={stats.timeline_format || 'day'}
 						metric={activeFilters.metric || 'users'}
+						bind:showComparison
 					/>
 				{/if}
 			</CardContent>

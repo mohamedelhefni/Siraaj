@@ -4,10 +4,15 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Eye, EyeOff } from 'lucide-svelte';
 
-	let { data = [], comparisonData = [], format = 'day', metric = 'events' } = $props();
+	let {
+		data = [],
+		comparisonData = [],
+		format = 'day',
+		metric = 'events',
+		showComparison = $bindable(true)
+	} = $props();
 	let svgElement = $state();
 	let chartContainer = $state();
-	let showComparison = $state(true);
 
 	// Get label based on metric type
 	const metricLabels = {
