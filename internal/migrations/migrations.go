@@ -73,6 +73,33 @@ var migrations = []Migration{
 		Up:          `CREATE INDEX IF NOT EXISTS idx_is_bot ON events(is_bot)`,
 		Down:        `DROP INDEX IF EXISTS idx_is_bot`,
 	},
+	{
+		Version:     6,
+		Description: "Create composite indexes for common query patterns",
+		Up: `-- Composite index for timeline queries (most common query pattern)
+		CREATE INDEX IF NOT EXISTS idx_timestamp_event_name ON events(timestamp DESC, event_name);
+		
+		-- Composite index for filtered queries
+		CREATE INDEX IF NOT EXISTS idx_timestamp_project ON events(timestamp DESC, project_id);
+		
+		-- Composite index for session analysis
+		CREATE INDEX IF NOT EXISTS idx_session_timestamp ON events(session_id, timestamp);
+		
+		-- Composite index for user journey analysis
+		CREATE INDEX IF NOT EXISTS idx_user_timestamp ON events(user_id, timestamp);
+		
+		-- Composite index for URL-based queries
+		CREATE INDEX IF NOT EXISTS idx_timestamp_url ON events(timestamp DESC, url);
+		
+		-- Composite index for country filtering
+		CREATE INDEX IF NOT EXISTS idx_timestamp_country ON events(timestamp DESC, country);`,
+		Down: `DROP INDEX IF EXISTS idx_timestamp_event_name;
+		DROP INDEX IF EXISTS idx_timestamp_project;
+		DROP INDEX IF EXISTS idx_session_timestamp;
+		DROP INDEX IF EXISTS idx_user_timestamp;
+		DROP INDEX IF EXISTS idx_timestamp_url;
+		DROP INDEX IF EXISTS idx_timestamp_country`,
+	},
 }
 
 func initMigrationTable(db *sql.DB) error {

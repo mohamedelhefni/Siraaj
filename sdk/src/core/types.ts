@@ -8,6 +8,11 @@ export interface AnalyticsConfig {
   flushInterval?: number;
   timeout?: number;
   maxRetries?: number;
+  useBeacon?: boolean; // Use navigator.sendBeacon for reliability
+  sampling?: number; // Sample rate 0.0 to 1.0 (percentage of events to track)
+  maxQueueSize?: number; // Maximum failed events to queue
+  enablePerformanceTracking?: boolean; // Track Web Vitals
+  respectDoNotTrack?: boolean; // Respect DNT header
 }
 
 export interface EventData {
@@ -34,6 +39,18 @@ export interface DeviceInfo {
   browser: string;
   os: string;
   device: string;
+  screen_width?: number;
+  screen_height?: number;
+  viewport_width?: number;
+  viewport_height?: number;
+  language?: string;
+  timezone?: string;
+}
+
+export interface QueuedRequest {
+  event: EventData;
+  retries: number;
+  nextRetry: number; // Timestamp
 }
 
 export interface Analytics {

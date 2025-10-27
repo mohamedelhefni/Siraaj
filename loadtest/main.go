@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -423,17 +425,131 @@ func (ht *HTTPLoadTester) RunLoadTest(totalEvents int, workers int, numUsers int
 	return nil
 }
 
+// ========== CSV GENERATOR ==========
+
+type CSVGenerator struct {
+	filepath string
+}
+
+func NewCSVGenerator(filepath string) *CSVGenerator {
+	return &CSVGenerator{filepath: filepath}
+}
+
+func (cg *CSVGenerator) GenerateCSV(totalEvents int, numUsers int, projectID string) error {
+	log.Printf("📝 Generating CSV file: %s with %d events", cg.filepath, totalEvents)
+	
+	file, err := os.Create(cg.filepath)
+	if err != nil {
+		return fmt.Errorf("failed to create CSV file: %w", err)
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// Write CSV header
+	header := []string{
+		"timestamp", "event_name", "user_id", "session_id", "session_duration",
+		"url", "referrer", "user_agent", "ip", "country", "browser", "os", "device", "is_bot", "project_id",
+	}
+	if err := writer.Write(header); err != nil {
+		return fmt.Errorf("failed to write CSV header: %w", err)
+	}
+
+	userPool := make([]string, numUsers)
+	for i := 0; i < numUsers; i++ {
+		userPool[i] = fmt.Sprintf("user_%d", i+1)
+	}
+
+	baseTime := time.Now()
+	start := time.Now()
+	
+	for i := 0; i < totalEvents; i++ {
+		event := GenerateRandomEvent(baseTime, userPool, projectID)
+		
+		record := []string{
+			event.Timestamp.Format(time.RFC3339),
+			event.EventName,
+			event.UserID,
+			event.SessionID,
+			fmt.Sprintf("%d", event.SessionDuration),
+			event.URL,
+			event.Referrer,
+			event.UserAgent,
+			event.IP,
+			event.Country,
+			event.Browser,
+			event.OS,
+			event.Device,
+			fmt.Sprintf("%t", event.IsBot),
+			event.ProjectID,
+		}
+		
+		if err := writer.Write(record); err != nil {
+			return fmt.Errorf("failed to write CSV record: %w", err)
+		}
+		
+		if (i+1)%100000 == 0 {
+			elapsed := time.Since(start)
+			rate := float64(i+1) / elapsed.Seconds()
+			log.Printf("📊 Progress: %d/%d events written (%.0f events/sec)", i+1, totalEvents, rate)
+		}
+	}
+
+	duration := time.Since(start)
+	rate := float64(totalEvents) / duration.Seconds()
+	
+	log.Printf("✅ CSV generation completed!")
+	log.Printf("📈 Total events: %d", totalEvents)
+	log.Printf("⏱️  Total time: %v", duration)
+	log.Printf("🚄 Average rate: %.0f events/sec", rate)
+	
+	return nil
+}
+
+func (cg *CSVGenerator) ImportToDatabase(dbPath string) error {
+	log.Printf("📥 Importing CSV file %s to database %s", cg.filepath, dbPath)
+	
+	db, err := sql.Open("duckdb", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	start := time.Now()
+	
+	// Import CSV using DuckDB's INSERT INTO ... SELECT FROM read_csv_auto
+	// Use nextval('id_sequence') for auto-incrementing IDs
+	query := fmt.Sprintf(`
+		INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration, url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id)
+		SELECT nextval('id_sequence'), timestamp::TIMESTAMP, event_name, user_id, session_id, session_duration::INTEGER, url, referrer, user_agent, ip, country, browser, os, device, is_bot::BOOLEAN, project_id
+		FROM read_csv_auto('%s', header=true)
+	`, cg.filepath)
+	
+	_, err = db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to import CSV: %w", err)
+	}
+	
+	duration := time.Since(start)
+	
+	log.Printf("✅ CSV import completed in %v", duration)
+	
+	return nil
+}
+
 // ========== MAIN ==========
 
 func main() {
-	mode := flag.String("mode", "db", "Load test mode: 'db' or 'http'")
-	events := flag.Int("events", 100000, "Total number of events to generate")
+	mode := flag.String("mode", "db", "Load test mode: 'db', 'http', or 'csv'")
+	events := flag.Int("events", 1000000, "Total number of events to generate")
 	batchSize := flag.Int("batch", 1000, "Batch size for DB mode")
 	workers := flag.Int("workers", 50, "Number of concurrent workers for HTTP mode")
 	users := flag.Int("users", 10000, "Number of unique users to simulate")
 	projectID := flag.String("project", "test_project", "Project ID for events")
 	dbPath := flag.String("db", "../data/analytics.db", "Database path for DB mode")
 	endpoint := flag.String("endpoint", "http://localhost:8080/api/events", "API endpoint for HTTP mode")
+	csvPath := flag.String("csv", "../data/loadtest.csv", "CSV file path for CSV mode")
 
 	flag.Parse()
 
@@ -467,7 +583,23 @@ func main() {
 			log.Fatal("HTTP load test failed:", err)
 		}
 
+	case "csv":
+		log.Printf("  CSV Path: %s", *csvPath)
+		log.Printf("  Database: %s", *dbPath)
+		
+		cg := NewCSVGenerator(*csvPath)
+		
+		// Generate CSV
+		if err := cg.GenerateCSV(*events, *users, *projectID); err != nil {
+			log.Fatal("CSV generation failed:", err)
+		}
+		
+		// Import to database
+		if err := cg.ImportToDatabase(*dbPath); err != nil {
+			log.Fatal("CSV import failed:", err)
+		}
+
 	default:
-		log.Fatal("Invalid mode. Use 'db' or 'http'")
+		log.Fatal("Invalid mode. Use 'db', 'http', or 'csv'")
 	}
 }

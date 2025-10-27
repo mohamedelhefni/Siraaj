@@ -78,6 +78,98 @@ func (h *EventHandler) TrackEvent(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// TrackBatchEvents handles bulk event tracking from SDK
+// Endpoint: POST /api/track/batch
+func (h *EventHandler) TrackBatchEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var batchRequest struct {
+		Events []domain.Event `json:"events"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&batchRequest); err != nil {
+		log.Printf("Error decoding batch request: %v", err)
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if len(batchRequest.Events) == 0 {
+		http.Error(w, "No events provided", http.StatusBadRequest)
+		return
+	}
+
+	// Limit batch size to prevent abuse
+	const maxBatchSize = 100
+	if len(batchRequest.Events) > maxBatchSize {
+		http.Error(w, fmt.Sprintf("Batch size exceeds maximum of %d events", maxBatchSize), http.StatusBadRequest)
+		return
+	}
+
+	clientIP := getClientIP(r)
+	now := time.Now()
+	botCount := 0
+
+	// Enrich all events in the batch
+	for i := range batchRequest.Events {
+		// Set timestamp if not provided
+		if batchRequest.Events[i].Timestamp.IsZero() {
+			batchRequest.Events[i].Timestamp = now
+		}
+
+		// Get IP from request if not set
+		if batchRequest.Events[i].IP == "" {
+			batchRequest.Events[i].IP = clientIP
+		}
+
+		// Enrich with geolocation data if service is available
+		if h.geoService != nil && batchRequest.Events[i].Country == "" {
+			geo := h.geoService.LookupOrDefault(batchRequest.Events[i].IP)
+			if geo != nil {
+				batchRequest.Events[i].Country = geo.Country
+				if batchRequest.Events[i].Country == "" {
+					batchRequest.Events[i].Country = geo.CountryCode
+				}
+			}
+		}
+
+		// Detect if user agent belongs to a bot
+		batchRequest.Events[i].IsBot = botdetector.IsBot(batchRequest.Events[i].UserAgent)
+		if batchRequest.Events[i].IsBot {
+			botCount++
+		}
+	}
+
+	// Track all events in a single batch operation
+	if err := h.service.TrackEventBatch(batchRequest.Events); err != nil {
+		log.Printf("Error tracking batch events: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Log batch processing summary
+	if botCount > 0 {
+		log.Printf("📦 Batch processed: %d events (%d bots detected)", len(batchRequest.Events), botCount)
+	} else {
+		log.Printf("📦 Batch processed: %d events", len(batchRequest.Events))
+	}
+
+	// Prepare success response
+	w.Header().Set("Content-Type", "application/json")
+	response := map[string]interface{}{
+		"status":     "ok",
+		"total":      len(batchRequest.Events),
+		"successful": len(batchRequest.Events),
+		"failed":     0,
+	}
+	
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding batch response: %v", err)
+	}
+}
+
 func (h *EventHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	// Default to last 7 days
 	now := time.Now()

@@ -41,12 +41,42 @@ func initDatabase(dbPath string) (*sql.DB, error) {
 	db.SetConnMaxLifetime(time.Hour)
 
 	// Enable DuckDB optimizations
-	if _, err = db.Exec("PRAGMA memory_limit='512MB'"); err != nil {
+	// Increase memory limit to handle larger datasets (default is ~488MB)
+	memoryLimit := os.Getenv("DUCKDB_MEMORY_LIMIT")
+	if memoryLimit == "" {
+		memoryLimit = "4GB" // Default to 4GB for better performance with large datasets
+	}
+	if _, err = db.Exec(fmt.Sprintf("PRAGMA memory_limit='%s'", memoryLimit)); err != nil {
 		log.Printf("Warning: Could not set memory limit: %v", err)
+	} else {
+		log.Printf("✓ DuckDB memory limit set to: %s", memoryLimit)
 	}
 
-	if _, err = db.Exec("PRAGMA threads=2"); err != nil {
+	threads := os.Getenv("DUCKDB_THREADS")
+	if threads == "" {
+		threads = "4" // Use 4 threads for M3 chip (better utilization)
+	}
+	if _, err = db.Exec(fmt.Sprintf("PRAGMA threads=%s", threads)); err != nil {
 		log.Printf("Warning: Could not set threads: %v", err)
+	} else {
+		log.Printf("✓ DuckDB threads set to: %s", threads)
+	}
+
+	// Enable aggressive query optimizations for OLAP workloads
+	optimizations := []struct {
+		name  string
+		query string
+	}{
+		{"Enable parallel execution", "SET enable_object_cache=true"},
+		{"Disable preserve insertion order", "SET preserve_insertion_order=false"},
+		{"Enable query profiling", "SET enable_profiling=false"}, // Disable profiling in production
+		{"Set temp directory", "SET temp_directory='/tmp/duckdb_temp'"},
+	}
+
+	for _, opt := range optimizations {
+		if _, err := db.Exec(opt.query); err != nil {
+			log.Printf("Warning: Could not apply %s: %v", opt.name, err)
+		}
 	}
 
 	// Run migrations
@@ -102,6 +132,7 @@ func main() {
 
 	// API endpoints
 	mux.HandleFunc("/api/track", eventHandler.TrackEvent)
+	mux.HandleFunc("/api/track/batch", eventHandler.TrackBatchEvents)
 	mux.HandleFunc("/api/stats", eventHandler.GetStats)
 	mux.HandleFunc("/api/events", eventHandler.GetEvents)
 	mux.HandleFunc("/api/online", eventHandler.GetOnlineUsers)
@@ -169,7 +200,8 @@ func main() {
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Printf("🎨 Dashboard:  http://localhost:%s/dashboard/\n", port)
 	fmt.Printf("📡 API Track:  http://localhost:%s/api/track\n", port)
-	fmt.Printf("📈 API Stats:  http://localhost:%s/api/stats\n", port)
+	fmt.Printf("� API Batch:  http://localhost:%s/api/track/batch\n", port)
+	fmt.Printf("�📈 API Stats:  http://localhost:%s/api/stats\n", port)
 	fmt.Printf("🌍 Geo Test:   http://localhost:%s/api/geo\n", port)
 	fmt.Printf("❤️  Health:    http://localhost:%s/api/health\n", port)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
