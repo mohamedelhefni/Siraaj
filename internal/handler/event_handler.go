@@ -164,7 +164,7 @@ func (h *EventHandler) TrackBatchEvents(w http.ResponseWriter, r *http.Request) 
 		"successful": len(batchRequest.Events),
 		"failed":     0,
 	}
-	
+
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("Error encoding batch response: %v", err)
 	}
