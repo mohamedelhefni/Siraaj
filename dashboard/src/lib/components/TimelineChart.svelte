@@ -3,6 +3,7 @@
 	import * as d3 from 'd3';
 	import { Button } from '$lib/components/ui/button';
 	import { Eye, EyeOff } from 'lucide-svelte';
+	import { formatCompactNumber } from '$lib/utils/formatters.js';
 
 	let {
 		data = [],
@@ -45,7 +46,7 @@
 		} else if (metricType === 'views_per_visit') {
 			return count.toFixed(2);
 		} else {
-			return Math.round(count).toLocaleString();
+			return formatCompactNumber(Math.round(count));
 		}
 	}
 
@@ -163,7 +164,7 @@
 		} else if (metric === 'views_per_visit') {
 			yAxis.tickFormat((d) => d.toFixed(1));
 		} else {
-			yAxis.tickFormat((d) => d.toLocaleString());
+			yAxis.tickFormat((d) => formatCompactNumber(d));
 		}
 
 		svg

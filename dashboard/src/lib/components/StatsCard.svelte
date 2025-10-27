@@ -15,7 +15,7 @@
 	};
 
 	const IconComponent = icons[icon] || Activity;
-	
+
 	// Auto-format numeric values
 	const formattedValue = $derived(() => {
 		if (typeof value === 'number') {

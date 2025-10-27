@@ -2,6 +2,7 @@
 	import { TrendingDown, TrendingUp, Clock, Users, Activity } from 'lucide-svelte';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
+	import { formatCompactNumber } from '$lib/utils/formatters.js';
 
 	interface FunnelStepResult {
 		step: {
@@ -101,7 +102,7 @@
 			<Card>
 				<CardContent class="p-4">
 					<div class="text-muted-foreground mb-1 text-xs font-medium uppercase">Total Entered</div>
-					<div class="text-2xl font-bold">{result.total_users.toLocaleString()}</div>
+					<div class="text-2xl font-bold">{formatCompactNumber(result.total_users)}</div>
 					<div class="text-muted-foreground mt-1 text-xs">users started the funnel</div>
 				</CardContent>
 			</Card>
@@ -109,7 +110,7 @@
 			<Card>
 				<CardContent class="p-4">
 					<div class="text-muted-foreground mb-1 text-xs font-medium uppercase">Completed</div>
-					<div class="text-2xl font-bold">{result.completed_users.toLocaleString()}</div>
+					<div class="text-2xl font-bold">{formatCompactNumber(result.completed_users)}</div>
 					<div class="text-muted-foreground mt-1 text-xs">users completed all steps</div>
 				</CardContent>
 			</Card>
@@ -172,12 +173,11 @@
 
 								<div class="text-right">
 									<div class="text-lg font-bold">
-										{stepResult.user_count.toLocaleString()}
+										{formatCompactNumber(stepResult.user_count)}
 									</div>
 									<div class="text-muted-foreground text-xs">users</div>
 								</div>
 							</div>
-
 							<!-- Funnel Bar -->
 							<div class="bg-muted relative h-16 overflow-hidden rounded-lg">
 								<div
@@ -208,7 +208,7 @@
 										<Users class="h-3 w-3" />
 										Sessions
 									</div>
-									<div class="font-semibold">{stepResult.session_count.toLocaleString()}</div>
+									<div class="font-semibold">{formatCompactNumber(stepResult.session_count)}</div>
 								</div>
 
 								<div class="bg-muted/50 rounded-lg p-3">
@@ -216,9 +216,8 @@
 										<Activity class="h-3 w-3" />
 										Events
 									</div>
-									<div class="font-semibold">{stepResult.event_count.toLocaleString()}</div>
+									<div class="font-semibold">{formatCompactNumber(stepResult.event_count)}</div>
 								</div>
-
 								{#if stepResult.avg_time_to_next && stepResult.avg_time_to_next > 0}
 									<div class="bg-muted/50 rounded-lg p-3">
 										<div class="text-muted-foreground mb-1 flex items-center gap-1 text-xs">
@@ -241,12 +240,13 @@
 										{stepResult.dropoff_rate.toFixed(1)}% drop-off
 									</span>
 									<span class="text-muted-foreground text-xs">
-										({(result.steps[index + 1].user_count - stepResult.user_count).toLocaleString()}
+										({formatCompactNumber(
+											result.steps[index + 1].user_count - stepResult.user_count
+										)}
 										users left)
 									</span>
 								</div>
 							{/if}
-
 							<!-- Separator -->
 							{#if index < result.steps.length - 1}
 								<div class="border-t"></div>

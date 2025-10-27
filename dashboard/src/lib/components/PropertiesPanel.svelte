@@ -2,6 +2,7 @@
 	import { Search, Filter, X, ChevronDown } from 'lucide-svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import Modal from './Modal.svelte';
+	import { formatCompactNumber } from '$lib/utils/formatters.js';
 
 	let { properties = [], onPropertyClick = null } = $props();
 
@@ -111,12 +112,12 @@
 				{/if}
 			</p>
 		{:else}
-			<div class="text-muted-foreground mb-2 text-xs">
+			<div class="text-muted-foreground mb-4 text-sm">
 				Showing {displayedProperties.length} of {filteredProperties.length} propert{filteredProperties.length ===
 				1
 					? 'y'
 					: 'ies'}
-				· Total events: {totalCount.toLocaleString()}
+				· Total events: {formatCompactNumber(totalCount)}
 			</div>
 
 			{#each displayedProperties as prop}
@@ -137,7 +138,7 @@
 						</div>
 						<div class="flex items-center gap-3 text-xs">
 							<span class="text-muted-foreground">
-								{prop.count?.toLocaleString()} events ({percentage}%)
+								{formatCompactNumber(prop.count)} events ({percentage}%)
 							</span>
 							{#if prop.event_types > 1}
 								<Badge variant="outline" class="text-xs">
@@ -203,7 +204,7 @@
 				<div class="grid grid-cols-2 gap-4">
 					<div>
 						<h3 class="text-muted-foreground mb-1 text-xs font-medium uppercase">Event Count</h3>
-						<p class="text-2xl font-bold">{selectedProperty.count?.toLocaleString()}</p>
+						<p class="text-2xl font-bold">{formatCompactNumber(selectedProperty.count)}</p>
 					</div>
 
 					<div>
@@ -251,7 +252,7 @@
 						</div>
 						<div class="flex items-center gap-3 text-xs">
 							<span class="text-muted-foreground">
-								{prop.count?.toLocaleString()} events ({percentage}%)
+								{formatCompactNumber(prop.count)} events ({percentage}%)
 							</span>
 							{#if prop.event_types > 1}
 								<Badge variant="outline" class="text-xs">

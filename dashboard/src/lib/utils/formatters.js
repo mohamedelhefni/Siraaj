@@ -5,32 +5,32 @@
  * @returns {string} Formatted number string
  */
 export function formatCompactNumber(num, decimals = 1) {
-	if (num === null || num === undefined || isNaN(num)) {
-		return '0';
-	}
+    if (num === null || num === undefined || isNaN(num)) {
+        return '0';
+    }
 
-	const absNum = Math.abs(num);
+    const absNum = Math.abs(num);
 
-	// Less than 1000, show as-is
-	if (absNum < 1000) {
-		return num.toString();
-	}
+    // Less than 1000, show as-is
+    if (absNum < 1000) {
+        return num.toString();
+    }
 
-	const suffixes = [
-		{ value: 1e9, symbol: 'B' },  // Billion
-		{ value: 1e6, symbol: 'M' },  // Million
-		{ value: 1e3, symbol: 'K' }   // Thousand
-	];
+    const suffixes = [
+        { value: 1e9, symbol: 'B' },  // Billion
+        { value: 1e6, symbol: 'M' },  // Million
+        { value: 1e3, symbol: 'K' }   // Thousand
+    ];
 
-	for (const { value, symbol } of suffixes) {
-		if (absNum >= value) {
-			const formatted = (num / value).toFixed(decimals);
-			// Remove trailing zeros and decimal point if not needed
-			return formatted.replace(/\.0+$/, '') + symbol;
-		}
-	}
+    for (const { value, symbol } of suffixes) {
+        if (absNum >= value) {
+            const formatted = (num / value).toFixed(decimals);
+            // Remove trailing zeros and decimal point if not needed
+            return formatted.replace(/\.0+$/, '') + symbol;
+        }
+    }
 
-	return num.toString();
+    return num.toString();
 }
 
 /**
@@ -39,10 +39,10 @@ export function formatCompactNumber(num, decimals = 1) {
  * @returns {string} Formatted number with commas
  */
 export function formatNumberWithCommas(num) {
-	if (num === null || num === undefined || isNaN(num)) {
-		return '0';
-	}
-	return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    if (num === null || num === undefined || isNaN(num)) {
+        return '0';
+    }
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 /**
@@ -53,9 +53,9 @@ export function formatNumberWithCommas(num) {
  * @returns {string} Formatted percentage
  */
 export function formatPercentage(value, total, decimals = 1) {
-	if (!total || total === 0) return '0%';
-	const percentage = (value / total) * 100;
-	return `${percentage.toFixed(decimals)}%`;
+    if (!total || total === 0) return '0%';
+    const percentage = (value / total) * 100;
+    return `${percentage.toFixed(decimals)}%`;
 }
 
 /**
@@ -65,15 +65,15 @@ export function formatPercentage(value, total, decimals = 1) {
  * @returns {string} Formatted byte string
  */
 export function formatBytes(bytes, decimals = 2) {
-	if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) return '0 Bytes';
 
-	const k = 1024;
-	const dm = decimals < 0 ? 0 : decimals;
-	const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
 
-	const i = Math.floor(Math.log(bytes) / Math.log(k));
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-	return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
 /**
@@ -82,10 +82,10 @@ export function formatBytes(bytes, decimals = 2) {
  * @returns {string} Formatted duration
  */
 export function formatDuration(ms) {
-	if (ms < 1000) return `${ms}ms`;
-	if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-	if (ms < 3600000) return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
-	return `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`;
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    if (ms < 3600000) return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+    return `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`;
 }
 
 /**
@@ -95,14 +95,14 @@ export function formatDuration(ms) {
  * @returns {string} Formatted number
  */
 export function formatNumber(num, context = 'auto') {
-	if (context === 'compact') {
-		return formatCompactNumber(num);
-	}
-	if (context === 'full') {
-		return formatNumberWithCommas(num);
-	}
-	// Auto: use compact for large numbers, full for small
-	return Math.abs(num) >= 10000 ? formatCompactNumber(num) : formatNumberWithCommas(num);
+    if (context === 'compact') {
+        return formatCompactNumber(num);
+    }
+    if (context === 'full') {
+        return formatNumberWithCommas(num);
+    }
+    // Auto: use compact for large numbers, full for small
+    return Math.abs(num) >= 10000 ? formatCompactNumber(num) : formatNumberWithCommas(num);
 }
 
 /**
@@ -113,15 +113,15 @@ export function formatNumber(num, context = 'auto') {
  * @returns {string} Formatted change
  */
 export function formatChange(current, previous, asPercentage = false) {
-	if (!previous || previous === 0) return '+0';
-	
-	const diff = current - previous;
-	const sign = diff >= 0 ? '+' : '';
-	
-	if (asPercentage) {
-		const percentChange = ((diff / previous) * 100).toFixed(1);
-		return `${sign}${percentChange}%`;
-	}
-	
-	return `${sign}${formatCompactNumber(diff)}`;
+    if (!previous || previous === 0) return '+0';
+
+    const diff = current - previous;
+    const sign = diff >= 0 ? '+' : '';
+
+    if (asPercentage) {
+        const percentChange = ((diff / previous) * 100).toFixed(1);
+        return `${sign}${percentChange}%`;
+    }
+
+    return `${sign}${formatCompactNumber(diff)}`;
 }
