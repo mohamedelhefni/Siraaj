@@ -7,6 +7,7 @@
 		getFaviconUrl,
 		getSourceDisplayName
 	} from '$lib/utils/icons';
+	import { formatCompactNumber } from '$lib/utils/formatters.js';
 	import { Chrome, Globe, ChevronDown } from 'lucide-svelte';
 	import Modal from './Modal.svelte';
 
@@ -142,7 +143,7 @@
 							</span>
 						</div>
 						<span class="text-muted-foreground ml-2 shrink-0 text-sm">
-							{item[valueKey]?.toLocaleString()} ({percentage}%)
+							{formatCompactNumber(item[valueKey])} ({percentage}%)
 						</span>
 					</div>
 					<div class="bg-secondary h-2 w-full rounded-full">
@@ -235,7 +236,7 @@
 								</span>
 							</div>
 							<span class="text-muted-foreground ml-2 shrink-0 text-sm">
-								{item[valueKey]?.toLocaleString()} ({percentage}%)
+								{formatCompactNumber(item[valueKey])} ({percentage}%)
 							</span>
 						</div>
 						<div class="bg-secondary h-2 w-full rounded-full">

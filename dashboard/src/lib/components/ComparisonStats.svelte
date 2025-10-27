@@ -1,6 +1,7 @@
 <script>
 	import { TrendingUp, TrendingDown, Minus } from 'lucide-svelte';
 	import { Card } from '$lib/components/ui/card';
+	import { formatCompactNumber as formatNum } from '$lib/utils/formatters.js';
 
 	let { currentStats, previousStats, loading = false } = $props();
 
@@ -13,7 +14,7 @@
 	// Format number for display
 	function formatNumber(num) {
 		if (!num && num !== 0) return '0';
-		return num.toLocaleString();
+		return formatNum(num);
 	}
 
 	// Format duration (seconds to readable format)

@@ -1,5 +1,6 @@
 <script>
 	import { TrendingUp, TrendingDown, Minus } from 'lucide-svelte';
+	import { formatCompactNumber } from '$lib/utils/formatters.js';
 
 	let {
 		label,
@@ -7,7 +8,7 @@
 		previousValue = null,
 		currentPeriod = '',
 		previousPeriod = '',
-		formatValue = (val) => val?.toLocaleString() || '0',
+		formatValue = (val) => formatCompactNumber(val),
 		isSelected = false,
 		isNegativeBetter = false,
 		onclick = () => {}
