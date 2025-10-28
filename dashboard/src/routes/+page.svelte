@@ -55,6 +55,11 @@
 		timeline_format: 'day'
 	});
 
+	let comparisonTimeline: any = $state({
+		timeline: [],
+		timeline_format: 'day'
+	});
+
 	let topPages: any = $state({
 		top_pages: []
 	});
@@ -329,8 +334,9 @@
 				sourcesData,
 				eventsData,
 				devicesData,
-				onlineData,
-				comparisonData
+				onlineUsersData,
+				comparisonData,
+				comparisonTimelineData
 			] = await Promise.all([
 				// Main stats (counts, rates, trends)
 				fetchTopStats(startDate, endDate, activeFilters).catch((err) => {
@@ -387,20 +393,40 @@
 				}),
 
 				// Comparison stats (previous period)
-				fetchTopStats(
-					format(
-						new Date(
-							new Date(startDate).getTime() -
-								(new Date(endDate).getTime() - new Date(startDate).getTime())
-						),
-						'yyyy-MM-dd'
-					),
-					format(subDays(new Date(startDate), 1), 'yyyy-MM-dd'),
-					activeFilters
-				).catch((err) => {
-					console.error('Failed to load comparison stats:', err);
-					return null;
-				})
+				(() => {
+					const start = new Date(startDate);
+					const end = new Date(endDate);
+					const duration = end.getTime() - start.getTime();
+					const prevEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000); // Day before start
+					const prevStart = new Date(prevEnd.getTime() - duration);
+					
+					return fetchTopStats(
+						format(prevStart, 'yyyy-MM-dd'),
+						format(prevEnd, 'yyyy-MM-dd'),
+						activeFilters
+					).catch((err) => {
+						console.error('Failed to load comparison stats:', err);
+						return null;
+					});
+				})(),
+
+				// Comparison timeline (previous period)
+				(() => {
+					const start = new Date(startDate);
+					const end = new Date(endDate);
+					const duration = end.getTime() - start.getTime();
+					const prevEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000); // Day before start
+					const prevStart = new Date(prevEnd.getTime() - duration);
+					
+					return fetchTimeline(
+						format(prevStart, 'yyyy-MM-dd'),
+						format(prevEnd, 'yyyy-MM-dd'),
+						activeFilters
+					).catch((err) => {
+						console.error('Failed to load comparison timeline:', err);
+						return { timeline: [], timeline_format: 'day' };
+					});
+				})()
 			]);
 
 			// Update all state
@@ -436,12 +462,16 @@
 				browsersDevicesOS = devicesData;
 			}
 
-			if (onlineData) {
-				onlineData = onlineData;
+			if (onlineUsersData) {
+				onlineData = onlineUsersData as { online_users: number; active_sessions: number };
 			}
 
 			if (comparisonData) {
 				comparisonStats = comparisonData;
+			}
+
+			if (comparisonTimelineData) {
+				comparisonTimeline = comparisonTimelineData;
 			}
 
 			lastRefresh = new Date();
@@ -891,7 +921,7 @@
 							: null}
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
-						formatValue={(val) => (val ? val.toFixed(2) : '0.00')}
+						formatValue={(val: number) => (val ? val.toFixed(2) : '0.00')}
 						isSelected={isMetricSelected('views_per_visit')}
 						onclick={() => handleMetricClick('views_per_visit')}
 					/>
@@ -903,7 +933,7 @@
 						previousValue={showComparison ? comparisonStats.bounce_rate || 0 : null}
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
-						formatValue={(val) => (val ? val.toFixed(0) + '%' : '0%')}
+						formatValue={(val: number) => (val ? val.toFixed(0) + '%' : '0%')}
 						isNegativeBetter={true}
 						isSelected={isMetricSelected('bounce_rate')}
 						onclick={() => handleMetricClick('bounce_rate')}
@@ -916,7 +946,7 @@
 						previousValue={showComparison ? comparisonStats.avg_session_duration || 0 : null}
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
-						formatValue={(val) => {
+						formatValue={(val: number) => {
 							if (!val) return '0s';
 							if (val < 60) return Math.floor(val) + 's';
 							if (val < 3600) {
@@ -939,7 +969,7 @@
 						previousValue={showComparison ? comparisonStats.bot_percentage || 0 : null}
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
-						formatValue={(val) => (val ? val.toFixed(0) + '%' : '0%')}
+						formatValue={(val: number) => (val ? val.toFixed(0) + '%' : '0%')}
 						isNegativeBetter={true}
 						isSelected={activeFilters.botFilter === 'bot'}
 						onclick={() => {
@@ -964,7 +994,7 @@
 				{:else}
 					<TimelineChart
 						data={timeline.timeline || []}
-						comparisonData={[]}
+						comparisonData={comparisonTimeline.timeline || []}
 						format={timeline.timeline_format || 'day'}
 						metric={activeFilters.metric || 'users'}
 						bind:showComparison
