@@ -127,6 +127,11 @@ func main() {
 	eventService := service.NewEventService(eventRepo)
 	eventHandler := handler.NewEventHandler(eventService, geoService)
 
+	// Start cache warmer in background
+	cacheWarmer := service.NewCacheWarmer(eventRepo)
+	go cacheWarmer.Start()
+	log.Println("✓ Cache warmer started")
+
 	// Setup HTTP routes
 	mux := http.NewServeMux()
 
