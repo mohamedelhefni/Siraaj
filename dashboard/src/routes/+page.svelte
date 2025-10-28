@@ -399,7 +399,7 @@
 					const duration = end.getTime() - start.getTime();
 					const prevEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000); // Day before start
 					const prevStart = new Date(prevEnd.getTime() - duration);
-					
+
 					return fetchTopStats(
 						format(prevStart, 'yyyy-MM-dd'),
 						format(prevEnd, 'yyyy-MM-dd'),
@@ -417,7 +417,7 @@
 					const duration = end.getTime() - start.getTime();
 					const prevEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000); // Day before start
 					const prevStart = new Date(prevEnd.getTime() - duration);
-					
+
 					return fetchTimeline(
 						format(prevStart, 'yyyy-MM-dd'),
 						format(prevEnd, 'yyyy-MM-dd'),
