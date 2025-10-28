@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Siraaj Analytics - CDN Example</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .section {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #444;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 10px;
+            font-family: inherit;
+        }
+
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .status {
+            background: #f0f4ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+        }
+
+        .status-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #667eea;
+        }
+
+        .status-info {
+            font-size: 13px;
+            color: #666;
+            line-height: 1.8;
+        }
+
+        code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            color: #d63384;
+        }
+
+        .link {
+            color: #667eea;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .link:hover {
+            color: #764ba2;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🎯 Siraaj Analytics</h1>
+        <p class="subtitle">CDN Integration Example</p>
+
+        <!-- Event Tracking Section -->
+        <div class="section">
+            <div class="section-title">📊 Event Tracking</div>
+            <button onclick="trackCustomEvent()">Track Custom Event</button>
+            <button onclick="trackPageView()">Track Page View</button>
+            <button onclick="trackMultipleEvents()">Track 5 Events</button>
+        </div>
+
+        <!-- User Identification -->
+        <div class="section">
+            <div class="section-title">👤 User Identification</div>
+            <input type="text" id="userId" placeholder="Enter User ID (e.g., user-123)">
+            <input type="email" id="userEmail" placeholder="Enter Email">
+            <button onclick="identifyUser()">Identify User</button>
+        </div>
+
+        <!-- Form Tracking -->
+        <div class="section">
+            <div class="section-title">📝 Form Tracking</div>
+            <form id="testForm" onsubmit="return handleFormSubmit(event)">
+                <input type="text" name="name" placeholder="Your Name" required>
+                <textarea name="message" placeholder="Your Message" rows="3" required></textarea>
+                <button type="submit">Submit Form</button>
+            </form>
+        </div>
+
+        <!-- Navigation Links -->
+        <div class="section">
+            <div class="section-title">🔗 Link Tracking</div>
+            <a href="#section1" class="link">Internal Link</a> |
+            <a href="https://github.com" target="_blank" class="link">External Link</a>
+        </div>
+
+        <!-- Status Info -->
+        <div class="status">
+            <div class="status-title">✅ Analytics Status</div>
+            <div class="status-info">
+                <strong>Session ID:</strong> <code id="sessionId">Loading...</code><br>
+                <strong>User ID:</strong> <code id="currentUserId">Anonymous</code><br>
+                <strong>Auto-tracking:</strong> <code>Enabled (clicks, forms, errors)</code><br>
+                <strong>Buffer Size:</strong> <code>10 events</code><br>
+                <strong>Flush Interval:</strong> <code>30 seconds</code>
+            </div>
+        </div>
+    </div>
+
+    <!-- Include Siraaj Analytics SDK as ES Module -->
+    <script type="module">
+        // Import Analytics from the ES module
+        // When running locally from examples folder, use relative path to dist
+        import { analytics } from '../dist/analytics.esm.js';
+
+        // For production, use CDN with ES modules:
+        // import { analytics } from 'https://unpkg.com/@siraaj/analytics@latest/dist/analytics.esm.js';
+        // import { analytics } from 'https://cdn.jsdelivr.net/npm/@siraaj/analytics@latest/dist/analytics.esm.js';
+
+        // Initialize Analytics
+        analytics.init({
+            endpoint: 'http://localhost:8080/api/track',  // Replace with your analytics server URL
+            apiKey: 'demo-project',                       // Replace with your API key/project ID
+            autoTrack: true,                              // Auto-track clicks, forms, and errors
+            batchSize: 10,                                // Buffer 10 events before sending
+            flushInterval: 30000,                         // Flush every 30 seconds
+            debug: true                                   // Enable debug logs in console
+        });
+
+        // Wait for DOM to be ready
+        window.addEventListener('DOMContentLoaded', function () {
+            // Display session info
+            document.getElementById('sessionId').textContent = analytics.getSessionId() || 'N/A';
+            document.getElementById('currentUserId').textContent = analytics.getUserId() || 'Anonymous';
+
+            // // Track initial page view
+            // analytics.page({
+            //     title: document.title,
+            //     path: window.location.pathname
+            // });
+
+            console.log('📊 Siraaj Analytics initialized successfully');
+        });
+
+        // Make functions globally accessible for onclick handlers
+        window.trackCustomEvent = function () {
+            analytics.track('button_clicked', {
+                buttonName: 'Track Custom Event',
+                timestamp: new Date().toISOString(),
+                page: window.location.pathname
+            });
+            alert('Custom event tracked! Check the console for details.');
+        };
+
+        window.trackPageView = function () {
+            analytics.pageView({
+                title: document.title,
+                path: window.location.pathname,
+                referrer: document.referrer
+            });
+        };
+
+        window.trackMultipleEvents = function () {
+            for (let i = 1; i <= 5; i++) {
+                analytics.track('batch_event', {
+                    eventNumber: i,
+                    batchId: Date.now()
+                });
+            }
+            alert('5 events tracked! They will be sent in a batch.');
+        };
+
+        window.identifyUser = function () {
+            const userId = document.getElementById('userId').value;
+            const userEmail = document.getElementById('userEmail').value;
+
+            if (!userId) {
+                alert('Please enter a User ID');
+                return;
+            }
+
+            analytics.identify(userId, {
+                email: userEmail || undefined,
+                identifiedAt: new Date().toISOString(),
+                source: 'cdn-example'
+            });
+
+            document.getElementById('currentUserId').textContent = userId;
+            alert(`User identified as: ${userId}`);
+        };
+
+        window.handleFormSubmit = function (event) {
+            event.preventDefault();
+
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData.entries());
+
+            analytics.track('form_submitted', {
+                formId: 'testForm',
+                formName: data.name,
+                messageLength: data.message.length
+            });
+
+            alert('Form submitted and tracked!');
+            event.target.reset();
+            return false;
+        };
+        // Track custom event
+        function trackCustomEvent() {
+            if (!analytics) {
+                alert('Analytics not initialized yet');
+                return;
+            }
+            analytics.track('button_clicked', {
+                buttonName: 'Track Custom Event',
+                timestamp: new Date().toISOString(),
+                page: window.location.pathname
+            });
+            alert('Custom event tracked! Check the console for details.');
+        }
+
+        // Track page view
+        function trackPageView() {
+            if (!analytics) {
+                alert('Analytics not initialized yet');
+                return;
+            }
+            analytics.pageView({
+                title: document.title,
+                path: window.location.pathname,
+                referrer: document.referrer
+            });
+        }
+
+        // Track multiple events
+        function trackMultipleEvents() {
+            if (!analytics) {
+                alert('Analytics not initialized yet');
+                return;
+            }
+            for (let i = 1; i <= 5; i++) {
+                analytics.track('batch_event', {
+                    eventNumber: i,
+                    batchId: Date.now()
+                });
+            }
+            alert('5 events tracked! They will be sent in a batch.');
+        }
+
+        // Identify user
+        function identifyUser() {
+            if (!analytics) {
+                alert('Analytics not initialized yet');
+                return;
+            }
+
+            const userId = document.getElementById('userId').value;
+            const userEmail = document.getElementById('userEmail').value;
+
+            if (!userId) {
+                alert('Please enter a User ID');
+                return;
+            }
+
+            analytics.identify(userId, {
+                email: userEmail || undefined,
+                identifiedAt: new Date().toISOString(),
+                source: 'cdn-example'
+            });
+
+            document.getElementById('currentUserId').textContent = userId;
+            alert(`User identified as: ${userId}`);
+        }
+
+        // Handle form submit
+        function handleFormSubmit(event) {
+            event.preventDefault();
+
+            if (!analytics) {
+                alert('Analytics not initialized yet');
+                return false;
+            }
+
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData.entries());
+
+            analytics.track('form_submitted', {
+                formId: 'testForm',
+                formName: data.name,
+                messageLength: data.message.length
+            });
+
+            event.target.reset();
+            return false;
+        }
+    </script>
+</body>
+
+</html>

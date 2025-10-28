@@ -157,6 +157,7 @@ class AnalyticsCore {
             hash: window.location.hash,
             ...properties,
         });
+        this.flush(false)
     }
 
     identify(userId: string, traits: Record<string, any> = {}): void {
