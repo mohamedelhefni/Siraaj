@@ -1,7 +1,18 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { format, subDays, startOfMonth, startOfYear, subMonths } from 'date-fns';
-	import { fetchStats, fetchOnlineUsers, fetchProjects, fetchComparisonStats } from '$lib/api';
+	import {
+		fetchOnlineUsers,
+		fetchProjects,
+		fetchTopStats,
+		fetchTimeline,
+		fetchTopPages,
+		fetchEntryExitPages,
+		fetchTopCountries,
+		fetchTopSources,
+		fetchTopEvents,
+		fetchBrowsersDevicesOS
+	} from '$lib/api';
 	import { RefreshCw, X, TrendingUp, TrendingDown, Minus } from 'lucide-svelte';
 	import {
 		Card,
@@ -36,21 +47,41 @@
 		events_change: 0,
 		users_change: 0,
 		visits_change: 0,
-		page_views_change: 0,
-		top_events: [],
+		page_views_change: 0
+	});
+
+	let timeline: any = $state({
 		timeline: [],
-		top_pages: [],
+		timeline_format: 'day'
+	});
+
+	let topPages: any = $state({
+		top_pages: []
+	});
+
+	let entryExitPages: any = $state({
 		entry_pages: [],
-		exit_pages: [],
+		exit_pages: []
+	});
+
+	let topCountries: any[] = $state([]);
+	let topSources: any[] = $state([]);
+	let topEvents: any[] = $state([]);
+
+	let browsersDevicesOS: any = $state({
 		browsers: [],
 		devices: [],
-		operating_systems: [],
-		top_countries: [],
-		top_sources: []
+		os: []
 	});
 
 	let comparisonStats: any = $state({
-		timeline: []
+		unique_users: 0,
+		total_visits: 0,
+		page_views: 0,
+		total_events: 0,
+		bounce_rate: 0,
+		avg_session_duration: 0,
+		bot_percentage: 0
 	});
 
 	let onlineData = $state({
@@ -288,61 +319,143 @@
 		error = null;
 
 		try {
-			// Load stats
-			const statsPromise = fetchStats(startDate, endDate, 50, activeFilters)
-				.then((data: any) => {
-					stats = data;
-					statsLoading = false;
-					return data;
-				})
-				.catch((err) => {
-					statsLoading = false;
-					throw err;
-				});
-
-			// Load comparison stats
-			const comparisonPromise = fetchComparisonStats(startDate, endDate, 50, activeFilters)
-				.then((data: any) => {
-					comparisonStats = data;
-					return data;
-				})
-				.catch((err) => {
-					// Silent fail for comparison data
-					comparisonStats = { timeline: [] };
+			// Load all stats endpoints in parallel for maximum performance
+			const [
+				topStatsData,
+				timelineData,
+				pagesData,
+				entryExitData,
+				countriesData,
+				sourcesData,
+				eventsData,
+				devicesData,
+				onlineData,
+				comparisonData
+			] = await Promise.all([
+				// Main stats (counts, rates, trends)
+				fetchTopStats(startDate, endDate, activeFilters).catch((err) => {
+					console.error('Failed to load top stats:', err);
 					return null;
-				});
+				}),
 
-			// Load online users
-			const onlinePromise = fetchOnlineUsers(5)
-				.then((data: any) => {
-					onlineData = data;
-					onlineUsersLoading = false;
-					return data;
+				// Timeline chart data
+				fetchTimeline(startDate, endDate, activeFilters).catch((err) => {
+					console.error('Failed to load timeline:', err);
+					return { timeline: [], timeline_format: 'day' };
+				}),
+
+				// Top pages
+				fetchTopPages(startDate, endDate, 10, activeFilters).catch((err) => {
+					console.error('Failed to load pages:', err);
+					return { top_pages: [] };
+				}),
+
+				// Entry and exit pages
+				fetchEntryExitPages(startDate, endDate, 10, activeFilters).catch((err) => {
+					console.error('Failed to load entry/exit pages:', err);
+					return { entry_pages: [], exit_pages: [] };
+				}),
+
+				// Top countries
+				fetchTopCountries(startDate, endDate, 10, activeFilters).catch((err) => {
+					console.error('Failed to load countries:', err);
+					return [];
+				}),
+
+				// Top sources
+				fetchTopSources(startDate, endDate, 10, activeFilters).catch((err) => {
+					console.error('Failed to load sources:', err);
+					return [];
+				}),
+
+				// Top events
+				fetchTopEvents(startDate, endDate, 10, activeFilters).catch((err) => {
+					console.error('Failed to load events:', err);
+					return [];
+				}),
+
+				// Browsers, devices, OS
+				fetchBrowsersDevicesOS(startDate, endDate, 10, activeFilters).catch((err) => {
+					console.error('Failed to load devices:', err);
+					return { browsers: [], devices: [], os: [] };
+				}),
+
+				// Online users
+				fetchOnlineUsers(5).catch((err) => {
+					console.error('Failed to load online users:', err);
+					return { online_users: 0, active_sessions: 0 };
+				}),
+
+				// Comparison stats (previous period)
+				fetchTopStats(
+					format(
+						new Date(
+							new Date(startDate).getTime() -
+								(new Date(endDate).getTime() - new Date(startDate).getTime())
+						),
+						'yyyy-MM-dd'
+					),
+					format(subDays(new Date(startDate), 1), 'yyyy-MM-dd'),
+					activeFilters
+				).catch((err) => {
+					console.error('Failed to load comparison stats:', err);
+					return null;
 				})
-				.catch((err) => {
-					onlineUsersLoading = false;
-					throw err;
-				});
+			]);
 
-			// Load properties
-			// const propertiesPromise = fetchTopProperties(startDate, endDate, 5, activeFilters)
-			// 	.then((data) => {
-			// 		topProperties = data || [];
-			// 		propertiesLoading = false;
-			// 		return data;
-			// 	})
-			// 	.catch((err) => {
-			// 		propertiesLoading = false;
-			// 		throw err;
-			// 	});
+			// Update all state
+			if (topStatsData) {
+				stats = topStatsData;
+			}
 
-			await Promise.all([statsPromise, comparisonPromise, onlinePromise]);
+			if (timelineData) {
+				timeline = timelineData;
+			}
+
+			if (pagesData) {
+				topPages = pagesData;
+			}
+
+			if (entryExitData) {
+				entryExitPages = entryExitData;
+			}
+
+			if (countriesData) {
+				topCountries = countriesData;
+			}
+
+			if (sourcesData) {
+				topSources = sourcesData;
+			}
+
+			if (eventsData) {
+				topEvents = eventsData;
+			}
+
+			if (devicesData) {
+				browsersDevicesOS = devicesData;
+			}
+
+			if (onlineData) {
+				onlineData = onlineData;
+			}
+
+			if (comparisonData) {
+				comparisonStats = comparisonData;
+			}
 
 			lastRefresh = new Date();
 			updateURLParams();
+
+			// All loading complete
+			statsLoading = false;
+			propertiesLoading = false;
+			onlineUsersLoading = false;
 		} catch (err: any) {
 			error = err?.message || 'Failed to load stats';
-			// Failed to load stats
+			statsLoading = false;
+			propertiesLoading = false;
+			onlineUsersLoading = false;
 		} finally {
 			loading = false;
 		}
@@ -850,9 +963,9 @@
 					</div>
 				{:else}
 					<TimelineChart
-						data={stats.timeline || []}
-						comparisonData={comparisonStats.timeline || []}
-						format={stats.timeline_format || 'day'}
+						data={timeline.timeline || []}
+						comparisonData={[]}
+						format={timeline.timeline_format || 'day'}
 						metric={activeFilters.metric || 'users'}
 						bind:showComparison
 					/>
@@ -910,7 +1023,7 @@
 							</div>
 						{:else if pagesTab === 'all'}
 							<TopItemsList
-								items={stats.top_pages || []}
+								items={topPages.top_pages || []}
 								labelKey="url"
 								maxItems={10}
 								valueKey="count"
@@ -919,7 +1032,7 @@
 							/>
 						{:else if pagesTab === 'entry'}
 							<TopItemsList
-								items={stats.entry_pages || []}
+								items={entryExitPages.entry_pages || []}
 								labelKey="url"
 								maxItems={10}
 								valueKey="count"
@@ -928,7 +1041,7 @@
 							/>
 						{:else if pagesTab === 'exit'}
 							<TopItemsList
-								items={stats.exit_pages || []}
+								items={entryExitPages.exit_pages || []}
 								labelKey="url"
 								maxItems={10}
 								valueKey="count"
@@ -945,7 +1058,7 @@
 				</CardHeader>
 				<CardContent>
 					<CountriesPanel
-						countries={stats.top_countries || []}
+						countries={topCountries || []}
 						onclick={(item: any) => addFilter('country', item.name)}
 						loading={statsLoading}
 					/>
@@ -970,7 +1083,7 @@
 						</div>
 					{:else}
 						<TopItemsList
-							items={stats.top_events || []}
+							items={topEvents || []}
 							labelKey="name"
 							valueKey="count"
 							maxItems={8}
@@ -998,7 +1111,7 @@
 						</div>
 					{:else}
 						<TopItemsList
-							items={stats.top_sources || []}
+							items={topSources || []}
 							labelKey="name"
 							valueKey="count"
 							maxItems={8}
@@ -1016,9 +1129,9 @@
 				</CardHeader>
 				<CardContent>
 					<BrowserPanel
-						browsers={stats.browsers || []}
-						devices={stats.devices || []}
-						operatingSystems={stats.os || []}
+						browsers={browsersDevicesOS.browsers || []}
+						devices={browsersDevicesOS.devices || []}
+						operatingSystems={browsersDevicesOS.os || []}
 						onBrowserClick={(item: any) => addFilter('browser', item.name)}
 						onDeviceClick={(item: any) => addFilter('device', item.name)}
 						onOsClick={(item: any) => addFilter('os', item.name)}

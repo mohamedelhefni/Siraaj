@@ -429,3 +429,207 @@ func getClientIP(r *http.Request) string {
 
 	return strings.Split(r.RemoteAddr, ":")[0]
 }
+
+// parseFiltersAndDates is a helper to parse common query parameters
+func parseFiltersAndDates(r *http.Request) (startDate, endDate time.Time, limit int, filters map[string]string) {
+	// Default to last 7 days
+	now := time.Now()
+	endDate = time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999999999, now.Location())
+	startDate = endDate.AddDate(0, 0, -7)
+	startDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, startDate.Location())
+
+	// Parse date range from query params
+	if start := r.URL.Query().Get("start"); start != "" {
+		if t, err := time.Parse("2006-01-02", start); err == nil {
+			startDate = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+		}
+	}
+	if end := r.URL.Query().Get("end"); end != "" {
+		if t, err := time.Parse("2006-01-02", end); err == nil {
+			endDate = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
+		}
+	}
+
+	// Parse limit parameter
+	limit = 50
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		var l int
+		if n, err := fmt.Sscanf(limitStr, "%d", &l); err == nil && n == 1 {
+			limit = l
+			if limit > 1000 {
+				limit = 1000 // Cap at 1000
+			}
+		}
+	}
+
+	// Parse filters
+	filters = make(map[string]string)
+	if project := r.URL.Query().Get("project"); project != "" {
+		filters["project"] = project
+	}
+	if source := r.URL.Query().Get("source"); source != "" {
+		filters["source"] = source
+	}
+	if country := r.URL.Query().Get("country"); country != "" {
+		filters["country"] = country
+	}
+	if device := r.URL.Query().Get("device"); device != "" {
+		filters["device"] = device
+	}
+	if os := r.URL.Query().Get("os"); os != "" {
+		filters["os"] = os
+	}
+	if browser := r.URL.Query().Get("browser"); browser != "" {
+		filters["browser"] = browser
+	}
+	if event := r.URL.Query().Get("event"); event != "" {
+		filters["event"] = event
+	}
+	if metric := r.URL.Query().Get("metric"); metric != "" {
+		filters["metric"] = metric
+	}
+	if botFilter := r.URL.Query().Get("botFilter"); botFilter != "" {
+		filters["botFilter"] = botFilter
+	}
+	if page := r.URL.Query().Get("page"); page != "" {
+		filters["page"] = page
+	}
+
+	return
+}
+
+// GetTopStats returns main statistics (counts, rates, trends)
+func (h *EventHandler) GetTopStats(w http.ResponseWriter, r *http.Request) {
+	startDate, endDate, _, filters := parseFiltersAndDates(r)
+
+	stats, err := h.service.GetTopStats(startDate, endDate, filters)
+	if err != nil {
+		log.Printf("Error getting top stats: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		log.Printf("Error encoding top stats: %v", err)
+	}
+}
+
+// GetTimeline returns timeline data for the main chart
+func (h *EventHandler) GetTimeline(w http.ResponseWriter, r *http.Request) {
+	startDate, endDate, _, filters := parseFiltersAndDates(r)
+
+	timeline, err := h.service.GetTimeline(startDate, endDate, filters)
+	if err != nil {
+		log.Printf("Error getting timeline: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(timeline); err != nil {
+		log.Printf("Error encoding timeline: %v", err)
+	}
+}
+
+// GetTopPagesHandler returns top pages
+func (h *EventHandler) GetTopPagesHandler(w http.ResponseWriter, r *http.Request) {
+	startDate, endDate, limit, filters := parseFiltersAndDates(r)
+
+	pages, err := h.service.GetTopPages(startDate, endDate, limit, filters)
+	if err != nil {
+		log.Printf("Error getting top pages: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(pages); err != nil {
+		log.Printf("Error encoding top pages: %v", err)
+	}
+}
+
+// GetEntryExitPagesHandler returns entry and exit pages
+func (h *EventHandler) GetEntryExitPagesHandler(w http.ResponseWriter, r *http.Request) {
+	startDate, endDate, limit, filters := parseFiltersAndDates(r)
+
+	pages, err := h.service.GetEntryExitPages(startDate, endDate, limit, filters)
+	if err != nil {
+		log.Printf("Error getting entry/exit pages: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(pages); err != nil {
+		log.Printf("Error encoding entry/exit pages: %v", err)
+	}
+}
+
+// GetTopCountriesHandler returns top countries
+func (h *EventHandler) GetTopCountriesHandler(w http.ResponseWriter, r *http.Request) {
+	startDate, endDate, limit, filters := parseFiltersAndDates(r)
+
+	countries, err := h.service.GetTopCountries(startDate, endDate, limit, filters)
+	if err != nil {
+		log.Printf("Error getting top countries: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(countries); err != nil {
+		log.Printf("Error encoding top countries: %v", err)
+	}
+}
+
+// GetTopSourcesHandler returns top traffic sources
+func (h *EventHandler) GetTopSourcesHandler(w http.ResponseWriter, r *http.Request) {
+	startDate, endDate, limit, filters := parseFiltersAndDates(r)
+
+	sources, err := h.service.GetTopSources(startDate, endDate, limit, filters)
+	if err != nil {
+		log.Printf("Error getting top sources: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(sources); err != nil {
+		log.Printf("Error encoding top sources: %v", err)
+	}
+}
+
+// GetTopEventsHandler returns top events
+func (h *EventHandler) GetTopEventsHandler(w http.ResponseWriter, r *http.Request) {
+	startDate, endDate, limit, filters := parseFiltersAndDates(r)
+
+	events, err := h.service.GetTopEvents(startDate, endDate, limit, filters)
+	if err != nil {
+		log.Printf("Error getting top events: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(events); err != nil {
+		log.Printf("Error encoding top events: %v", err)
+	}
+}
+
+// GetBrowsersDevicesOSHandler returns browsers, devices, and OS data
+func (h *EventHandler) GetBrowsersDevicesOSHandler(w http.ResponseWriter, r *http.Request) {
+	startDate, endDate, limit, filters := parseFiltersAndDates(r)
+
+	data, err := h.service.GetBrowsersDevicesOS(startDate, endDate, limit, filters)
+	if err != nil {
+		log.Printf("Error getting browsers/devices/OS: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Printf("Error encoding browsers/devices/OS: %v", err)
+	}
+}

@@ -154,7 +154,7 @@ export async function healthCheck() {
 }
 
 /**
- * Analyze a funnel
+ * Fetch funnel analysis results
  * @param {Object} funnelRequest - Funnel configuration
  * @param {Array<Object>} funnelRequest.steps - Array of funnel steps
  * @param {string} funnelRequest.start_date - Start date (YYYY-MM-DD)
@@ -173,6 +173,179 @@ export async function fetchFunnelAnalysis(funnelRequest) {
     if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Failed to fetch funnel analysis: ${errorText || response.statusText}`);
+    }
+    return response.json();
+}
+
+// ========== New Focused Endpoints ==========
+
+/**
+ * Helper to build query params from filters
+ * @param {string} startDate - Start date
+ * @param {string} endDate - End date
+ * @param {number} limit - Limit for results
+ * @param {Object} filters - Filters object
+ * @returns {URLSearchParams} Query parameters
+ */
+function buildQueryParams(startDate, endDate, limit = 50, filters = {}) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start', startDate);
+    if (endDate) params.append('end', endDate);
+    if (limit) params.append('limit', limit.toString());
+
+    // Add filters
+    if (filters.source) params.append('source', filters.source);
+    if (filters.country) params.append('country', filters.country);
+    if (filters.browser) params.append('browser', filters.browser);
+    if (filters.device) params.append('device', filters.device);
+    if (filters.os) params.append('os', filters.os);
+    if (filters.event) params.append('event', filters.event);
+    if (filters.project) params.append('project', filters.project);
+    if (filters.metric) params.append('metric', filters.metric);
+    if (filters.botFilter) params.append('botFilter', filters.botFilter);
+    if (filters.page) params.append('page', filters.page);
+
+    return params;
+}
+
+/**
+ * Fetch top-level statistics (counts, rates, trends)
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {Object} filters - Optional filters
+ * @returns {Promise<Object>} Top stats
+ */
+export async function fetchTopStats(startDate, endDate, filters = {}) {
+    const params = buildQueryParams(startDate, endDate, 50, filters);
+
+    const response = await fetch(`${API_BASE_URL}/stats/overview?${params}`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch top stats: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Fetch timeline data for the main chart
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {Object} filters - Optional filters (including metric)
+ * @returns {Promise<Object>} Timeline data with format
+ */
+export async function fetchTimeline(startDate, endDate, filters = {}) {
+    const params = buildQueryParams(startDate, endDate, 50, filters);
+
+    const response = await fetch(`${API_BASE_URL}/stats/timeline?${params}`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch timeline: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Fetch top pages
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {number} limit - Limit for results
+ * @param {Object} filters - Optional filters
+ * @returns {Promise<Object>} Top pages data
+ */
+export async function fetchTopPages(startDate, endDate, limit = 10, filters = {}) {
+    const params = buildQueryParams(startDate, endDate, limit, filters);
+
+    const response = await fetch(`${API_BASE_URL}/stats/pages?${params}`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch top pages: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Fetch entry and exit pages
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {number} limit - Limit for results
+ * @param {Object} filters - Optional filters
+ * @returns {Promise<Object>} Entry and exit pages
+ */
+export async function fetchEntryExitPages(startDate, endDate, limit = 10, filters = {}) {
+    const params = buildQueryParams(startDate, endDate, limit, filters);
+
+    const response = await fetch(`${API_BASE_URL}/stats/pages/entry-exit?${params}`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch entry/exit pages: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Fetch top countries
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {number} limit - Limit for results
+ * @param {Object} filters - Optional filters
+ * @returns {Promise<Array>} Top countries
+ */
+export async function fetchTopCountries(startDate, endDate, limit = 10, filters = {}) {
+    const params = buildQueryParams(startDate, endDate, limit, filters);
+
+    const response = await fetch(`${API_BASE_URL}/stats/countries?${params}`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch top countries: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Fetch top traffic sources
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {number} limit - Limit for results
+ * @param {Object} filters - Optional filters
+ * @returns {Promise<Array>} Top sources
+ */
+export async function fetchTopSources(startDate, endDate, limit = 10, filters = {}) {
+    const params = buildQueryParams(startDate, endDate, limit, filters);
+
+    const response = await fetch(`${API_BASE_URL}/stats/sources?${params}`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch top sources: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Fetch top events
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {number} limit - Limit for results
+ * @param {Object} filters - Optional filters
+ * @returns {Promise<Array>} Top events
+ */
+export async function fetchTopEvents(startDate, endDate, limit = 10, filters = {}) {
+    const params = buildQueryParams(startDate, endDate, limit, filters);
+
+    const response = await fetch(`${API_BASE_URL}/stats/events?${params}`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch top events: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Fetch browsers, devices, and operating systems
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {number} limit - Limit for results
+ * @param {Object} filters - Optional filters
+ * @returns {Promise<Object>} Browsers, devices, and OS data
+ */
+export async function fetchBrowsersDevicesOS(startDate, endDate, limit = 10, filters = {}) {
+    const params = buildQueryParams(startDate, endDate, limit, filters);
+
+    const response = await fetch(`${API_BASE_URL}/stats/devices?${params}`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch browsers/devices/OS: ${response.statusText}`);
     }
     return response.json();
 }

@@ -18,6 +18,16 @@ type EventRepository interface {
 	GetOnlineUsers(timeWindow int) (map[string]interface{}, error)
 	GetProjects() ([]string, error)
 	GetFunnelAnalysis(request domain.FunnelRequest) (*domain.FunnelAnalysisResult, error)
+
+	// New focused endpoints
+	GetTopStats(startDate, endDate time.Time, filters map[string]string) (map[string]interface{}, error)
+	GetTimeline(startDate, endDate time.Time, filters map[string]string) (map[string]interface{}, error)
+	GetTopPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error)
+	GetTopCountries(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error)
+	GetTopSources(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error)
+	GetTopEvents(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error)
+	GetBrowsersDevicesOS(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error)
+	GetEntryExitPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error)
 }
 
 type eventRepository struct {
@@ -1367,6 +1377,714 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 			}
 		}
 	}
+
+	return result, nil
+}
+
+// buildWhereClause constructs a WHERE clause and arguments from filters
+func buildWhereClause(startDate, endDate time.Time, filters map[string]string) (string, []interface{}) {
+	whereClause := "timestamp BETWEEN ? AND ?"
+	args := []interface{}{startDate, endDate}
+
+	if projectID, ok := filters["project"]; ok && projectID != "" {
+		whereClause += " AND project_id = ?"
+		args = append(args, projectID)
+	}
+	if source, ok := filters["source"]; ok && source != "" {
+		whereClause += " AND referrer = ?"
+		args = append(args, source)
+	}
+	if country, ok := filters["country"]; ok && country != "" {
+		whereClause += " AND country = ?"
+		args = append(args, country)
+	}
+	if browser, ok := filters["browser"]; ok && browser != "" {
+		whereClause += " AND browser = ?"
+		args = append(args, browser)
+	}
+	if device, ok := filters["device"]; ok && device != "" {
+		whereClause += " AND device = ?"
+		args = append(args, device)
+	}
+	if os, ok := filters["os"]; ok && os != "" {
+		whereClause += " AND os = ?"
+		args = append(args, os)
+	}
+	if eventName, ok := filters["event"]; ok && eventName != "" {
+		whereClause += " AND event_name = ?"
+		args = append(args, eventName)
+	}
+	if page, ok := filters["page"]; ok && page != "" {
+		whereClause += " AND url = ?"
+		args = append(args, page)
+	}
+	if botFilter, ok := filters["botFilter"]; ok && botFilter != "" {
+		if botFilter == "bot" {
+			whereClause += " AND is_bot = TRUE"
+		} else if botFilter == "human" {
+			whereClause += " AND is_bot = FALSE"
+		}
+	}
+
+	return whereClause, args
+}
+
+// GetTopStats returns the main statistics (counts, rates, etc.)
+func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[string]string) (map[string]interface{}, error) {
+	whereClause, args := buildWhereClause(startDate, endDate, filters)
+
+	// Get current period stats
+	query := fmt.Sprintf(`
+		SELECT 
+			COUNT(*) as total_events,
+			COUNT(DISTINCT user_id) as unique_users,
+			COUNT(DISTINCT session_id) as total_visits,
+			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views,
+			COUNT(DISTINCT CASE WHEN event_name = 'page_view' THEN session_id END) as sessions_with_views,
+			AVG(CASE WHEN session_duration > 0 THEN session_duration END) as avg_session_duration,
+			COUNT(CASE WHEN is_bot = TRUE THEN 1 END) as bot_events,
+			COUNT(CASE WHEN is_bot = FALSE THEN 1 END) as human_events,
+			COUNT(DISTINCT CASE WHEN is_bot = TRUE THEN user_id END) as bot_users,
+			COUNT(DISTINCT CASE WHEN is_bot = FALSE THEN user_id END) as human_users
+		FROM events 
+		WHERE %s
+	`, whereClause)
+
+	var totalEvents, uniqueUsers, totalVisits, pageViews, sessionsWithViews int
+	var botEvents, humanEvents, botUsers, humanUsers int
+	var avgSessionDuration sql.NullFloat64
+
+	err := r.db.QueryRow(query, args...).Scan(
+		&totalEvents, &uniqueUsers, &totalVisits, &pageViews, &sessionsWithViews,
+		&avgSessionDuration, &botEvents, &humanEvents, &botUsers, &humanUsers,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	stats := make(map[string]interface{})
+	stats["total_events"] = totalEvents
+	stats["unique_users"] = uniqueUsers
+	stats["total_visits"] = totalVisits
+	stats["page_views"] = pageViews
+
+	// Average session duration
+	if avgSessionDuration.Valid {
+		stats["avg_session_duration"] = avgSessionDuration.Float64
+	} else {
+		stats["avg_session_duration"] = 0.0
+	}
+
+	// Calculate bounce rate
+	var bounceRate float64
+	if sessionsWithViews > 0 {
+		singlePageQuery := fmt.Sprintf(`
+			SELECT COUNT(DISTINCT session_id) 
+			FROM (
+				SELECT session_id, COUNT(*) as view_count
+				FROM events 
+				WHERE %s AND event_name = 'page_view'
+				GROUP BY session_id
+				HAVING view_count = 1
+			)
+		`, whereClause)
+		var singlePageSessions int
+		err = r.db.QueryRow(singlePageQuery, args...).Scan(&singlePageSessions)
+		if err == nil {
+			bounceRate = float64(singlePageSessions) / float64(sessionsWithViews) * 100
+		}
+	}
+	stats["bounce_rate"] = bounceRate
+
+	// Bot statistics
+	stats["bot_events"] = botEvents
+	stats["human_events"] = humanEvents
+	stats["bot_users"] = botUsers
+	stats["human_users"] = humanUsers
+
+	if totalEvents > 0 {
+		stats["bot_percentage"] = float64(botEvents) / float64(totalEvents) * 100
+	} else {
+		stats["bot_percentage"] = 0.0
+	}
+
+	// Calculate trends by comparing with previous period
+	duration := endDate.Sub(startDate)
+	prevStartDate := startDate.Add(-duration)
+	prevEndDate := startDate
+
+	prevWhereClause, prevArgs := buildWhereClause(prevStartDate, prevEndDate, filters)
+	prevQuery := fmt.Sprintf(`
+		SELECT 
+			COUNT(*) as total_events,
+			COUNT(DISTINCT user_id) as unique_users,
+			COUNT(DISTINCT session_id) as total_visits,
+			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views
+		FROM events 
+		WHERE %s
+	`, prevWhereClause)
+
+	var prevTotalEvents, prevUniqueUsers, prevTotalVisits, prevPageViews int
+	err = r.db.QueryRow(prevQuery, prevArgs...).Scan(&prevTotalEvents, &prevUniqueUsers, &prevTotalVisits, &prevPageViews)
+	if err == nil {
+		stats["prev_total_events"] = prevTotalEvents
+		stats["prev_unique_users"] = prevUniqueUsers
+		stats["prev_total_visits"] = prevTotalVisits
+		stats["prev_page_views"] = prevPageViews
+
+		if prevTotalEvents > 0 {
+			stats["events_change"] = float64(totalEvents-prevTotalEvents) / float64(prevTotalEvents) * 100
+		}
+		if prevUniqueUsers > 0 {
+			stats["users_change"] = float64(uniqueUsers-prevUniqueUsers) / float64(prevUniqueUsers) * 100
+		}
+		if prevTotalVisits > 0 {
+			stats["visits_change"] = float64(totalVisits-prevTotalVisits) / float64(prevTotalVisits) * 100
+		}
+		if prevPageViews > 0 {
+			stats["page_views_change"] = float64(pageViews-prevPageViews) / float64(prevPageViews) * 100
+		}
+	}
+
+	return stats, nil
+}
+
+// GetTimeline returns timeline data for visualization
+func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[string]string) (map[string]interface{}, error) {
+	whereClause, args := buildWhereClause(startDate, endDate, filters)
+
+	// Determine what metric to display
+	metric := filters["metric"]
+	var selectClause string
+	switch metric {
+	case "users":
+		selectClause = "COUNT(DISTINCT user_id) as count"
+	case "visits":
+		selectClause = "COUNT(DISTINCT session_id) as count"
+	case "page_views":
+		selectClause = "COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as count"
+	case "events":
+		selectClause = "COUNT(*) as count"
+	case "views_per_visit":
+		selectClause = "CAST(COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) AS FLOAT) / NULLIF(COUNT(DISTINCT session_id), 0) as count"
+	case "bounce_rate":
+		selectClause = `
+			CASE 
+				WHEN COUNT(DISTINCT session_id) = 0 THEN 0
+				ELSE CAST(SUM(CASE WHEN event_name = 'page_view' THEN 1 ELSE 0 END) AS FLOAT) * 100.0 / NULLIF(COUNT(DISTINCT session_id), 0)
+			END as count`
+	case "visit_duration":
+		selectClause = "AVG(CASE WHEN session_duration > 0 THEN session_duration END) as count"
+	default:
+		selectClause = "COUNT(DISTINCT user_id) as count"
+	}
+
+	// Determine granularity based on date range
+	timelineDuration := endDate.Sub(startDate)
+	var timelineQuery string
+	var timeFormat string
+
+	if timelineDuration <= 24*time.Hour {
+		// Hourly data
+		if metric == "bounce_rate" {
+			timelineQuery = fmt.Sprintf(`
+				WITH session_page_counts AS (
+					SELECT 
+						strftime(DATE_TRUNC('hour', timestamp), '%%Y-%%m-%%d %%H:00:00') as date,
+						session_id,
+						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
+					FROM events 
+					WHERE %s
+					GROUP BY date, session_id
+				)
+				SELECT 
+					date,
+					CAST(COUNT(CASE WHEN page_view_count = 1 THEN 1 END) AS FLOAT) * 100.0 / NULLIF(COUNT(*), 0) as count
+				FROM session_page_counts
+				GROUP BY date
+				ORDER BY date
+			`, whereClause)
+		} else {
+			timelineQuery = fmt.Sprintf(`
+				SELECT 
+					strftime(DATE_TRUNC('hour', timestamp), '%%Y-%%m-%%d %%H:00:00') as date, 
+					%s
+				FROM events 
+				WHERE %s
+				GROUP BY date 
+				ORDER BY date
+			`, selectClause, whereClause)
+		}
+		timeFormat = "hour"
+	} else if timelineDuration <= 90*24*time.Hour {
+		// Daily data
+		if metric == "bounce_rate" {
+			timelineQuery = fmt.Sprintf(`
+				WITH session_page_counts AS (
+					SELECT 
+						strftime(DATE_TRUNC('day', timestamp), '%%Y-%%m-%%d') as date,
+						session_id,
+						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
+					FROM events 
+					WHERE %s
+					GROUP BY date, session_id
+				)
+				SELECT 
+					date,
+					CAST(COUNT(CASE WHEN page_view_count = 1 THEN 1 END) AS FLOAT) * 100.0 / NULLIF(COUNT(*), 0) as count
+				FROM session_page_counts
+				GROUP BY date
+				ORDER BY date
+			`, whereClause)
+		} else {
+			timelineQuery = fmt.Sprintf(`
+				SELECT 
+					strftime(DATE_TRUNC('day', timestamp), '%%Y-%%m-%%d') as date, 
+					%s
+				FROM events 
+				WHERE %s
+				GROUP BY date 
+				ORDER BY date
+			`, selectClause, whereClause)
+		}
+		timeFormat = "day"
+	} else {
+		// Monthly data
+		if metric == "bounce_rate" {
+			timelineQuery = fmt.Sprintf(`
+				WITH session_page_counts AS (
+					SELECT 
+						strftime(DATE_TRUNC('month', timestamp), '%%Y-%%m-01') as date,
+						session_id,
+						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
+					FROM events 
+					WHERE %s
+					GROUP BY date, session_id
+				)
+				SELECT 
+					date,
+					CAST(COUNT(CASE WHEN page_view_count = 1 THEN 1 END) AS FLOAT) * 100.0 / NULLIF(COUNT(*), 0) as count
+				FROM session_page_counts
+				GROUP BY date
+				ORDER BY date
+			`, whereClause)
+		} else {
+			timelineQuery = fmt.Sprintf(`
+				SELECT 
+					strftime(DATE_TRUNC('month', timestamp), '%%Y-%%m-01') as date, 
+					%s
+				FROM events 
+				WHERE %s
+				GROUP BY date 
+				ORDER BY date
+			`, selectClause, whereClause)
+		}
+		timeFormat = "month"
+	}
+
+	rows, err := r.db.Query(timelineQuery, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	timeline := []map[string]interface{}{}
+	for rows.Next() {
+		var date string
+		var count sql.NullFloat64
+		if err := rows.Scan(&date, &count); err != nil {
+			log.Printf("Error scanning timeline row: %v", err)
+			continue
+		}
+
+		countValue := 0.0
+		if count.Valid {
+			countValue = count.Float64
+		}
+
+		timeline = append(timeline, map[string]interface{}{
+			"date":  date,
+			"count": countValue,
+		})
+	}
+
+	return map[string]interface{}{
+		"timeline":        timeline,
+		"timeline_format": timeFormat,
+	}, nil
+}
+
+// GetTopPages returns top pages with entry/exit pages
+func (r *eventRepository) GetTopPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error) {
+	whereClause, args := buildWhereClause(startDate, endDate, filters)
+	queryArgs := append(args, limit)
+
+	// Top pages
+	query := fmt.Sprintf(`
+		SELECT url, COUNT(*) as count 
+		FROM events 
+		WHERE %s AND url IS NOT NULL AND url != ''
+		GROUP BY url 
+		ORDER BY count DESC 
+		LIMIT ?
+	`, whereClause)
+
+	rows, err := r.db.Query(query, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	topPages := []map[string]interface{}{}
+	for rows.Next() {
+		var url string
+		var count int
+		if err := rows.Scan(&url, &count); err != nil {
+			continue
+		}
+		topPages = append(topPages, map[string]interface{}{
+			"url":   url,
+			"count": count,
+		})
+	}
+
+	return map[string]interface{}{
+		"top_pages": topPages,
+	}, nil
+}
+
+// GetEntryExitPages returns entry and exit pages separately
+func (r *eventRepository) GetEntryExitPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error) {
+	whereClause, args := buildWhereClause(startDate, endDate, filters)
+	queryArgs := append(args, limit)
+
+	// Entry Pages
+	entryPagesQuery := fmt.Sprintf(`
+		WITH entry_pages AS (
+			SELECT DISTINCT ON (session_id) 
+				session_id, 
+				url
+			FROM events 
+			WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
+			ORDER BY session_id, timestamp ASC
+		)
+		SELECT url, COUNT(*) as count
+		FROM entry_pages
+		GROUP BY url
+		ORDER BY count DESC
+		LIMIT ?
+	`, whereClause)
+
+	entryRows, err := r.db.Query(entryPagesQuery, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := entryRows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	entryPages := []map[string]interface{}{}
+	for entryRows.Next() {
+		var url string
+		var count int
+		if err := entryRows.Scan(&url, &count); err != nil {
+			continue
+		}
+		entryPages = append(entryPages, map[string]interface{}{
+			"url":   url,
+			"count": count,
+		})
+	}
+
+	// Exit Pages
+	exitPagesQuery := fmt.Sprintf(`
+		WITH exit_pages AS (
+			SELECT DISTINCT ON (session_id) 
+				session_id, 
+				url
+			FROM events 
+			WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
+			ORDER BY session_id, timestamp DESC
+		)
+		SELECT url, COUNT(*) as count
+		FROM exit_pages
+		GROUP BY url
+		ORDER BY count DESC
+		LIMIT ?
+	`, whereClause)
+
+	exitRows, err := r.db.Query(exitPagesQuery, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := exitRows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	exitPages := []map[string]interface{}{}
+	for exitRows.Next() {
+		var url string
+		var count int
+		if err := exitRows.Scan(&url, &count); err != nil {
+			continue
+		}
+		exitPages = append(exitPages, map[string]interface{}{
+			"url":   url,
+			"count": count,
+		})
+	}
+
+	return map[string]interface{}{
+		"entry_pages": entryPages,
+		"exit_pages":  exitPages,
+	}, nil
+}
+
+// GetTopCountries returns top countries
+func (r *eventRepository) GetTopCountries(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error) {
+	whereClause, args := buildWhereClause(startDate, endDate, filters)
+	queryArgs := append(args, limit)
+
+	query := fmt.Sprintf(`
+		SELECT country, COUNT(*) as count 
+		FROM events 
+		WHERE %s AND country IS NOT NULL AND country != ''
+		GROUP BY country 
+		ORDER BY count DESC 
+		LIMIT ?
+	`, whereClause)
+
+	rows, err := r.db.Query(query, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	countries := []map[string]interface{}{}
+	for rows.Next() {
+		var country string
+		var count int
+		if err := rows.Scan(&country, &count); err != nil {
+			continue
+		}
+		countries = append(countries, map[string]interface{}{
+			"name":  country,
+			"count": count,
+		})
+	}
+
+	return countries, nil
+}
+
+// GetTopSources returns top referrer sources
+func (r *eventRepository) GetTopSources(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error) {
+	whereClause, args := buildWhereClause(startDate, endDate, filters)
+	queryArgs := append(args, limit)
+
+	query := fmt.Sprintf(`
+		SELECT 
+			CASE 
+				WHEN referrer = '' OR referrer IS NULL THEN 'Direct'
+				ELSE referrer
+			END as source,
+			COUNT(*) as count 
+		FROM events 
+		WHERE %s
+		GROUP BY source 
+		ORDER BY count DESC 
+		LIMIT ?
+	`, whereClause)
+
+	rows, err := r.db.Query(query, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	sources := []map[string]interface{}{}
+	for rows.Next() {
+		var source string
+		var count int
+		if err := rows.Scan(&source, &count); err != nil {
+			continue
+		}
+		sources = append(sources, map[string]interface{}{
+			"name":  source,
+			"count": count,
+		})
+	}
+
+	return sources, nil
+}
+
+// GetTopEvents returns top event names
+func (r *eventRepository) GetTopEvents(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error) {
+	whereClause, args := buildWhereClause(startDate, endDate, filters)
+	queryArgs := append(args, limit)
+
+	query := fmt.Sprintf(`
+		SELECT event_name, COUNT(*) as count 
+		FROM events 
+		WHERE %s
+		GROUP BY event_name 
+		ORDER BY count DESC 
+		LIMIT ?
+	`, whereClause)
+
+	rows, err := r.db.Query(query, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	events := []map[string]interface{}{}
+	for rows.Next() {
+		var name string
+		var count int
+		if err := rows.Scan(&name, &count); err != nil {
+			continue
+		}
+		events = append(events, map[string]interface{}{
+			"name":  name,
+			"count": count,
+		})
+	}
+
+	return events, nil
+}
+
+// GetBrowsersDevicesOS returns browsers, devices, and operating systems
+func (r *eventRepository) GetBrowsersDevicesOS(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error) {
+	whereClause, args := buildWhereClause(startDate, endDate, filters)
+	queryArgs := append(args, limit)
+
+	result := make(map[string]interface{})
+
+	// Browsers
+	browsersQuery := fmt.Sprintf(`
+		SELECT browser, COUNT(*) as count 
+		FROM events 
+		WHERE %s AND browser IS NOT NULL AND browser != ''
+		GROUP BY browser 
+		ORDER BY count DESC
+		LIMIT ?
+	`, whereClause)
+
+	browsersRows, err := r.db.Query(browsersQuery, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := browsersRows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	browsers := []map[string]interface{}{}
+	for browsersRows.Next() {
+		var browser string
+		var count int
+		if err := browsersRows.Scan(&browser, &count); err != nil {
+			continue
+		}
+		browsers = append(browsers, map[string]interface{}{
+			"name":  browser,
+			"count": count,
+		})
+	}
+	result["browsers"] = browsers
+
+	// Devices
+	devicesQuery := fmt.Sprintf(`
+		SELECT device, COUNT(*) as count 
+		FROM events 
+		WHERE %s AND device IS NOT NULL AND device != ''
+		GROUP BY device 
+		ORDER BY count DESC
+		LIMIT ?
+	`, whereClause)
+
+	devicesRows, err := r.db.Query(devicesQuery, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := devicesRows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	devices := []map[string]interface{}{}
+	for devicesRows.Next() {
+		var device string
+		var count int
+		if err := devicesRows.Scan(&device, &count); err != nil {
+			continue
+		}
+		devices = append(devices, map[string]interface{}{
+			"name":  device,
+			"count": count,
+		})
+	}
+	result["devices"] = devices
+
+	// Operating Systems
+	osQuery := fmt.Sprintf(`
+		SELECT os, COUNT(*) as count 
+		FROM events 
+		WHERE %s AND os IS NOT NULL AND os != ''
+		GROUP BY os 
+		ORDER BY count DESC
+		LIMIT ?
+	`, whereClause)
+
+	osRows, err := r.db.Query(osQuery, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := osRows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	operatingSystems := []map[string]interface{}{}
+	for osRows.Next() {
+		var os string
+		var count int
+		if err := osRows.Scan(&os, &count); err != nil {
+			continue
+		}
+		operatingSystems = append(operatingSystems, map[string]interface{}{
+			"name":  os,
+			"count": count,
+		})
+	}
+	result["os"] = operatingSystems
 
 	return result, nil
 }

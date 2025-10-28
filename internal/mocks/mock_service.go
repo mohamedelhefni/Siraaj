@@ -41,6 +41,36 @@ func (m *MockEventService) EXPECT() *MockEventServiceMockRecorder {
 	return m.recorder
 }
 
+// GetBrowsersDevicesOS mocks base method.
+func (m *MockEventService) GetBrowsersDevicesOS(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBrowsersDevicesOS", startDate, endDate, limit, filters)
+	ret0, _ := ret[0].(map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBrowsersDevicesOS indicates an expected call of GetBrowsersDevicesOS.
+func (mr *MockEventServiceMockRecorder) GetBrowsersDevicesOS(startDate, endDate, limit, filters any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBrowsersDevicesOS", reflect.TypeOf((*MockEventService)(nil).GetBrowsersDevicesOS), startDate, endDate, limit, filters)
+}
+
+// GetEntryExitPages mocks base method.
+func (m *MockEventService) GetEntryExitPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEntryExitPages", startDate, endDate, limit, filters)
+	ret0, _ := ret[0].(map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetEntryExitPages indicates an expected call of GetEntryExitPages.
+func (mr *MockEventServiceMockRecorder) GetEntryExitPages(startDate, endDate, limit, filters any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEntryExitPages", reflect.TypeOf((*MockEventService)(nil).GetEntryExitPages), startDate, endDate, limit, filters)
+}
+
 // GetEvents mocks base method.
 func (m *MockEventService) GetEvents(startDate, endDate time.Time, limit, offset int) (map[string]any, error) {
 	m.ctrl.T.Helper()
@@ -114,6 +144,96 @@ func (m *MockEventService) GetStats(startDate, endDate time.Time, limit int, fil
 func (mr *MockEventServiceMockRecorder) GetStats(startDate, endDate, limit, filters any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStats", reflect.TypeOf((*MockEventService)(nil).GetStats), startDate, endDate, limit, filters)
+}
+
+// GetTimeline mocks base method.
+func (m *MockEventService) GetTimeline(startDate, endDate time.Time, filters map[string]string) (map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTimeline", startDate, endDate, filters)
+	ret0, _ := ret[0].(map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTimeline indicates an expected call of GetTimeline.
+func (mr *MockEventServiceMockRecorder) GetTimeline(startDate, endDate, filters any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeline", reflect.TypeOf((*MockEventService)(nil).GetTimeline), startDate, endDate, filters)
+}
+
+// GetTopCountries mocks base method.
+func (m *MockEventService) GetTopCountries(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTopCountries", startDate, endDate, limit, filters)
+	ret0, _ := ret[0].([]map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTopCountries indicates an expected call of GetTopCountries.
+func (mr *MockEventServiceMockRecorder) GetTopCountries(startDate, endDate, limit, filters any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTopCountries", reflect.TypeOf((*MockEventService)(nil).GetTopCountries), startDate, endDate, limit, filters)
+}
+
+// GetTopEvents mocks base method.
+func (m *MockEventService) GetTopEvents(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTopEvents", startDate, endDate, limit, filters)
+	ret0, _ := ret[0].([]map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTopEvents indicates an expected call of GetTopEvents.
+func (mr *MockEventServiceMockRecorder) GetTopEvents(startDate, endDate, limit, filters any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTopEvents", reflect.TypeOf((*MockEventService)(nil).GetTopEvents), startDate, endDate, limit, filters)
+}
+
+// GetTopPages mocks base method.
+func (m *MockEventService) GetTopPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTopPages", startDate, endDate, limit, filters)
+	ret0, _ := ret[0].(map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTopPages indicates an expected call of GetTopPages.
+func (mr *MockEventServiceMockRecorder) GetTopPages(startDate, endDate, limit, filters any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTopPages", reflect.TypeOf((*MockEventService)(nil).GetTopPages), startDate, endDate, limit, filters)
+}
+
+// GetTopSources mocks base method.
+func (m *MockEventService) GetTopSources(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTopSources", startDate, endDate, limit, filters)
+	ret0, _ := ret[0].([]map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTopSources indicates an expected call of GetTopSources.
+func (mr *MockEventServiceMockRecorder) GetTopSources(startDate, endDate, limit, filters any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTopSources", reflect.TypeOf((*MockEventService)(nil).GetTopSources), startDate, endDate, limit, filters)
+}
+
+// GetTopStats mocks base method.
+func (m *MockEventService) GetTopStats(startDate, endDate time.Time, filters map[string]string) (map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTopStats", startDate, endDate, filters)
+	ret0, _ := ret[0].(map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTopStats indicates an expected call of GetTopStats.
+func (mr *MockEventServiceMockRecorder) GetTopStats(startDate, endDate, filters any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTopStats", reflect.TypeOf((*MockEventService)(nil).GetTopStats), startDate, endDate, filters)
 }
 
 // TrackEvent mocks base method.

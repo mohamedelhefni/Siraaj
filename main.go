@@ -141,6 +141,16 @@ func main() {
 	mux.HandleFunc("/api/health", eventHandler.Health)
 	mux.HandleFunc("/api/geo", eventHandler.GeoTest)
 
+	// New focused stats endpoints
+	mux.HandleFunc("/api/stats/overview", eventHandler.GetTopStats)
+	mux.HandleFunc("/api/stats/timeline", eventHandler.GetTimeline)
+	mux.HandleFunc("/api/stats/pages", eventHandler.GetTopPagesHandler)
+	mux.HandleFunc("/api/stats/pages/entry-exit", eventHandler.GetEntryExitPagesHandler)
+	mux.HandleFunc("/api/stats/countries", eventHandler.GetTopCountriesHandler)
+	mux.HandleFunc("/api/stats/sources", eventHandler.GetTopSourcesHandler)
+	mux.HandleFunc("/api/stats/events", eventHandler.GetTopEventsHandler)
+	mux.HandleFunc("/api/stats/devices", eventHandler.GetBrowsersDevicesOSHandler)
+
 	// Debug endpoint to show all events
 	mux.HandleFunc("/api/debug/events", func(w http.ResponseWriter, r *http.Request) {
 		rows, err := db.Query("SELECT id, timestamp, event_name, user_id FROM events ORDER BY timestamp DESC LIMIT 50")
