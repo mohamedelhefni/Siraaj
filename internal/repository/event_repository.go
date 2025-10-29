@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mohamedelhefni/siraaj/internal/cache"
 	"github.com/mohamedelhefni/siraaj/internal/domain"
 )
 
@@ -32,15 +31,11 @@ type EventRepository interface {
 }
 
 type eventRepository struct {
-	db    *sql.DB
-	cache *cache.StatsCache
+	db *sql.DB
 }
 
 func NewEventRepository(db *sql.DB) EventRepository {
-	return &eventRepository{
-		db:    db,
-		cache: cache.NewStatsCache(200), // 200MB cache
-	}
+	return &eventRepository{db: db}
 }
 
 func (r *eventRepository) Create(event domain.Event) error {
@@ -1434,37 +1429,8 @@ func buildWhereClause(startDate, endDate time.Time, filters map[string]string) (
 	return whereClause, args
 }
 
-// determineTTL determines cache TTL based on date range
-func (r *eventRepository) determineTTL(startDate, endDate time.Time) time.Duration {
-	now := time.Now()
-
-	// If query is for current hour, cache for 2 minutes
-	if endDate.After(now.Add(-1 * time.Hour)) {
-		return 2 * time.Minute
-	}
-
-	// If query is for last 24 hours, cache for 5 minutes
-	if endDate.After(now.Add(-24 * time.Hour)) {
-		return 5 * time.Minute
-	}
-
-	// If query is for last 7 days, cache for 15 minutes
-	if endDate.After(now.Add(-7 * 24 * time.Hour)) {
-		return 15 * time.Minute
-	}
-
-	// Historical data (older than 7 days), cache for 1 hour
-	return 1 * time.Hour
-}
-
 // GetTopStats returns the main statistics (counts, rates, etc.)
 func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[string]string) (map[string]interface{}, error) {
-	// Check cache first
-	cacheKey := cache.GenerateKey("top_stats", startDate, endDate, filters, 0)
-	if cached, found := r.cache.Get(cacheKey); found {
-		return cached.(map[string]interface{}), nil
-	}
-
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 
 	// Get current period stats
@@ -1580,21 +1546,11 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 		}
 	}
 
-	// Cache the result
-	ttl := r.determineTTL(startDate, endDate)
-	r.cache.Set(cacheKey, stats, ttl)
-
 	return stats, nil
 }
 
 // GetTimeline returns timeline data for visualization
 func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[string]string) (map[string]interface{}, error) {
-	// Check cache first
-	cacheKey := cache.GenerateKey("timeline", startDate, endDate, filters, 0)
-	if cached, found := r.cache.Get(cacheKey); found {
-		return cached.(map[string]interface{}), nil
-	}
-
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 
 	// Determine what metric to display
@@ -1756,26 +1712,14 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 		})
 	}
 
-	result := map[string]interface{}{
+	return map[string]interface{}{
 		"timeline":        timeline,
 		"timeline_format": timeFormat,
-	}
-
-	// Cache the result
-	ttl := r.determineTTL(startDate, endDate)
-	r.cache.Set(cacheKey, result, ttl)
-
-	return result, nil
+	}, nil
 }
 
 // GetTopPages returns top pages with entry/exit pages
 func (r *eventRepository) GetTopPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error) {
-	// Check cache first
-	cacheKey := cache.GenerateKey("top_pages", startDate, endDate, filters, limit)
-	if cached, found := r.cache.Get(cacheKey); found {
-		return cached.(map[string]interface{}), nil
-	}
-
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 	queryArgs := append(args, limit)
 
@@ -1812,25 +1756,13 @@ func (r *eventRepository) GetTopPages(startDate, endDate time.Time, limit int, f
 		})
 	}
 
-	result := map[string]interface{}{
+	return map[string]interface{}{
 		"top_pages": topPages,
-	}
-
-	// Cache the result
-	ttl := r.determineTTL(startDate, endDate)
-	r.cache.Set(cacheKey, result, ttl)
-
-	return result, nil
+	}, nil
 }
 
 // GetEntryExitPages returns entry and exit pages separately
 func (r *eventRepository) GetEntryExitPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error) {
-	// Check cache first
-	cacheKey := cache.GenerateKey("entry_exit_pages", startDate, endDate, filters, limit)
-	if cached, found := r.cache.Get(cacheKey); found {
-		return cached.(map[string]interface{}), nil
-	}
-
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 	queryArgs := append(args, limit)
 
@@ -1914,26 +1846,14 @@ func (r *eventRepository) GetEntryExitPages(startDate, endDate time.Time, limit 
 		})
 	}
 
-	result := map[string]interface{}{
+	return map[string]interface{}{
 		"entry_pages": entryPages,
 		"exit_pages":  exitPages,
-	}
-
-	// Cache the result
-	ttl := r.determineTTL(startDate, endDate)
-	r.cache.Set(cacheKey, result, ttl)
-
-	return result, nil
+	}, nil
 }
 
 // GetTopCountries returns top countries
 func (r *eventRepository) GetTopCountries(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error) {
-	// Check cache first
-	cacheKey := cache.GenerateKey("top_countries", startDate, endDate, filters, limit)
-	if cached, found := r.cache.Get(cacheKey); found {
-		return cached.([]map[string]interface{}), nil
-	}
-
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 	queryArgs := append(args, limit)
 
@@ -1969,21 +1889,11 @@ func (r *eventRepository) GetTopCountries(startDate, endDate time.Time, limit in
 		})
 	}
 
-	// Cache the result
-	ttl := r.determineTTL(startDate, endDate)
-	r.cache.Set(cacheKey, countries, ttl)
-
 	return countries, nil
 }
 
 // GetTopSources returns top referrer sources
 func (r *eventRepository) GetTopSources(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error) {
-	// Check cache first
-	cacheKey := cache.GenerateKey("top_sources", startDate, endDate, filters, limit)
-	if cached, found := r.cache.Get(cacheKey); found {
-		return cached.([]map[string]interface{}), nil
-	}
-
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 	queryArgs := append(args, limit)
 
@@ -2024,21 +1934,11 @@ func (r *eventRepository) GetTopSources(startDate, endDate time.Time, limit int,
 		})
 	}
 
-	// Cache the result
-	ttl := r.determineTTL(startDate, endDate)
-	r.cache.Set(cacheKey, sources, ttl)
-
 	return sources, nil
 }
 
 // GetTopEvents returns top event names
 func (r *eventRepository) GetTopEvents(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error) {
-	// Check cache first
-	cacheKey := cache.GenerateKey("top_events", startDate, endDate, filters, limit)
-	if cached, found := r.cache.Get(cacheKey); found {
-		return cached.([]map[string]interface{}), nil
-	}
-
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 	queryArgs := append(args, limit)
 
@@ -2074,21 +1974,11 @@ func (r *eventRepository) GetTopEvents(startDate, endDate time.Time, limit int, 
 		})
 	}
 
-	// Cache the result
-	ttl := r.determineTTL(startDate, endDate)
-	r.cache.Set(cacheKey, events, ttl)
-
 	return events, nil
 }
 
 // GetBrowsersDevicesOS returns browsers, devices, and operating systems
 func (r *eventRepository) GetBrowsersDevicesOS(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error) {
-	// Check cache first
-	cacheKey := cache.GenerateKey("browsers_devices_os", startDate, endDate, filters, limit)
-	if cached, found := r.cache.Get(cacheKey); found {
-		return cached.(map[string]interface{}), nil
-	}
-
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 	queryArgs := append(args, limit)
 
@@ -2195,10 +2085,6 @@ func (r *eventRepository) GetBrowsersDevicesOS(startDate, endDate time.Time, lim
 		})
 	}
 	result["os"] = operatingSystems
-
-	// Cache the result
-	ttl := r.determineTTL(startDate, endDate)
-	r.cache.Set(cacheKey, result, ttl)
 
 	return result, nil
 }
