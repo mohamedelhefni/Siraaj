@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	_ "github.com/duckdb/duckdb-go/v2"
@@ -18,6 +20,7 @@ import (
 	"github.com/mohamedelhefni/siraaj/internal/migrations"
 	"github.com/mohamedelhefni/siraaj/internal/repository"
 	"github.com/mohamedelhefni/siraaj/internal/service"
+	"github.com/mohamedelhefni/siraaj/internal/storage"
 )
 
 //go:embed all:ui/dashboard
@@ -103,8 +106,7 @@ func main() {
 		}()
 	}
 
-	// Initialize database
-	// Get db path from env
+	// Initialize database first (needed for Parquet storage)
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
 		dbPath = "data/analytics.db"
@@ -122,10 +124,56 @@ func main() {
 
 	log.Println("✓ DuckDB initialized successfully")
 
-	// Initialize layers
-	eventRepo := repository.NewEventRepository(db)
+	// Initialize Parquet storage with buffering (needs DB connection)
+	parquetFilePath := os.Getenv("PARQUET_FILE")
+	if parquetFilePath == "" {
+		parquetFilePath = "data/events.parquet"
+	}
+
+	bufferSize := 10000               // Buffer 10k events before flush
+	flushInterval := 30 * time.Second // Flush every 30 seconds
+
+	parquetStorage, err := storage.NewParquetStorage(db, parquetFilePath, bufferSize, flushInterval)
+	if err != nil {
+		log.Fatalf("Failed to initialize Parquet storage: %v", err)
+	}
+	defer func() {
+		if err := parquetStorage.Close(); err != nil {
+			log.Printf("Warning: failed to close Parquet storage: %v", err)
+		}
+	}()
+
+	// Initialize layers with Parquet storage
+	eventRepo := repository.NewEventRepository(db, parquetStorage)
 	eventService := service.NewEventService(eventRepo)
 	eventHandler := handler.NewEventHandler(eventService, geoService)
+
+	// Setup graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-sigChan
+		log.Println("\n🛑 Shutting down gracefully...")
+
+		// Close Parquet storage first to flush buffer
+		if err := parquetStorage.Close(); err != nil {
+			log.Printf("Error closing Parquet storage: %v", err)
+		}
+
+		// Close other resources
+		if geoService != nil {
+			if err := geoService.Close(); err != nil {
+				log.Printf("Error closing geolocation service: %v", err)
+			}
+		}
+
+		if err := db.Close(); err != nil {
+			log.Printf("Error closing database: %v", err)
+		}
+
+		os.Exit(0)
+	}()
 
 	// Setup HTTP routes
 	mux := http.NewServeMux()
@@ -213,8 +261,8 @@ func main() {
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Printf("🎨 Dashboard:  http://localhost:%s/dashboard/\n", port)
 	fmt.Printf("📡 API Track:  http://localhost:%s/api/track\n", port)
-	fmt.Printf("� API Batch:  http://localhost:%s/api/track/batch\n", port)
-	fmt.Printf("�📈 API Stats:  http://localhost:%s/api/stats\n", port)
+	fmt.Printf("📦 API Batch:  http://localhost:%s/api/track/batch\n", port)
+	fmt.Printf("📈 API Stats:  http://localhost:%s/api/stats\n", port)
 	fmt.Printf("🌍 Geo Test:   http://localhost:%s/api/geo\n", port)
 	fmt.Printf("❤️  Health:    http://localhost:%s/api/health\n", port)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -226,6 +274,7 @@ func main() {
 		fmt.Println("⚠️  Geolocation service disabled")
 	}
 	fmt.Println("✓ Clean Architecture implemented")
+	fmt.Printf("✓ Parquet storage enabled: %s (buffer: %d events, flush: %v)\n", parquetFilePath, bufferSize, flushInterval)
 	fmt.Println()
 
 	// Apply middleware: CORS and Logging

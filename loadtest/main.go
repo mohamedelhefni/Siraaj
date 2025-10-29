@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -635,6 +636,95 @@ func (cg *CSVGenerator) ImportToDatabase(dbPath string) error {
 	return nil
 }
 
+// ImportToParquet imports CSV data to Parquet using DuckDB COPY command
+func (cg *CSVGenerator) ImportToParquet(parquetPath string) error {
+	log.Printf("📥 Importing CSV file %s to Parquet file %s", cg.filepath, parquetPath)
+
+	start := time.Now()
+
+	// Open DuckDB connection
+	db, err := sql.Open("duckdb", "")
+	if err != nil {
+		return fmt.Errorf("failed to open DuckDB: %w", err)
+	}
+	defer db.Close()
+
+	// Use DuckDB COPY to convert CSV to Parquet with ZSTD compression
+	copyQuery := fmt.Sprintf(`
+		COPY (
+			SELECT * FROM read_csv('%s', 
+				AUTO_DETECT=TRUE,
+				header=true,
+				timestampformat='%%Y-%%m-%%dT%%H:%%M:%%S.%%fZ'
+			)
+		) TO '%s' (FORMAT 'PARQUET', CODEC 'ZSTD', ROW_GROUP_SIZE 100000)
+	`, cg.filepath, parquetPath)
+
+	log.Printf("🔄 Executing COPY command...")
+	_, err = db.Exec(copyQuery)
+	if err != nil {
+		return fmt.Errorf("failed to copy to Parquet: %w", err)
+	}
+
+	duration := time.Since(start)
+
+	// Get file size
+	fileInfo, err := os.Stat(parquetPath)
+	if err == nil {
+		log.Printf("📊 Parquet file size: %.2f MB", float64(fileInfo.Size())/(1024*1024))
+	}
+
+	// Count rows
+	var rowCount int64
+	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM read_parquet('%s')", parquetPath)).Scan(&rowCount)
+	if err == nil {
+		rate := float64(rowCount) / duration.Seconds()
+		log.Printf("✅ Parquet import completed!")
+		log.Printf("📈 Total rows: %d", rowCount)
+		log.Printf("⏱️  Total time: %v", duration)
+		log.Printf("🚄 Average rate: %.0f rows/sec", rate)
+	}
+
+	return nil
+}
+
+// csvRecordToEvent converts CSV record to Event struct (for HTTP mode)
+func csvRecordToEvent(record []string, currentID *uint64) (Event, error) {
+	*currentID++
+
+	// Parse timestamp
+	timestamp, err := time.Parse(time.RFC3339, record[0])
+	if err != nil {
+		timestamp = time.Now()
+	}
+
+	// Parse session duration
+	sessionDuration, _ := strconv.Atoi(record[4])
+
+	// Parse is_bot
+	isBot, _ := strconv.ParseBool(record[13])
+
+	return Event{
+		ID:              *currentID,
+		Timestamp:       timestamp,
+		EventName:       record[1],
+		UserID:          record[2],
+		SessionID:       record[3],
+		SessionDuration: sessionDuration,
+		URL:             record[5],
+		Referrer:        record[6],
+		UserAgent:       record[7],
+		IP:              record[8],
+		Country:         record[9],
+		Browser:         record[10],
+		OS:              record[11],
+		Device:          record[12],
+		IsBot:           isBot,
+		ProjectID:       record[14],
+		Channel:         record[15],
+	}, nil
+}
+
 // ========== MAIN ==========
 
 func main() {
@@ -682,7 +772,7 @@ func main() {
 
 	case "csv":
 		log.Printf("  CSV Path: %s", *csvPath)
-		log.Printf("  Database: %s", *dbPath)
+		log.Printf("  Parquet Path: %s", "../data/events.parquet")
 
 		cg := NewCSVGenerator(*csvPath)
 
@@ -691,9 +781,10 @@ func main() {
 			log.Fatal("CSV generation failed:", err)
 		}
 
-		// Import to database
-		if err := cg.ImportToDatabase(*dbPath); err != nil {
-			log.Fatal("CSV import failed:", err)
+		// Import to Parquet file
+		parquetPath := "../data/events.parquet"
+		if err := cg.ImportToParquet(parquetPath); err != nil {
+			log.Fatal("Parquet import failed:", err)
 		}
 
 	default:
