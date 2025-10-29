@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/mohamedelhefni/siraaj/geolocation"
 	"github.com/mohamedelhefni/siraaj/internal/botdetector"
+	"github.com/mohamedelhefni/siraaj/internal/channeldetector"
 	"github.com/mohamedelhefni/siraaj/internal/domain"
 	"github.com/mohamedelhefni/siraaj/internal/service"
 )
@@ -65,6 +67,10 @@ func (h *EventHandler) TrackEvent(w http.ResponseWriter, r *http.Request) {
 	if event.IsBot {
 		log.Printf("🤖 Bot detected: %s", botdetector.GetBotName(event.UserAgent))
 	}
+
+	// Detect channel from referrer and URL
+	currentDomain := extractDomainFromURL(event.URL)
+	event.Channel = string(channeldetector.DetectChannel(event.Referrer, event.URL, currentDomain))
 
 	if err := h.service.TrackEvent(event); err != nil {
 		log.Printf("Error tracking event: %v", err)
@@ -140,6 +146,14 @@ func (h *EventHandler) TrackBatchEvents(w http.ResponseWriter, r *http.Request) 
 		if batchRequest.Events[i].IsBot {
 			botCount++
 		}
+
+		// Detect channel from referrer and URL
+		currentDomain := extractDomainFromURL(batchRequest.Events[i].URL)
+		batchRequest.Events[i].Channel = string(channeldetector.DetectChannel(
+			batchRequest.Events[i].Referrer,
+			batchRequest.Events[i].URL,
+			currentDomain,
+		))
 	}
 
 	// Track all events in a single batch operation
@@ -428,6 +442,42 @@ func getClientIP(r *http.Request) string {
 	}
 
 	return strings.Split(r.RemoteAddr, ":")[0]
+}
+
+// extractDomainFromURL extracts the domain from a URL string
+func extractDomainFromURL(urlStr string) string {
+	if urlStr == "" {
+		return ""
+	}
+
+	// Handle cases where URL doesn't have a scheme
+	if !strings.HasPrefix(urlStr, "http://") && !strings.HasPrefix(urlStr, "https://") {
+		urlStr = "https://" + urlStr
+	}
+
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return ""
+	}
+
+	return parsedURL.Hostname()
+}
+
+// GetChannelsHandler returns traffic breakdown by channel
+func (h *EventHandler) GetChannelsHandler(w http.ResponseWriter, r *http.Request) {
+	startDate, endDate, _, filters := parseFiltersAndDates(r)
+
+	channels, err := h.service.GetChannels(startDate, endDate, filters)
+	if err != nil {
+		log.Printf("Error getting channels: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(channels); err != nil {
+		log.Printf("Error encoding channels: %v", err)
+	}
 }
 
 // parseFiltersAndDates is a helper to parse common query parameters

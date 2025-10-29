@@ -56,6 +56,21 @@ func (mr *MockEventServiceMockRecorder) GetBrowsersDevicesOS(startDate, endDate,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBrowsersDevicesOS", reflect.TypeOf((*MockEventService)(nil).GetBrowsersDevicesOS), startDate, endDate, limit, filters)
 }
 
+// GetChannels mocks base method.
+func (m *MockEventService) GetChannels(startDate, endDate time.Time, filters map[string]string) ([]map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChannels", startDate, endDate, filters)
+	ret0, _ := ret[0].([]map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetChannels indicates an expected call of GetChannels.
+func (mr *MockEventServiceMockRecorder) GetChannels(startDate, endDate, filters any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChannels", reflect.TypeOf((*MockEventService)(nil).GetChannels), startDate, endDate, filters)
+}
+
 // GetEntryExitPages mocks base method.
 func (m *MockEventService) GetEntryExitPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]any, error) {
 	m.ctrl.T.Helper()

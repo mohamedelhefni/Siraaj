@@ -349,3 +349,20 @@ export async function fetchBrowsersDevicesOS(startDate, endDate, limit = 10, fil
     }
     return response.json();
 }
+
+/**
+ * Fetch channel analytics (traffic source breakdown)
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {Object} filters - Optional filters
+ * @returns {Promise<Array>} Channel breakdown with metrics
+ */
+export async function fetchChannels(startDate, endDate, filters = {}) {
+    const params = buildQueryParams(startDate, endDate, 50, filters);
+
+    const response = await fetch(`${API_BASE_URL}/channels?${params}`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch channels: ${response.statusText}`);
+    }
+    return response.json();
+}

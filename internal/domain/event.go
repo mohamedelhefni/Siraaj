@@ -19,6 +19,7 @@ type Event struct {
 	Device          string    `json:"device"`
 	IsBot           bool      `json:"is_bot"`
 	ProjectID       string    `json:"project_id"`
+	Channel         string    `json:"channel"` // Traffic channel: Direct, Organic, Referral, Social, Paid
 }
 
 type Stats struct {
@@ -63,6 +64,11 @@ type OSStat struct {
 type DeviceStat struct {
 	Device string `json:"device"`
 	Count  int64  `json:"count"`
+}
+
+type ChannelStat struct {
+	Channel string `json:"channel"`
+	Count   int64  `json:"count"`
 }
 
 type TimelineStat struct {

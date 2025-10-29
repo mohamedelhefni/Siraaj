@@ -28,6 +28,7 @@ export interface EventData {
   os: string;
   device: string;
   project_id: string;
+  channel: string;
 }
 
 export interface SessionInfo {

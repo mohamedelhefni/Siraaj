@@ -126,6 +126,7 @@ class AnalyticsCore {
         properties = this.sanitizeProperties(properties);
 
         const deviceInfo = this.getDeviceInfo();
+        const channel = this.detectChannel(document.referrer, window.location.href);
 
         const event: EventData = {
             event_name: eventName,
@@ -140,6 +141,7 @@ class AnalyticsCore {
             os: deviceInfo.os,
             device: deviceInfo.device,
             project_id: this.config.projectId,
+            channel: channel,
             ...properties,
         };
 
@@ -717,6 +719,74 @@ class AnalyticsCore {
         return 'Desktop';
     }
 
+    private detectChannel(referrer: string, url: string): string {
+        // Priority 1: Paid channels (utm_medium or utm_source contains paid/cpc/ppc)
+        const urlLower = url.toLowerCase();
+        const referrerLower = referrer.toLowerCase();
+
+        if (
+            urlLower.includes('utm_medium=cpc') ||
+            urlLower.includes('utm_medium=ppc') ||
+            urlLower.includes('utm_medium=paid') ||
+            urlLower.includes('utm_source=paid') ||
+            urlLower.includes('gclid=') ||
+            urlLower.includes('fbclid=') ||
+            referrerLower.includes('/ads') ||
+            referrerLower.includes('adwords') ||
+            referrerLower.includes('googleads')
+        ) {
+            return 'Paid';
+        }
+
+        // Priority 2: Direct traffic (no referrer or same domain)
+        if (!referrer || referrer === '') {
+            return 'Direct';
+        }
+
+        // Extract domain from referrer
+        try {
+            const referrerUrl = new URL(referrer);
+            const currentUrl = new URL(url);
+
+            if (referrerUrl.hostname === currentUrl.hostname) {
+                return 'Direct';
+            }
+        } catch (e) {
+            // If URL parsing fails, treat as direct
+            return 'Direct';
+        }
+
+        // Priority 3: Social media
+        const socialDomains = [
+            'facebook.com', 'fb.com', 'twitter.com', 't.co', 'linkedin.com',
+            'instagram.com', 'tiktok.com', 'pinterest.com', 'reddit.com',
+            'youtube.com', 'snapchat.com', 'whatsapp.com', 'telegram.org',
+            'vk.com', 'weibo.com', 'tumblr.com', 'discord.com', 'twitch.tv'
+        ];
+
+        for (const domain of socialDomains) {
+            if (referrerLower.includes(domain)) {
+                return 'Social';
+            }
+        }
+
+        // Priority 4: Organic search
+        const searchEngines = [
+            'google.com/search', 'google.', 'bing.com', 'yahoo.com',
+            'duckduckgo.com', 'baidu.com', 'yandex.com', 'ask.com',
+            'aol.com', 'ecosia.org', 'qwant.com', 'startpage.com'
+        ];
+
+        for (const engine of searchEngines) {
+            if (referrerLower.includes(engine)) {
+                return 'Organic';
+            }
+        }
+
+        // Priority 5: Referral (all other external sources)
+        return 'Referral';
+    }
+
     private isDNTEnabled(): boolean {
         if (typeof window === 'undefined') return false;
 
@@ -822,3 +892,4 @@ class AnalyticsCore {
 
 export const analytics = new AnalyticsCore();
 export type { AnalyticsConfig, EventData, DeviceInfo } from './types';
+

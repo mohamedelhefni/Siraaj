@@ -28,6 +28,9 @@ type EventRepository interface {
 	GetTopEvents(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error)
 	GetBrowsersDevicesOS(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error)
 	GetEntryExitPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error)
+
+	// Channel analytics
+	GetChannels(startDate, endDate time.Time, filters map[string]string) ([]map[string]interface{}, error)
 }
 
 type eventRepository struct {
@@ -41,8 +44,8 @@ func NewEventRepository(db *sql.DB) EventRepository {
 func (r *eventRepository) Create(event domain.Event) error {
 	query := `
 		INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration, url, referrer, 
-			user_agent, ip, country, browser, os, device, is_bot, project_id)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			user_agent, ip, country, browser, os, device, is_bot, project_id, channel)
+		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	if event.ProjectID == "" {
@@ -65,6 +68,7 @@ func (r *eventRepository) Create(event domain.Event) error {
 		event.Device,
 		event.IsBot,
 		event.ProjectID,
+		event.Channel,
 	)
 
 	if err != nil {
@@ -91,8 +95,8 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration, url, referrer, 
-			user_agent, ip, country, browser, os, device, is_bot, project_id)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			user_agent, ip, country, browser, os, device, is_bot, project_id, channel)
+		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -124,6 +128,7 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 			event.Device,
 			event.IsBot,
 			event.ProjectID,
+			event.Channel,
 		)
 		if err != nil {
 			log.Printf("Error inserting event in batch: %v", err)
@@ -137,7 +142,7 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 func (r *eventRepository) GetEvents(startDate, endDate time.Time, limit, offset int) (map[string]interface{}, error) {
 	query := `
 		SELECT id, timestamp, event_name, user_id, session_id, session_duration, url, referrer,
-			user_agent, ip, country, browser, os, device, is_bot, project_id
+			user_agent, ip, country, browser, os, device, is_bot, project_id, channel
 		FROM events
 		WHERE timestamp BETWEEN ? AND ?
 		ORDER BY timestamp DESC
@@ -160,7 +165,7 @@ func (r *eventRepository) GetEvents(startDate, endDate time.Time, limit, offset 
 		err := rows.Scan(
 			&e.ID, &e.Timestamp, &e.EventName, &e.UserID, &e.SessionID, &e.SessionDuration,
 			&e.URL, &e.Referrer, &e.UserAgent, &e.IP, &e.Country,
-			&e.Browser, &e.OS, &e.Device, &e.IsBot, &e.ProjectID,
+			&e.Browser, &e.OS, &e.Device, &e.IsBot, &e.ProjectID, &e.Channel,
 		)
 		if err != nil {
 			log.Printf("Error scanning event: %v", err)
@@ -2087,4 +2092,59 @@ func (r *eventRepository) GetBrowsersDevicesOS(startDate, endDate time.Time, lim
 	result["os"] = operatingSystems
 
 	return result, nil
+}
+
+// GetChannels returns traffic breakdown by channel with optional filters
+func (r *eventRepository) GetChannels(startDate, endDate time.Time, filters map[string]string) ([]map[string]interface{}, error) {
+	whereClause, args := buildWhereClause(startDate, endDate, filters)
+
+	query := fmt.Sprintf(`
+		SELECT 
+			COALESCE(channel, 'Unknown') as channel_name,
+			COUNT(*) as total_events,
+			COUNT(DISTINCT user_id) as unique_users,
+			COUNT(DISTINCT session_id) as total_visits,
+			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views
+		FROM events 
+		WHERE %s
+		GROUP BY channel 
+		ORDER BY total_events DESC
+	`, whereClause)
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
+
+	channels := []map[string]interface{}{}
+	for rows.Next() {
+		var channelName string
+		var totalEvents, uniqueUsers, totalVisits, pageViews int64
+		if err := rows.Scan(&channelName, &totalEvents, &uniqueUsers, &totalVisits, &pageViews); err != nil {
+			log.Printf("Error scanning channel row: %v", err)
+			continue
+		}
+
+		// Calculate conversion rate (page views per visit)
+		conversionRate := 0.0
+		if totalVisits > 0 {
+			conversionRate = float64(pageViews) / float64(totalVisits)
+		}
+
+		channels = append(channels, map[string]interface{}{
+			"channel":         channelName,
+			"total_events":    totalEvents,
+			"unique_users":    uniqueUsers,
+			"total_visits":    totalVisits,
+			"page_views":      pageViews,
+			"conversion_rate": conversionRate,
+		})
+	}
+
+	return channels, nil
 }

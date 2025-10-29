@@ -26,6 +26,15 @@
 					📊 Dashboard
 				</a>
 				<a
+					href="/dashboard/channels"
+					class="hover:bg-accent rounded-lg px-3 py-2 text-sm font-medium transition-colors {$page
+						.url.pathname === '/channels'
+						? 'bg-accent'
+						: ''}"
+				>
+					📈 Channels
+				</a>
+				<a
 					href="/dashboard/funnel"
 					class="hover:bg-accent rounded-lg px-3 py-2 text-sm font-medium transition-colors {$page
 						.url.pathname === '/dashboard/funnel'

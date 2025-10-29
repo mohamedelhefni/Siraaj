@@ -151,6 +151,9 @@ func main() {
 	mux.HandleFunc("/api/stats/events", eventHandler.GetTopEventsHandler)
 	mux.HandleFunc("/api/stats/devices", eventHandler.GetBrowsersDevicesOSHandler)
 
+	// Channel analytics
+	mux.HandleFunc("/api/channels", eventHandler.GetChannelsHandler)
+
 	// Debug endpoint to show all events
 	mux.HandleFunc("/api/debug/events", func(w http.ResponseWriter, r *http.Request) {
 		rows, err := db.Query("SELECT id, timestamp, event_name, user_id FROM events ORDER BY timestamp DESC LIMIT 50")

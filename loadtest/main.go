@@ -37,6 +37,7 @@ type Event struct {
 	Device          string    `json:"device"`
 	IsBot           bool      `json:"is_bot"`
 	ProjectID       string    `json:"project_id"`
+	Channel         string    `json:"channel"`
 }
 
 // Sample data for realistic events
@@ -63,6 +64,14 @@ var (
 		"https://linkedin.com", "https://reddit.com", "https://youtube.com",
 		"https://github.com", "https://stackoverflow.com", "https://medium.com",
 		"https://dev.to", "https://hackernews.com", "direct", "email",
+		// Paid channels
+		"https://google.com/ads", "https://facebook.com/ads", "https://twitter.com/ads",
+		"https://linkedin.com/ads", "https://instagram.com/ads",
+		// Organic search
+		"https://www.google.com/search", "https://www.bing.com/search", "https://search.yahoo.com",
+		// Social
+		"https://t.co", "https://www.facebook.com", "https://www.linkedin.com",
+		"https://www.instagram.com", "https://www.tiktok.com",
 	}
 
 	userAgents = []string{
@@ -108,6 +117,88 @@ var (
 	}
 )
 
+// DetectChannel determines the traffic channel based on referrer and URL
+func DetectChannel(referrer, url string) string {
+	// Priority 1: Paid channels (utm_medium or utm_source contains paid/cpc/ppc)
+	if containsAny(url, []string{"utm_medium=cpc", "utm_medium=ppc", "utm_medium=paid", "utm_source=paid"}) ||
+		containsAny(referrer, []string{"/ads", "adwords", "googleads", "facebook.com/ads"}) {
+		return "Paid"
+	}
+
+	// Priority 2: Direct traffic (no referrer or same domain)
+	if referrer == "" || referrer == "direct" {
+		return "Direct"
+	}
+
+	// Priority 3: Social media
+	socialDomains := []string{
+		"facebook.com", "twitter.com", "linkedin.com", "instagram.com",
+		"tiktok.com", "pinterest.com", "reddit.com", "youtube.com",
+		"snapchat.com", "whatsapp.com", "telegram.org", "t.co",
+	}
+	if containsAnyDomain(referrer, socialDomains) {
+		return "Social"
+	}
+
+	// Priority 4: Organic search
+	searchEngines := []string{
+		"google.com/search", "bing.com/search", "yahoo.com/search",
+		"duckduckgo.com", "baidu.com", "yandex.com", "ask.com",
+	}
+	if containsAny(referrer, searchEngines) {
+		return "Organic"
+	}
+
+	// Priority 5: Referral (all other external sources)
+	return "Referral"
+}
+
+// containsAny checks if the text contains any of the substrings
+func containsAny(text string, substrings []string) bool {
+	for _, substr := range substrings {
+		if len(text) >= len(substr) && indexOfSubstring(text, substr) >= 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// containsAnyDomain checks if the referrer URL contains any of the domains
+func containsAnyDomain(referrer string, domains []string) bool {
+	for _, domain := range domains {
+		if indexOfSubstring(referrer, domain) >= 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// indexOfSubstring finds the index of a substring (case-insensitive)
+func indexOfSubstring(s, substr string) int {
+	sLower := toLower(s)
+	substrLower := toLower(substr)
+	for i := 0; i <= len(sLower)-len(substrLower); i++ {
+		if sLower[i:i+len(substrLower)] == substrLower {
+			return i
+		}
+	}
+	return -1
+}
+
+// toLower converts a string to lowercase
+func toLower(s string) string {
+	result := make([]byte, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'A' && c <= 'Z' {
+			result[i] = c + 32
+		} else {
+			result[i] = c
+		}
+	}
+	return string(result)
+}
+
 // GenerateRandomEvent creates a realistic random event
 func GenerateRandomEvent(baseTime time.Time, userPool []string, projectID string) Event {
 	// Random timestamp within the last 30 days
@@ -146,6 +237,9 @@ func GenerateRandomEvent(baseTime time.Time, userPool []string, projectID string
 	ipBase := ipRanges[rand.Intn(len(ipRanges))]
 	ip := fmt.Sprintf("%s.%d", ipBase, rand.Intn(255)+1)
 
+	// Detect channel based on referrer and URL
+	channel := DetectChannel(referrer, url)
+
 	return Event{
 		Timestamp:       timestamp,
 		EventName:       eventName,
@@ -162,6 +256,7 @@ func GenerateRandomEvent(baseTime time.Time, userPool []string, projectID string
 		Device:          device,
 		IsBot:           isBot,
 		ProjectID:       projectID,
+		Channel:         channel,
 	}
 }
 
@@ -201,8 +296,8 @@ func (lt *DBLoadTester) InsertEventsBatch(events []Event) error {
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration,
-			url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id, channel)
+		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -226,6 +321,7 @@ func (lt *DBLoadTester) InsertEventsBatch(events []Event) error {
 			event.Device,
 			event.IsBot,
 			event.ProjectID,
+			event.Channel,
 		)
 		if err != nil {
 			return err
@@ -437,7 +533,7 @@ func NewCSVGenerator(filepath string) *CSVGenerator {
 
 func (cg *CSVGenerator) GenerateCSV(totalEvents int, numUsers int, projectID string) error {
 	log.Printf("📝 Generating CSV file: %s with %d events", cg.filepath, totalEvents)
-	
+
 	file, err := os.Create(cg.filepath)
 	if err != nil {
 		return fmt.Errorf("failed to create CSV file: %w", err)
@@ -450,7 +546,7 @@ func (cg *CSVGenerator) GenerateCSV(totalEvents int, numUsers int, projectID str
 	// Write CSV header
 	header := []string{
 		"timestamp", "event_name", "user_id", "session_id", "session_duration",
-		"url", "referrer", "user_agent", "ip", "country", "browser", "os", "device", "is_bot", "project_id",
+		"url", "referrer", "user_agent", "ip", "country", "browser", "os", "device", "is_bot", "project_id", "channel",
 	}
 	if err := writer.Write(header); err != nil {
 		return fmt.Errorf("failed to write CSV header: %w", err)
@@ -463,10 +559,10 @@ func (cg *CSVGenerator) GenerateCSV(totalEvents int, numUsers int, projectID str
 
 	baseTime := time.Now()
 	start := time.Now()
-	
+
 	for i := 0; i < totalEvents; i++ {
 		event := GenerateRandomEvent(baseTime, userPool, projectID)
-		
+
 		record := []string{
 			event.Timestamp.Format(time.RFC3339),
 			event.EventName,
@@ -483,12 +579,13 @@ func (cg *CSVGenerator) GenerateCSV(totalEvents int, numUsers int, projectID str
 			event.Device,
 			fmt.Sprintf("%t", event.IsBot),
 			event.ProjectID,
+			event.Channel,
 		}
-		
+
 		if err := writer.Write(record); err != nil {
 			return fmt.Errorf("failed to write CSV record: %w", err)
 		}
-		
+
 		if (i+1)%100000 == 0 {
 			elapsed := time.Since(start)
 			rate := float64(i+1) / elapsed.Seconds()
@@ -498,18 +595,18 @@ func (cg *CSVGenerator) GenerateCSV(totalEvents int, numUsers int, projectID str
 
 	duration := time.Since(start)
 	rate := float64(totalEvents) / duration.Seconds()
-	
+
 	log.Printf("✅ CSV generation completed!")
 	log.Printf("📈 Total events: %d", totalEvents)
 	log.Printf("⏱️  Total time: %v", duration)
 	log.Printf("🚄 Average rate: %.0f events/sec", rate)
-	
+
 	return nil
 }
 
 func (cg *CSVGenerator) ImportToDatabase(dbPath string) error {
 	log.Printf("📥 Importing CSV file %s to database %s", cg.filepath, dbPath)
-	
+
 	db, err := sql.Open("duckdb", dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
@@ -517,24 +614,24 @@ func (cg *CSVGenerator) ImportToDatabase(dbPath string) error {
 	defer db.Close()
 
 	start := time.Now()
-	
+
 	// Import CSV using DuckDB's INSERT INTO ... SELECT FROM read_csv_auto
 	// Use nextval('id_sequence') for auto-incrementing IDs
 	query := fmt.Sprintf(`
-		INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration, url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id)
-		SELECT nextval('id_sequence'), timestamp::TIMESTAMP, event_name, user_id, session_id, session_duration::INTEGER, url, referrer, user_agent, ip, country, browser, os, device, is_bot::BOOLEAN, project_id
+		INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration, url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id, channel)
+		SELECT nextval('id_sequence'), timestamp::TIMESTAMP, event_name, user_id, session_id, session_duration::INTEGER, url, referrer, user_agent, ip, country, browser, os, device, is_bot::BOOLEAN, project_id, channel
 		FROM read_csv_auto('%s', header=true)
 	`, cg.filepath)
-	
+
 	_, err = db.Exec(query)
 	if err != nil {
 		return fmt.Errorf("failed to import CSV: %w", err)
 	}
-	
+
 	duration := time.Since(start)
-	
+
 	log.Printf("✅ CSV import completed in %v", duration)
-	
+
 	return nil
 }
 
@@ -586,14 +683,14 @@ func main() {
 	case "csv":
 		log.Printf("  CSV Path: %s", *csvPath)
 		log.Printf("  Database: %s", *dbPath)
-		
+
 		cg := NewCSVGenerator(*csvPath)
-		
+
 		// Generate CSV
 		if err := cg.GenerateCSV(*events, *users, *projectID); err != nil {
 			log.Fatal("CSV generation failed:", err)
 		}
-		
+
 		// Import to database
 		if err := cg.ImportToDatabase(*dbPath); err != nil {
 			log.Fatal("CSV import failed:", err)

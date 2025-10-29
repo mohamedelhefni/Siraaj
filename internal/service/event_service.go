@@ -25,6 +25,9 @@ type EventService interface {
 	GetTopEvents(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error)
 	GetBrowsersDevicesOS(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error)
 	GetEntryExitPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error)
+
+	// Channel analytics
+	GetChannels(startDate, endDate time.Time, filters map[string]string) ([]map[string]interface{}, error)
 }
 
 type eventService struct {
@@ -102,4 +105,8 @@ func (s *eventService) GetBrowsersDevicesOS(startDate, endDate time.Time, limit 
 
 func (s *eventService) GetEntryExitPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error) {
 	return s.repo.GetEntryExitPages(startDate, endDate, limit, filters)
+}
+
+func (s *eventService) GetChannels(startDate, endDate time.Time, filters map[string]string) ([]map[string]interface{}, error) {
+	return s.repo.GetChannels(startDate, endDate, filters)
 }

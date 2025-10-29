@@ -100,6 +100,55 @@ var migrations = []Migration{
 		DROP INDEX IF EXISTS idx_timestamp_url;
 		DROP INDEX IF EXISTS idx_timestamp_country`,
 	},
+	{
+		Version:     7,
+		Description: "Add additional performance indexes for analytics queries",
+		Up: `-- Composite index for bot filtering with timestamp
+		CREATE INDEX IF NOT EXISTS idx_timestamp_is_bot ON events(timestamp DESC, is_bot);
+		
+		-- Composite index for browser analytics
+		CREATE INDEX IF NOT EXISTS idx_timestamp_browser ON events(timestamp DESC, browser);
+		
+		-- Composite index for device analytics
+		CREATE INDEX IF NOT EXISTS idx_timestamp_device ON events(timestamp DESC, device);
+		
+		-- Composite index for OS analytics
+		CREATE INDEX IF NOT EXISTS idx_timestamp_os ON events(timestamp DESC, os);
+		
+		-- Composite index for referrer/source analytics
+		CREATE INDEX IF NOT EXISTS idx_timestamp_referrer ON events(timestamp DESC, referrer);
+		
+		-- Covering index for page view queries (includes all necessary columns)
+		CREATE INDEX IF NOT EXISTS idx_pageview_covering ON events(timestamp DESC, event_name, session_id, is_bot);
+		
+		-- Index for session duration analytics
+		CREATE INDEX IF NOT EXISTS idx_session_duration ON events(session_duration);`,
+		Down: `DROP INDEX IF EXISTS idx_timestamp_is_bot;
+		DROP INDEX IF EXISTS idx_timestamp_browser;
+		DROP INDEX IF EXISTS idx_timestamp_device;
+		DROP INDEX IF EXISTS idx_timestamp_os;
+		DROP INDEX IF EXISTS idx_timestamp_referrer;
+		DROP INDEX IF EXISTS idx_pageview_covering;
+		DROP INDEX IF EXISTS idx_session_duration`,
+	},
+	{
+		Version:     8,
+		Description: "Add channel column to events table",
+		Up:          `ALTER TABLE events ADD COLUMN IF NOT EXISTS channel VARCHAR`,
+		Down:        `ALTER TABLE events DROP COLUMN IF EXISTS channel`,
+	},
+	{
+		Version:     9,
+		Description: "Create index on channel column",
+		Up:          `CREATE INDEX IF NOT EXISTS idx_channel ON events(channel)`,
+		Down:        `DROP INDEX IF EXISTS idx_channel`,
+	},
+	{
+		Version:     10,
+		Description: "Create composite index for channel analytics",
+		Up:          `CREATE INDEX IF NOT EXISTS idx_timestamp_channel ON events(timestamp DESC, channel)`,
+		Down:        `DROP INDEX IF EXISTS idx_timestamp_channel`,
+	},
 }
 
 func initMigrationTable(db *sql.DB) error {
