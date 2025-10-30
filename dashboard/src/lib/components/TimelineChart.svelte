@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import * as d3 from 'd3';
 	import { Button } from '$lib/components/ui/button';
 	import { Eye, EyeOff } from 'lucide-svelte';
@@ -75,22 +75,41 @@
 		}
 	}
 
+	let tooltipElement = $state(null);
+	let cleanupTooltip = $state(null);
+
 	function drawChart() {
 		if (!svgElement || !chartContainer || data.length === 0) return;
 
-		// Clear previous chart
-		d3.select(svgElement).selectAll('*').remove();
+		// Remove old tooltip if it exists
+		if (cleanupTooltip) {
+			cleanupTooltip();
+			cleanupTooltip = null;
+		}
+
+		const isFirstDraw = d3.select(svgElement).selectAll('g').empty();
+
+		// Only clear on first draw, otherwise update
+		if (isFirstDraw) {
+			d3.select(svgElement).selectAll('*').remove();
+		}
 
 		const margin = { top: 20, right: 30, bottom: 30, left: 50 };
 		const width = chartContainer.clientWidth - margin.left - margin.right;
 		const height = 300 - margin.top - margin.bottom;
 
-		const svg = d3
+		const svgSelection = d3
 			.select(svgElement)
 			.attr('width', width + margin.left + margin.right)
-			.attr('height', height + margin.top + margin.bottom)
-			.append('g')
-			.attr('transform', `translate(${margin.left},${margin.top})`);
+			.attr('height', height + margin.top + margin.bottom);
+
+		let svg = svgSelection.select('g.chart-group');
+		if (svg.empty()) {
+			svg = svgSelection
+				.append('g')
+				.attr('class', 'chart-group')
+				.attr('transform', `translate(${margin.left},${margin.top})`);
+		}
 
 		// Parse dates and prepare data
 		const parsedData = data.map((d) => ({
@@ -135,10 +154,18 @@
 			.y1((d) => y(d.count))
 			.curve(d3.curveMonotoneX);
 
-		// Add X axis
-		svg
+		// Update or create X axis
+		const xAxisGroup = svg.selectAll('.x-axis').data([null]);
+		const xAxisEnter = xAxisGroup
+			.enter()
 			.append('g')
-			.attr('transform', `translate(0,${height})`)
+			.attr('class', 'x-axis')
+			.attr('transform', `translate(0,${height})`);
+
+		xAxisGroup
+			.merge(xAxisEnter)
+			.transition()
+			.duration(isFirstDraw ? 0 : 500)
 			.call(
 				d3
 					.axisBottom(x)
@@ -149,7 +176,7 @@
 			.style('font-size', '12px')
 			.style('fill', '#6b7280');
 
-		// Add Y axis
+		// Update or create Y axis
 		const yAxis = d3.axisLeft(y).ticks(5);
 
 		// Format Y axis based on metric type
@@ -167,46 +194,64 @@
 			yAxis.tickFormat((d) => formatCompactNumber(d));
 		}
 
-		svg
-			.append('g')
+		const yAxisGroup = svg.selectAll('.y-axis').data([null]);
+		const yAxisEnter = yAxisGroup.enter().append('g').attr('class', 'y-axis');
+
+		yAxisGroup
+			.merge(yAxisEnter)
+			.transition()
+			.duration(isFirstDraw ? 0 : 500)
 			.call(yAxis)
 			.selectAll('text')
 			.style('font-size', '12px')
 			.style('fill', '#6b7280');
 
-		// Add grid lines
-		svg
-			.append('g')
-			.attr('class', 'grid')
-			.attr('opacity', 0.1)
+		// Update or create grid lines
+		const gridGroup = svg.selectAll('.grid').data([null]);
+		const gridEnter = gridGroup.enter().append('g').attr('class', 'grid').attr('opacity', 0.1);
+
+		gridGroup
+			.merge(gridEnter)
+			.transition()
+			.duration(isFirstDraw ? 0 : 500)
 			.call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
 
-		// Define linear gradient for area fill
-		const gradient = svg
-			.append('defs')
-			.append('linearGradient')
-			.attr('id', 'area-gradient')
-			.attr('x1', '0%')
-			.attr('x2', '0%')
-			.attr('y1', '0%')
-			.attr('y2', '100%');
+		// Define linear gradient for area fill (only once)
+		let defs = svgSelection.select('defs');
+		if (defs.empty()) {
+			defs = svgSelection.append('defs');
+		}
 
-		gradient
-			.append('stop')
-			.attr('offset', '0%')
-			.attr('stop-color', 'rgb(99, 102, 241)')
-			.attr('stop-opacity', 0.1);
+		let gradient = defs.select('#area-gradient');
+		if (gradient.empty()) {
+			gradient = defs
+				.append('linearGradient')
+				.attr('id', 'area-gradient')
+				.attr('x1', '0%')
+				.attr('x2', '0%')
+				.attr('y1', '0%')
+				.attr('y2', '100%');
 
-		gradient
-			.append('stop')
-			.attr('offset', '100%')
-			.attr('stop-color', 'rgb(99, 102, 241)')
-			.attr('stop-opacity', 0);
+			gradient
+				.append('stop')
+				.attr('offset', '0%')
+				.attr('stop-color', 'rgb(99, 102, 241)')
+				.attr('stop-opacity', 0.1);
 
-		// Add area with animation and gradient
-		svg
+			gradient
+				.append('stop')
+				.attr('offset', '100%')
+				.attr('stop-color', 'rgb(99, 102, 241)')
+				.attr('stop-opacity', 0);
+		}
+
+		// Update or create area with smooth transition
+		const areaPath = svg.selectAll('.area-path').data([parsedData]);
+
+		areaPath
+			.enter()
 			.append('path')
-			.datum(parsedData)
+			.attr('class', 'area-path')
 			.attr('fill', 'url(#area-gradient)')
 			.attr('d', area)
 			.style('opacity', 0)
@@ -215,24 +260,47 @@
 			.ease(d3.easeQuadInOut)
 			.style('opacity', 1);
 
-		// Add line with animation
-		const path = svg
+		areaPath
+			.transition()
+			.duration(isFirstDraw ? 0 : 750)
+			.ease(d3.easeQuadInOut)
+			.attr('d', area);
+
+		areaPath.exit().transition().duration(300).style('opacity', 0).remove();
+
+		// Update or create main line with smooth transition
+		const mainPath = svg.selectAll('.main-line').data([parsedData]);
+
+		const mainPathEnter = mainPath
+			.enter()
 			.append('path')
-			.datum(parsedData)
+			.attr('class', 'main-line')
 			.attr('fill', 'none')
 			.attr('stroke', 'rgb(99, 102, 241)')
 			.attr('stroke-width', 2)
 			.attr('d', line);
 
-		const totalLength = path.node().getTotalLength();
+		if (isFirstDraw) {
+			const totalLength = mainPathEnter.node()?.getTotalLength() || 0;
+			mainPathEnter
+				.attr('stroke-dasharray', totalLength + ' ' + totalLength)
+				.attr('stroke-dashoffset', totalLength)
+				.transition()
+				.duration(750)
+				.ease(d3.easeQuadInOut)
+				.attr('stroke-dashoffset', 0)
+				.on('end', function () {
+					d3.select(this).attr('stroke-dasharray', null);
+				});
+		}
 
-		path
-			.attr('stroke-dasharray', totalLength + ' ' + totalLength)
-			.attr('stroke-dashoffset', totalLength)
+		mainPath
 			.transition()
-			.duration(750)
+			.duration(isFirstDraw ? 0 : 750)
 			.ease(d3.easeQuadInOut)
-			.attr('stroke-dashoffset', 0);
+			.attr('d', line);
+
+		mainPath.exit().transition().duration(300).style('opacity', 0).remove();
 
 		// Add comparison line (dotted, previous period)
 		if (showComparison && parsedComparisonData.length > 0) {
@@ -250,31 +318,46 @@
 				.y((d) => y(d.count))
 				.curve(d3.curveMonotoneX);
 
-			const comparisonPath = svg
+			// Update or create comparison line
+			const compPath = svg.selectAll('.comparison-line').data([alignedComparisonData]);
+
+			const compPathEnter = compPath
+				.enter()
 				.append('path')
-				.datum(alignedComparisonData)
+				.attr('class', 'comparison-line')
 				.attr('fill', 'none')
-				.attr('stroke', 'rgb(156, 163, 175)') // gray-400
+				.attr('stroke', 'rgb(156, 163, 175)')
 				.attr('stroke-width', 2)
-				.attr('stroke-dasharray', '5,5') // dotted line
+				.attr('stroke-dasharray', '5,5')
 				.attr('opacity', 0.6)
 				.attr('d', comparisonLine);
 
-			const comparisonLength = comparisonPath.node().getTotalLength();
+			if (isFirstDraw) {
+				const comparisonLength = compPathEnter.node()?.getTotalLength() || 0;
+				compPathEnter
+					.attr('stroke-dasharray', comparisonLength + ' ' + comparisonLength)
+					.attr('stroke-dashoffset', comparisonLength)
+					.transition()
+					.duration(750)
+					.ease(d3.easeQuadInOut)
+					.attr('stroke-dashoffset', 0)
+					.on('end', function () {
+						d3.select(this).attr('stroke-dasharray', '5,5');
+					});
+			}
 
-			comparisonPath
-				.attr('stroke-dasharray', comparisonLength + ' ' + comparisonLength)
-				.attr('stroke-dashoffset', comparisonLength)
+			compPath
 				.transition()
-				.duration(750)
+				.duration(isFirstDraw ? 0 : 750)
 				.ease(d3.easeQuadInOut)
-				.attr('stroke-dashoffset', 0)
-				.attr('stroke-dasharray', '5,5'); // Reset to dotted after animation
+				.attr('d', comparisonLine);
 
-			// Add comparison dots
-			const comparisonDots = svg
-				.selectAll('.comparison-dot')
-				.data(alignedComparisonData)
+			compPath.exit().transition().duration(300).style('opacity', 0).remove();
+
+			// Update or create comparison dots
+			const comparisonDots = svg.selectAll('.comparison-dot').data(alignedComparisonData);
+
+			comparisonDots
 				.enter()
 				.append('circle')
 				.attr('class', 'comparison-dot')
@@ -283,118 +366,148 @@
 				.attr('r', 0)
 				.attr('fill', 'rgb(156, 163, 175)')
 				.attr('opacity', 0.6)
-				.style('cursor', 'pointer');
+				.style('cursor', 'pointer')
+				.on('mouseover', function (event, d) {
+					d3.select(this).transition().duration(200).attr('r', 5);
 
-			comparisonDots
+					if (tooltipElement) {
+						d3.select(tooltipElement).transition().duration(200).style('opacity', 1);
+
+						d3.select(tooltipElement)
+							.html(
+								`<strong>Previous Period</strong><br/>${formatTooltipDate(d.originalDate.toISOString())}<br/>${metricLabels[metric] || 'Count'}: <strong>${formatCount(d.count, metric)}</strong>`
+							)
+							.style('left', event.pageX + 10 + 'px')
+							.style('top', event.pageY - 10 + 'px');
+					}
+				})
+				.on('mouseout', function () {
+					d3.select(this).transition().duration(200).attr('r', 3);
+
+					if (tooltipElement) {
+						d3.select(tooltipElement).transition().duration(200).style('opacity', 0);
+					}
+				})
 				.transition()
 				.delay((d, i) => i * 50)
 				.duration(300)
 				.attr('r', 3);
 
-			// Add hover effects f0or comparison dots
 			comparisonDots
-				.on('mouseover', function (event, d) {
-					d3.select(this).transition().duration(200).attr('r', 5);
+				.transition()
+				.duration(isFirstDraw ? 0 : 500)
+				.attr('cx', (d) => x(d.date))
+				.attr('cy', (d) => y(d.count));
 
-					tooltip.transition().duration(200).style('opacity', 1);
-
-					tooltip
-						.html(
-							`<strong>Previous Period</strong><br/>${formatTooltipDate(d.originalDate.toISOString())}<br/>${metricLabels[metric] || 'Count'}: <strong>${formatCount(d.count, metric)}</strong>`
-						)
-						.style('left', event.pageX + 10 + 'px')
-						.style('top', event.pageY - 10 + 'px');
-				})
-				.on('mouseout', function () {
-					d3.select(this).transition().duration(200).attr('r', 3);
-
-					tooltip.transition().duration(200).style('opacity', 0);
-				});
+			comparisonDots.exit().transition().duration(200).attr('r', 0).remove();
+		} else {
+			// Remove comparison elements if not showing
+			svg.selectAll('.comparison-line').transition().duration(300).style('opacity', 0).remove();
+			svg.selectAll('.comparison-dot').transition().duration(200).attr('r', 0).remove();
 		}
 
-		// Add dots
-		const dots = svg
-			.selectAll('.dot')
-			.data(parsedData)
+		// Update or create main data dots
+		const dots = svg.selectAll('.main-dot').data(parsedData);
+
+		dots
 			.enter()
 			.append('circle')
-			.attr('class', 'dot')
+			.attr('class', 'main-dot')
 			.attr('cx', (d) => x(d.date))
 			.attr('cy', (d) => y(d.count))
 			.attr('r', 0)
 			.attr('fill', 'rgb(99, 102, 241)')
-			.style('cursor', 'pointer');
+			.style('cursor', 'pointer')
+			.on('mouseover', function (event, d) {
+				d3.select(this).transition().duration(200).attr('r', 6);
 
-		dots
+				if (tooltipElement) {
+					d3.select(tooltipElement).transition().duration(200).style('opacity', 1);
+
+					d3.select(tooltipElement)
+						.html(
+							`<strong>${formatTooltipDate(d.date.toISOString())}</strong><br/>${metricLabels[metric] || 'Count'}: <strong>${formatCount(d.count, metric)}</strong>`
+						)
+						.style('left', event.pageX + 10 + 'px')
+						.style('top', event.pageY - 10 + 'px');
+				}
+			})
+			.on('mouseout', function () {
+				d3.select(this).transition().duration(200).attr('r', 4);
+
+				if (tooltipElement) {
+					d3.select(tooltipElement).transition().duration(200).style('opacity', 0);
+				}
+			})
 			.transition()
 			.delay((d, i) => i * 50)
 			.duration(300)
 			.attr('r', 4);
 
-		// Create tooltip
-		const tooltip = d3
-			.select('body')
-			.append('div')
-			.attr('class', 'chart-tooltip')
-			.style('position', 'absolute')
-			.style('background', 'transparent')
-			.style('padding', '0')
-			.style('border-radius', '0')
-			.style('font-size', '14px')
-			.style('pointer-events', 'none')
-			.style('opacity', 0)
-			.style('z-index', '1000')
-			.style('transition', 'opacity 0.1s ease');
-
-		// Add hover effects
 		dots
-			.on('mouseover', function (event, d) {
-				d3.select(this).transition().duration(200).attr('r', 6);
+			.transition()
+			.duration(isFirstDraw ? 0 : 500)
+			.attr('cx', (d) => x(d.date))
+			.attr('cy', (d) => y(d.count));
 
-				tooltip.transition().duration(200).style('opacity', 1);
+		dots.exit().transition().duration(200).attr('r', 0).remove();
 
-				tooltip
-					.html(
-						`<strong>${formatTooltipDate(d.date.toISOString())}</strong><br/>${metricLabels[metric] || 'Count'}: <strong>${formatCount(d.count, metric)}</strong>`
-					)
-					.style('left', event.pageX + 10 + 'px')
-					.style('top', event.pageY - 10 + 'px');
-			})
-			.on('mouseout', function () {
-				d3.select(this).transition().duration(200).attr('r', 4);
-
-				tooltip.transition().duration(200).style('opacity', 0);
-			});
+		// Create or reuse tooltip (only once)
+		if (!tooltipElement) {
+			tooltipElement = d3
+				.select('body')
+				.append('div')
+				.attr('class', 'chart-tooltip')
+				.style('position', 'absolute')
+				.style('background', 'transparent')
+				.style('padding', '0')
+				.style('border-radius', '0')
+				.style('font-size', '14px')
+				.style('pointer-events', 'none')
+				.style('opacity', 0)
+				.style('z-index', '1000')
+				.style('transition', 'opacity 0.1s ease')
+				.node();
+		}
 
 		// Add invisible overlay for hover-anywhere tooltip
 		const bisect = d3.bisector((d) => d.date).left;
 
-		// Create vertical line and circles for hover indicator
-		const hoverLine = svg
-			.append('line')
-			.attr('class', 'hover-line')
-			.attr('stroke', '#9ca3af')
-			.attr('stroke-width', 1)
-			.attr('stroke-dasharray', '3,3')
-			.attr('opacity', 0);
+		// Create vertical line and circles for hover indicator (only once)
+		let hoverLine = svg.select('.hover-line');
+		if (hoverLine.empty()) {
+			hoverLine = svg
+				.append('line')
+				.attr('class', 'hover-line')
+				.attr('stroke', '#9ca3af')
+				.attr('stroke-width', 1)
+				.attr('stroke-dasharray', '3,3')
+				.attr('opacity', 0);
+		}
 
-		const hoverCircleCurrent = svg
-			.append('circle')
-			.attr('class', 'hover-circle-current')
-			.attr('r', 5)
-			.attr('fill', 'rgb(99, 102, 241)')
-			.attr('stroke', 'white')
-			.attr('stroke-width', 2)
-			.attr('opacity', 0);
+		let hoverCircleCurrent = svg.select('.hover-circle-current');
+		if (hoverCircleCurrent.empty()) {
+			hoverCircleCurrent = svg
+				.append('circle')
+				.attr('class', 'hover-circle-current')
+				.attr('r', 5)
+				.attr('fill', 'rgb(99, 102, 241)')
+				.attr('stroke', 'white')
+				.attr('stroke-width', 2)
+				.attr('opacity', 0);
+		}
 
-		const hoverCirclePrev = svg
-			.append('circle')
-			.attr('class', 'hover-circle-prev')
-			.attr('r', 5)
-			.attr('fill', 'rgb(156, 163, 175)')
-			.attr('stroke', 'white')
-			.attr('stroke-width', 2)
-			.attr('opacity', 0);
+		let hoverCirclePrev = svg.select('.hover-circle-prev');
+		if (hoverCirclePrev.empty()) {
+			hoverCirclePrev = svg
+				.append('circle')
+				.attr('class', 'hover-circle-prev')
+				.attr('r', 5)
+				.attr('fill', 'rgb(156, 163, 175)')
+				.attr('stroke', 'white')
+				.attr('stroke-width', 2)
+				.attr('opacity', 0);
+		}
 
 		// Align comparison data for lookup
 		let alignedComparisonLookup = new Map();
@@ -410,14 +523,20 @@
 			});
 		}
 
-		svg
-			.append('rect')
-			.attr('class', 'overlay')
+		// Update or create overlay for hover
+		let overlay = svg.select('.hover-overlay');
+		if (overlay.empty()) {
+			overlay = svg
+				.append('rect')
+				.attr('class', 'hover-overlay')
+				.attr('fill', 'none')
+				.attr('pointer-events', 'all')
+				.style('cursor', 'crosshair');
+		}
+
+		overlay
 			.attr('width', width)
 			.attr('height', height)
-			.attr('fill', 'none')
-			.attr('pointer-events', 'all')
-			.style('cursor', 'crosshair')
 			.on('mousemove', function (event) {
 				const [mouseX] = d3.pointer(event);
 				const xDate = x.invert(mouseX);
@@ -502,28 +621,33 @@
 					</div>
 				`;
 
-				tooltip.transition().duration(100).style('opacity', 1);
-				tooltip
-					.html(tooltipHTML)
-					.style('left', event.pageX + 15 + 'px')
-					.style('top', event.pageY - 15 + 'px');
+				if (tooltipElement) {
+					d3.select(tooltipElement).transition().duration(100).style('opacity', 1);
+					d3.select(tooltipElement)
+						.html(tooltipHTML)
+						.style('left', event.pageX + 15 + 'px')
+						.style('top', event.pageY - 15 + 'px');
+				}
 			})
 			.on('mouseout', function () {
 				hoverLine.attr('opacity', 0);
 				hoverCircleCurrent.attr('opacity', 0);
 				hoverCirclePrev.attr('opacity', 0);
-				tooltip.transition().duration(200).style('opacity', 0);
+				if (tooltipElement) {
+					d3.select(tooltipElement).transition().duration(200).style('opacity', 0);
+				}
 			});
 
-		// Cleanup tooltip on destroy
-		return () => {
-			tooltip.remove();
+		// Cleanup function for tooltip
+		cleanupTooltip = () => {
+			if (tooltipElement) {
+				d3.select(tooltipElement).remove();
+				tooltipElement = null;
+			}
 		};
 	}
 
 	onMount(() => {
-		const cleanup = drawChart();
-
 		// Handle window resize
 		const handleResize = () => {
 			drawChart();
@@ -533,21 +657,25 @@
 
 		return () => {
 			window.removeEventListener('resize', handleResize);
-			if (cleanup) cleanup();
+			if (cleanupTooltip) {
+				cleanupTooltip();
+			}
 		};
 	});
 
+	// Watch for changes and redraw when necessary
 	$effect(() => {
-		// Redraw when data or metric changes
-		if (data && metric) {
-			drawChart();
-		}
-	});
+		// Track the dependencies
+		data;
+		comparisonData;
+		metric;
+		showComparison;
 
-	$effect(() => {
-		// Redraw when showComparison changes
-		if (showComparison !== undefined) {
-			drawChart();
+		// Only redraw if we have a container and data, using untrack to prevent infinite loops
+		if (chartContainer && data.length > 0) {
+			untrack(() => {
+				drawChart();
+			});
 		}
 	});
 </script>

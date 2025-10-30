@@ -7,6 +7,7 @@
 
 	let chartContainer: HTMLDivElement;
 	let tooltip: HTMLDivElement;
+	let tooltipCleanup: (() => void) | null = null;
 
 	// Channel colors - modern palette
 	const channelColors: Record<string, string> = {
@@ -46,21 +47,38 @@
 	function drawBarChart() {
 		if (!chartContainer || data.length === 0) return;
 
-		// Clear previous chart
-		d3.select(chartContainer).selectAll('*').remove();
+		const isFirstDraw = d3.select(chartContainer).selectAll('svg').empty();
+
+		// Only clear on first draw
+		if (isFirstDraw) {
+			d3.select(chartContainer).selectAll('*').remove();
+		}
 
 		const margin = { top: 20, right: 20, bottom: 80, left: 100 };
 		const width = chartContainer.clientWidth - margin.left - margin.right;
 		const height = 400 - margin.top - margin.bottom;
 
-		const svg = d3
-			.select(chartContainer)
-			.append('svg')
-			.attr('width', width + margin.left + margin.right)
-			.attr('height', height + margin.top + margin.bottom)
-			.style('background', 'transparent');
+		let svg = d3.select(chartContainer).select('svg');
+		if (svg.empty()) {
+			svg = d3
+				.select(chartContainer)
+				.append('svg')
+				.attr('width', width + margin.left + margin.right)
+				.attr('height', height + margin.top + margin.bottom)
+				.style('background', 'transparent');
+		} else {
+			svg
+				.attr('width', width + margin.left + margin.right)
+				.attr('height', height + margin.top + margin.bottom);
+		}
 
-		const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+		let g = svg.select('g.chart-group');
+		if (g.empty()) {
+			g = svg
+				.append('g')
+				.attr('class', 'chart-group')
+				.attr('transform', `translate(${margin.left},${margin.top})`);
+		}
 
 		// X scale
 		const x = d3
@@ -76,22 +94,36 @@
 			.domain([0, maxValue * 1.1])
 			.range([height, 0]);
 
-		// Add subtle horizontal grid lines
-		g.selectAll('.grid-line')
-			.data(y.ticks(5))
-			.join('line')
+		// Update or create grid lines
+		const gridLines = g.selectAll('.grid-line').data(y.ticks(5));
+
+		gridLines
+			.enter()
+			.append('line')
 			.attr('class', 'grid-line')
+			.attr('stroke', '#f1f5f9')
+			.attr('stroke-width', 1)
+			.attr('opacity', 0.6)
+			.merge(gridLines)
+			.transition()
+			.duration(isFirstDraw ? 0 : 500)
 			.attr('x1', 0)
 			.attr('x2', width)
 			.attr('y1', (d) => y(d))
-			.attr('y2', (d) => y(d))
-			.attr('stroke', '#f1f5f9')
-			.attr('stroke-width', 1)
-			.attr('opacity', 0.6);
+			.attr('y2', (d) => y(d));
 
-		// X axis - minimal styling
-		g.append('g')
+		gridLines.exit().remove();
+
+		// Update or create X axis
+		const xAxisGroup = g.selectAll('.x-axis').data([null]);
+		xAxisGroup
+			.enter()
+			.append('g')
+			.attr('class', 'x-axis')
+			.merge(xAxisGroup)
 			.attr('transform', `translate(0,${height})`)
+			.transition()
+			.duration(isFirstDraw ? 0 : 500)
 			.call(d3.axisBottom(x).tickSize(0))
 			.selectAll('text')
 			.attr('transform', 'rotate(-45)')
@@ -100,8 +132,15 @@
 			.style('font-weight', '500')
 			.style('fill', '#64748b');
 
-		// Y axis - minimal styling
-		g.append('g')
+		// Update or create Y axis
+		const yAxisGroup = g.selectAll('.y-axis').data([null]);
+		yAxisGroup
+			.enter()
+			.append('g')
+			.attr('class', 'y-axis')
+			.merge(yAxisGroup)
+			.transition()
+			.duration(isFirstDraw ? 0 : 500)
 			.call(
 				d3
 					.axisLeft(y)
@@ -117,17 +156,20 @@
 		// Remove axis lines for flat design
 		g.selectAll('.domain').remove();
 
-		// Flat bars with no strokes or gradients
-		g.selectAll('.bar')
-			.data(data)
-			.join('rect')
+		// Update or create bars with smooth transition
+		const bars = g.selectAll('.bar').data(data, (d: any) => d.channel);
+
+		// Enter new bars
+		bars
+			.enter()
+			.append('rect')
 			.attr('class', 'bar')
 			.attr('x', (d) => x(d.channel || 'Unknown') || 0)
 			.attr('y', height)
 			.attr('width', x.bandwidth())
 			.attr('height', 0)
 			.attr('fill', (d) => getChannelColor(d.channel || 'Unknown'))
-			.attr('rx', 4) // Slight rounded corners
+			.attr('rx', 4)
 			.style('cursor', 'pointer')
 			.style('opacity', 0.9)
 			.on('mouseenter', function (event, d) {
@@ -147,16 +189,31 @@
 					.attr('transform', 'translateY(0px)');
 				hideTooltip();
 			})
+			.merge(bars)
 			.transition()
-			.duration(800)
-			.ease(d3.easeBackOut.overshoot(0.1))
+			.duration(isFirstDraw ? 800 : 500)
+			.ease(isFirstDraw ? d3.easeBackOut.overshoot(0.1) : d3.easeQuadInOut)
+			.attr('x', (d) => x(d.channel || 'Unknown') || 0)
 			.attr('y', (d) => y(d.total_events || 0))
+			.attr('width', x.bandwidth())
 			.attr('height', (d) => height - y(d.total_events || 0));
 
-		// Value labels
-		g.selectAll('.label')
-			.data(data)
-			.join('text')
+		// Remove old bars
+		bars
+			.exit()
+			.transition()
+			.duration(300)
+			.attr('y', height)
+			.attr('height', 0)
+			.style('opacity', 0)
+			.remove();
+
+		// Update or create value labels
+		const labels = g.selectAll('.label').data(data, (d: any) => d.channel);
+
+		labels
+			.enter()
+			.append('text')
 			.attr('class', 'label')
 			.attr('x', (d) => (x(d.channel || 'Unknown') || 0) + x.bandwidth() / 2)
 			.attr('y', height)
@@ -166,32 +223,52 @@
 			.style('fill', '#475569')
 			.style('opacity', 0)
 			.text((d) => (d.total_events || 0).toLocaleString())
+			.merge(labels)
+			.text((d) => (d.total_events || 0).toLocaleString())
 			.transition()
-			.duration(800)
-			.delay(300)
-			.ease(d3.easeBackOut)
+			.duration(isFirstDraw ? 800 : 500)
+			.delay(isFirstDraw ? 300 : 0)
+			.ease(isFirstDraw ? d3.easeBackOut : d3.easeQuadInOut)
+			.attr('x', (d) => (x(d.channel || 'Unknown') || 0) + x.bandwidth() / 2)
 			.attr('y', (d) => y(d.total_events || 0) - 8)
 			.style('opacity', 1);
+
+		labels.exit().transition().duration(300).style('opacity', 0).remove();
 	}
 
 	function drawPieChart() {
 		if (!chartContainer || data.length === 0) return;
 
-		// Clear previous chart
-		d3.select(chartContainer).selectAll('*').remove();
+		const isFirstDraw = d3.select(chartContainer).selectAll('svg').empty();
+
+		// Only clear on first draw
+		if (isFirstDraw) {
+			d3.select(chartContainer).selectAll('*').remove();
+		}
 
 		const width = chartContainer.clientWidth;
 		const height = 400;
 		const radius = Math.min(width, height) / 2 - 80;
 
-		const svg = d3
-			.select(chartContainer)
-			.append('svg')
-			.attr('width', width)
-			.attr('height', height)
-			.style('background', 'transparent');
+		let svg = d3.select(chartContainer).select('svg');
+		if (svg.empty()) {
+			svg = d3
+				.select(chartContainer)
+				.append('svg')
+				.attr('width', width)
+				.attr('height', height)
+				.style('background', 'transparent');
+		} else {
+			svg.attr('width', width).attr('height', height);
+		}
 
-		const g = svg.append('g').attr('transform', `translate(${width / 2 - 120},${height / 2})`);
+		let g = svg.select('g.pie-group');
+		if (g.empty()) {
+			g = svg
+				.append('g')
+				.attr('class', 'pie-group')
+				.attr('transform', `translate(${width / 2 - 120},${height / 2})`);
+		}
 
 		// Calculate total for percentages
 		const total = d3.sum(data, (d) => d.total_events || 0);
@@ -374,6 +451,8 @@
 	}
 
 	function showTooltip(event: MouseEvent, d: any) {
+		if (!tooltip) return;
+
 		const total = d3.sum(data, (item) => item.total_events || 0);
 		const percentage = ((d.total_events / total) * 100).toFixed(1);
 
@@ -403,22 +482,25 @@
 			</div>
 		`;
 		tooltip.style.display = 'block';
-		tooltip.style.opacity = '0';
+		tooltip.style.opacity = '1';
 		moveTooltip(event);
-
-		// Fade in animation
-		requestAnimationFrame(() => {
-			tooltip.style.opacity = '1';
-		});
 	}
 
 	function moveTooltip(event: MouseEvent) {
+		if (!tooltip) return;
 		tooltip.style.left = event.pageX + 10 + 'px';
 		tooltip.style.top = event.pageY + 10 + 'px';
 	}
 
 	function hideTooltip() {
-		tooltip.style.display = 'none';
+		if (!tooltip) return;
+		tooltip.style.opacity = '0';
+		// Use timeout to actually hide it after fade out
+		setTimeout(() => {
+			if (tooltip && tooltip.style.opacity === '0') {
+				tooltip.style.display = 'none';
+			}
+		}, 200);
 	}
 
 	function renderChart() {
@@ -457,10 +539,13 @@
 
 		return () => {
 			window.removeEventListener('resize', handleResize);
+			// Clean up tooltip
+			if (tooltip) {
+				tooltip.style.display = 'none';
+				tooltip.style.opacity = '0';
+			}
 		};
 	});
-
-	// Remove afterUpdate to prevent unnecessary re-renders
 </script>
 
 <div class="chart-container" bind:this={chartContainer}></div>
@@ -489,6 +574,7 @@
 		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 		transition: opacity 0.2s ease;
 		max-width: 250px;
+		opacity: 0;
 	}
 
 	:global(.tooltip-header) {

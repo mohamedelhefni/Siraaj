@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import * as d3 from 'd3';
 	import * as topojson from 'topojson-client';
 	import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-svelte';
@@ -9,6 +9,8 @@
 	let mapContainer: HTMLDivElement | undefined = $state();
 	let zoomBehavior: any = $state();
 	let svgSelection: any = $state();
+	let tooltipElement: any = null;
+	let cleanupTooltip: (() => void) | null = null;
 
 	// World map TopoJSON URL (using Natural Earth data)
 	const WORLD_MAP_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
@@ -45,8 +47,18 @@
 		if (!svgElement || !mapContainer) return;
 
 		try {
-			// Clear previous map
-			d3.select(svgElement).selectAll('*').remove();
+			const isFirstDraw = d3.select(svgElement).selectAll('g').empty();
+
+			// Only clear on first draw
+			if (isFirstDraw) {
+				d3.select(svgElement).selectAll('*').remove();
+			}
+
+			// Clean up old tooltip if exists
+			if (cleanupTooltip) {
+				cleanupTooltip();
+				cleanupTooltip = null;
+			}
 
 			const width = mapContainer.clientWidth;
 			const height = 400;
@@ -62,8 +74,11 @@
 				.attr('height', height)
 				.attr('viewBox', [0, 0, width, height]);
 
-			// Create a container group for zoom
-			const g = svgSelection.append('g');
+			// Create a container group for zoom (only once)
+			let g = svgSelection.select('g.map-group');
+			if (g.empty()) {
+				g = svgSelection.append('g').attr('class', 'map-group');
+			}
 
 			// Create projection
 			const projection = d3
@@ -97,37 +112,44 @@
 			const worldData: any = await d3.json(WORLD_MAP_URL);
 			const countries: any = topojson.feature(worldData, worldData.objects.countries);
 
-			// Create tooltip
-			const tooltip = d3
-				.select('body')
-				.append('div')
-				.style('position', 'absolute')
-				.style('background', 'rgba(0, 0, 0, 0.8)')
-				.style('color', 'white')
-				.style('padding', '8px 12px')
-				.style('border-radius', '4px')
-				.style('font-size', '14px')
-				.style('pointer-events', 'none')
-				.style('opacity', 0)
-				.style('z-index', '1000');
+			// Create or reuse tooltip
+			if (!tooltipElement) {
+				tooltipElement = d3
+					.select('body')
+					.append('div')
+					.style('position', 'absolute')
+					.style('background', 'rgba(0, 0, 0, 0.8)')
+					.style('color', 'white')
+					.style('padding', '8px 12px')
+					.style('border-radius', '4px')
+					.style('font-size', '14px')
+					.style('pointer-events', 'none')
+					.style('opacity', 0)
+					.style('z-index', '1000')
+					.style('transition', 'opacity 0.2s ease');
+			}
 
-			// Draw countries in the zoomable group
-			g.selectAll('path')
-				.data(countries.features)
-				.join('path')
+			const tooltip = tooltipElement;
+
+			// Draw countries in the zoomable group with smooth data updates
+			const countries_paths = g.selectAll('path').data(countries.features, (d: any) => d.id);
+
+			// Enter new countries
+			countries_paths
+				.enter()
+				.append('path')
 				.attr('d', path)
-				.attr('fill', (d: any) => {
-					// Normalize country name (replace Israel with Palestine)
-					let countryName = normalizeCountryName(d.properties.name);
-					const count = countryDataMap.get(countryName?.toLowerCase());
-					return count ? colorScale(count) : '#e5e7eb';
-				})
 				.attr('stroke', '#fff')
 				.attr('stroke-width', 0.5)
 				.style('cursor', 'pointer')
 				.style('opacity', 0)
+				.merge(countries_paths)
+				.attr('fill', (d: any) => {
+					let countryName = normalizeCountryName(d.properties.name);
+					const count = countryDataMap.get(countryName?.toLowerCase());
+					return count ? colorScale(count) : '#e5e7eb';
+				})
 				.on('mouseover', function (this: any, event: any, d: any) {
-					// Normalize country name (replace Israel with Palestine)
 					const countryName = normalizeCountryName(d.properties.name);
 					const count = countryDataMap.get(countryName?.toLowerCase());
 
@@ -156,7 +178,6 @@
 					tooltip.transition().duration(200).style('opacity', 0);
 				})
 				.on('click', function (event: any, d: any) {
-					// Normalize country name (replace Israel with Palestine)
 					const countryName = normalizeCountryName(d.properties.name);
 					const count = countryDataMap.get(countryName?.toLowerCase());
 
@@ -165,9 +186,12 @@
 					}
 				})
 				.transition()
-				.duration(800)
-				.delay((_d: any, i: number) => i * 2)
+				.duration(isFirstDraw ? 800 : 500)
+				.delay(isFirstDraw ? (_d: any, i: number) => i * 2 : 0)
 				.style('opacity', 1);
+
+			// Remove old countries
+			countries_paths.exit().transition().duration(300).style('opacity', 0).remove();
 
 			// Add legend
 			const legendWidth = 200;
@@ -222,9 +246,12 @@
 				.style('fill', '#374151')
 				.text('Visitors');
 
-			// Cleanup tooltip on destroy
-			return () => {
-				tooltip.remove();
+			// Cleanup function for tooltip
+			cleanupTooltip = () => {
+				if (tooltipElement) {
+					tooltipElement.remove();
+					tooltipElement = null;
+				}
 			};
 		} catch (error) {
 			// Error loading map data - show error message
@@ -258,16 +285,21 @@
 		return () => {
 			clearTimeout(timeoutId);
 			window.removeEventListener('resize', handleResize);
+			if (cleanupTooltip) {
+				cleanupTooltip();
+			}
 		};
 	});
 
-	// Watch for data changes using a derived value
-	let previousDataLength = $state(0);
+	// Watch for data changes - redraw when data changes
 	$effect(() => {
-		if (data.length !== previousDataLength && data.length > 0) {
-			previousDataLength = data.length;
-			// Use untrack to prevent infinite loops
-			setTimeout(() => drawMap(), 0);
+		// Track the data dependency
+		data;
+
+		if (mapContainer && data.length > 0) {
+			untrack(() => {
+				drawMap();
+			});
 		}
 	});
 </script>
