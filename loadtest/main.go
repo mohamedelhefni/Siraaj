@@ -650,6 +650,7 @@ func (cg *CSVGenerator) ImportToParquet(parquetPath string) error {
 	defer db.Close()
 
 	// Use DuckDB COPY to convert CSV to Parquet with ZSTD compression
+	// Sort by timestamp for optimal query performance
 	copyQuery := fmt.Sprintf(`
 		COPY (
 			SELECT * FROM read_csv('%s', 
@@ -657,6 +658,7 @@ func (cg *CSVGenerator) ImportToParquet(parquetPath string) error {
 				header=true,
 				timestampformat='%%Y-%%m-%%dT%%H:%%M:%%S.%%fZ'
 			)
+			ORDER BY timestamp
 		) TO '%s' (FORMAT 'PARQUET', CODEC 'ZSTD', ROW_GROUP_SIZE 100000)
 	`, cg.filepath, parquetPath)
 

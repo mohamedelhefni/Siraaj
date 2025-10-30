@@ -198,7 +198,9 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 
 	// Use a single query with CTEs for better performance
 	parquetSource := r.getParquetSource()
-	aggregateQuery := fmt.Sprintf(`
+
+	// Single optimized query using CTEs to scan data once
+	optimizedQuery := fmt.Sprintf(`
 	WITH date_filtered AS (
 		SELECT * FROM %s 
 		WHERE %s
@@ -206,26 +208,40 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	event_stats AS (
 		SELECT 
 			COUNT(*) as total_events,
-			COUNT(DISTINCT user_id) as unique_users,
-			COUNT(DISTINCT session_id) as total_visits,
+			APPROX_COUNT_DISTINCT( user_id) as unique_users,
+			APPROX_COUNT_DISTINCT( session_id) as total_visits,
 			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views,
-			COUNT(DISTINCT CASE WHEN event_name = 'page_view' THEN session_id END) as sessions_with_views,
-			AVG(CASE WHEN session_duration > 0 THEN session_duration END) as avg_session_duration
+			APPROX_COUNT_DISTINCT( CASE WHEN event_name = 'page_view' THEN session_id END) as sessions_with_views,
+			AVG(CASE WHEN session_duration > 0 THEN session_duration END) as avg_session_duration,
+			COUNT(CASE WHEN is_bot = TRUE THEN 1 END) as bot_events,
+			COUNT(CASE WHEN is_bot = FALSE THEN 1 END) as human_events,
+			APPROX_COUNT_DISTINCT( CASE WHEN is_bot = TRUE THEN user_id END) as bot_users,
+			APPROX_COUNT_DISTINCT( CASE WHEN is_bot = FALSE THEN user_id END) as human_users
 		FROM date_filtered
 	)
-	SELECT total_events, unique_users, total_visits, page_views, sessions_with_views, avg_session_duration FROM event_stats;
+	SELECT * FROM event_stats;
 	`, parquetSource, whereClause)
 
 	var totalEvents, uniqueUsers, totalVisits, pageViews, sessionsWithViews int
 	var avgSessionDuration sql.NullFloat64
-	err := r.db.QueryRow(aggregateQuery, args...).Scan(&totalEvents, &uniqueUsers, &totalVisits, &pageViews, &sessionsWithViews, &avgSessionDuration)
+	var botEvents, humanEvents, botUsers, humanUsers int
+
+	err := r.db.QueryRow(optimizedQuery, args...).Scan(
+		&totalEvents, &uniqueUsers, &totalVisits, &pageViews, &sessionsWithViews,
+		&avgSessionDuration, &botEvents, &humanEvents, &botUsers, &humanUsers,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	stats["total_events"] = totalEvents
 	stats["unique_users"] = uniqueUsers
 	stats["total_visits"] = totalVisits
 	stats["page_views"] = pageViews
+	stats["bot_events"] = botEvents
+	stats["human_events"] = humanEvents
+	stats["bot_users"] = botUsers
+	stats["human_users"] = humanUsers
 
 	// Add average session duration (default to 0 if NULL)
 	if avgSessionDuration.Valid {
@@ -234,11 +250,18 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		stats["avg_session_duration"] = 0.0
 	}
 
+	// Calculate bot percentage
+	if totalEvents > 0 {
+		stats["bot_percentage"] = float64(botEvents) / float64(totalEvents) * 100
+	} else {
+		stats["bot_percentage"] = 0.0
+	}
+
 	// Calculate bounce rate: sessions with only 1 page view / total sessions
 	var bounceRate float64
 	if totalVisits > 0 {
 		singlePageQuery := fmt.Sprintf(`
-			SELECT COUNT(DISTINCT session_id) 
+			SELECT APPROX_COUNT_DISTINCT( session_id) 
 			FROM (
 				SELECT session_id, COUNT(*) as view_count
 				FROM %s 
@@ -254,33 +277,6 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		}
 	}
 	stats["bounce_rate"] = bounceRate
-
-	// Bot statistics
-	botQuery := fmt.Sprintf(`
-		SELECT 
-			COUNT(CASE WHEN is_bot = TRUE THEN 1 END) as bot_events,
-			COUNT(CASE WHEN is_bot = FALSE THEN 1 END) as human_events,
-			COUNT(DISTINCT CASE WHEN is_bot = TRUE THEN user_id END) as bot_users,
-			COUNT(DISTINCT CASE WHEN is_bot = FALSE THEN user_id END) as human_users
-		FROM %s 
-		WHERE %s
-	`, parquetSource, whereClause)
-
-	var botEvents, humanEvents, botUsers, humanUsers int
-	err = r.db.QueryRow(botQuery, args...).Scan(&botEvents, &humanEvents, &botUsers, &humanUsers)
-	if err == nil {
-		stats["bot_events"] = botEvents
-		stats["human_events"] = humanEvents
-		stats["bot_users"] = botUsers
-		stats["human_users"] = humanUsers
-
-		// Calculate bot percentage
-		if totalEvents > 0 {
-			stats["bot_percentage"] = float64(botEvents) / float64(totalEvents) * 100
-		} else {
-			stats["bot_percentage"] = 0.0
-		}
-	}
 
 	// Top Events with optimized query
 	query := fmt.Sprintf(`
@@ -329,28 +325,28 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	var selectClause string
 	switch metric {
 	case "users":
-		selectClause = "COUNT(DISTINCT user_id) as count"
+		selectClause = "APPROX_COUNT_DISTINCT( user_id) as count"
 	case "visits":
-		selectClause = "COUNT(DISTINCT session_id) as count"
+		selectClause = "APPROX_COUNT_DISTINCT( session_id) as count"
 	case "page_views":
 		selectClause = "COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as count"
 	case "events":
 		selectClause = "COUNT(*) as count"
 	case "views_per_visit":
-		selectClause = "CAST(COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) AS FLOAT) / NULLIF(COUNT(DISTINCT session_id), 0) as count"
+		selectClause = "CAST(COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) AS FLOAT) / NULLIF(APPROX_COUNT_DISTINCT( session_id), 0) as count"
 	case "bounce_rate":
 		// For bounce rate in timeline, we need to use a different approach
 		// We'll calculate it per time period using a window function or aggregation
 		// This is a simplified version that's much faster
 		selectClause = `
 			CASE 
-				WHEN COUNT(DISTINCT session_id) = 0 THEN 0
-				ELSE CAST(SUM(CASE WHEN event_name = 'page_view' THEN 1 ELSE 0 END) AS FLOAT) * 100.0 / NULLIF(COUNT(DISTINCT session_id), 0)
+				WHEN APPROX_COUNT_DISTINCT( session_id) = 0 THEN 0
+				ELSE CAST(SUM(CASE WHEN event_name = 'page_view' THEN 1 ELSE 0 END) AS FLOAT) * 100.0 / NULLIF(APPROX_COUNT_DISTINCT( session_id), 0)
 			END as count`
 	case "visit_duration":
 		selectClause = "AVG(CASE WHEN session_duration > 0 THEN session_duration END) as count"
 	default: // Default to users
-		selectClause = "COUNT(DISTINCT user_id) as count"
+		selectClause = "APPROX_COUNT_DISTINCT( user_id) as count"
 	}
 
 	// Determine granularity based on date range
@@ -361,7 +357,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 			timelineQuery = fmt.Sprintf(`
 				WITH session_page_counts AS (
 					SELECT 
-						strftime(DATE_TRUNC('hour', timestamp), '%%Y-%%m-%%d %%H:00:00') as date,
+						date_hour as date,
 						session_id,
 						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
 					FROM %s 
@@ -378,7 +374,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		} else {
 			timelineQuery = fmt.Sprintf(`
 				SELECT 
-					strftime(DATE_TRUNC('hour', timestamp), '%%Y-%%m-%%d %%H:00:00') as date, 
+					date_hour AS date,
 					%s
 				FROM %s 
 				WHERE %s
@@ -394,7 +390,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 			timelineQuery = fmt.Sprintf(`
 				WITH session_page_counts AS (
 					SELECT 
-						strftime(DATE_TRUNC('day', timestamp), '%%Y-%%m-%%d') as date,
+						date_day as date,
 						session_id,
 						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
 					FROM %s 
@@ -411,7 +407,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		} else {
 			timelineQuery = fmt.Sprintf(`
 				SELECT 
-					strftime(DATE_TRUNC('day', timestamp), '%%Y-%%m-%%d') as date, 
+					date_day as date, 
 					%s
 				FROM %s 
 				WHERE %s
@@ -427,7 +423,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 			timelineQuery = fmt.Sprintf(`
 				WITH session_page_counts AS (
 					SELECT 
-						strftime(DATE_TRUNC('month', timestamp), '%%Y-%%m-01') as date,
+						date_month as date,
 						session_id,
 						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
 					FROM %s 
@@ -444,7 +440,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		} else {
 			timelineQuery = fmt.Sprintf(`
 				SELECT 
-					strftime(DATE_TRUNC('month', timestamp), '%%Y-%%m-01') as date, 
+					date_month as date, 
 					%s
 				FROM %s 
 				WHERE %s
@@ -842,8 +838,8 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	prevQuery := fmt.Sprintf(`
 		SELECT 
 			COUNT(*) as total_events,
-			COUNT(DISTINCT user_id) as unique_users,
-			COUNT(DISTINCT session_id) as total_visits,
+			APPROX_COUNT_DISTINCT( user_id) as unique_users,
+			APPROX_COUNT_DISTINCT( session_id) as total_visits,
 			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views
 		FROM %s 
 		WHERE %s
@@ -881,8 +877,8 @@ func (r *eventRepository) GetOnlineUsers(timeWindow int) (map[string]interface{}
 
 	query := fmt.Sprintf(`
 		SELECT 
-			COUNT(DISTINCT user_id) as online_users,
-			COUNT(DISTINCT session_id) as active_sessions
+			APPROX_COUNT_DISTINCT( user_id) as online_users,
+			APPROX_COUNT_DISTINCT( session_id) as active_sessions
 		FROM %s 
 		WHERE timestamp >= ?
 	`, parquetSource)
@@ -1031,8 +1027,8 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 			// First step: count all matching users
 			query := fmt.Sprintf(`
 				SELECT 
-					COUNT(DISTINCT user_id) as user_count,
-					COUNT(DISTINCT session_id) as session_count,
+					APPROX_COUNT_DISTINCT( user_id) as user_count,
+					APPROX_COUNT_DISTINCT( session_id) as session_count,
 					COUNT(*) as event_count
 				FROM %s 
 				WHERE %s
@@ -1186,8 +1182,8 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 			mainQuery := fmt.Sprintf(`
 				%s
 				SELECT 
-					COUNT(DISTINCT user_id) as user_count,
-					COUNT(DISTINCT session_id) as session_count,
+					APPROX_COUNT_DISTINCT( user_id) as user_count,
+					APPROX_COUNT_DISTINCT( session_id) as session_count,
 					COUNT(*) as event_count
 				FROM %s
 			`, cteBuilder.String(), currentCteName)
@@ -1412,15 +1408,15 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 	query := fmt.Sprintf(`
 		SELECT 
 			COUNT(*) as total_events,
-			COUNT(DISTINCT user_id) as unique_users,
-			COUNT(DISTINCT session_id) as total_visits,
+			APPROX_COUNT_DISTINCT( user_id) as unique_users,
+			APPROX_COUNT_DISTINCT( session_id) as total_visits,
 			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views,
-			COUNT(DISTINCT CASE WHEN event_name = 'page_view' THEN session_id END) as sessions_with_views,
+			APPROX_COUNT_DISTINCT( CASE WHEN event_name = 'page_view' THEN session_id END) as sessions_with_views,
 			AVG(CASE WHEN session_duration > 0 THEN session_duration END) as avg_session_duration,
 			COUNT(CASE WHEN is_bot = TRUE THEN 1 END) as bot_events,
 			COUNT(CASE WHEN is_bot = FALSE THEN 1 END) as human_events,
-			COUNT(DISTINCT CASE WHEN is_bot = TRUE THEN user_id END) as bot_users,
-			COUNT(DISTINCT CASE WHEN is_bot = FALSE THEN user_id END) as human_users
+			APPROX_COUNT_DISTINCT( CASE WHEN is_bot = TRUE THEN user_id END) as bot_users,
+			APPROX_COUNT_DISTINCT( CASE WHEN is_bot = FALSE THEN user_id END) as human_users
 		FROM %s 
 		WHERE %s
 	`, parquetSource, whereClause)
@@ -1429,6 +1425,7 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 	var botEvents, humanEvents, botUsers, humanUsers int
 	var avgSessionDuration sql.NullFloat64
 
+	fmt.Println("query is", query, args)
 	err := r.db.QueryRow(query, args...).Scan(
 		&totalEvents, &uniqueUsers, &totalVisits, &pageViews, &sessionsWithViews,
 		&avgSessionDuration, &botEvents, &humanEvents, &botUsers, &humanUsers,
@@ -1454,7 +1451,7 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 	var bounceRate float64
 	if sessionsWithViews > 0 {
 		singlePageQuery := fmt.Sprintf(`
-			SELECT COUNT(DISTINCT session_id) 
+			SELECT APPROX_COUNT_DISTINCT( session_id) 
 			FROM (
 				SELECT session_id, COUNT(*) as view_count
 				FROM %s 
@@ -1492,8 +1489,8 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 	prevQuery := fmt.Sprintf(`
 		SELECT 
 			COUNT(*) as total_events,
-			COUNT(DISTINCT user_id) as unique_users,
-			COUNT(DISTINCT session_id) as total_visits,
+			APPROX_COUNT_DISTINCT( user_id) as unique_users,
+			APPROX_COUNT_DISTINCT( session_id) as total_visits,
 			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views
 		FROM %s 
 		WHERE %s
@@ -1534,25 +1531,25 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 	var selectClause string
 	switch metric {
 	case "users":
-		selectClause = "COUNT(DISTINCT user_id) as count"
+		selectClause = "APPROX_COUNT_DISTINCT( user_id) as count"
 	case "visits":
-		selectClause = "COUNT(DISTINCT session_id) as count"
+		selectClause = "APPROX_COUNT_DISTINCT( session_id) as count"
 	case "page_views":
 		selectClause = "COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as count"
 	case "events":
 		selectClause = "COUNT(*) as count"
 	case "views_per_visit":
-		selectClause = "CAST(COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) AS FLOAT) / NULLIF(COUNT(DISTINCT session_id), 0) as count"
+		selectClause = "CAST(COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) AS FLOAT) / NULLIF(APPROX_COUNT_DISTINCT( session_id), 0) as count"
 	case "bounce_rate":
 		selectClause = `
 			CASE 
-				WHEN COUNT(DISTINCT session_id) = 0 THEN 0
-				ELSE CAST(SUM(CASE WHEN event_name = 'page_view' THEN 1 ELSE 0 END) AS FLOAT) * 100.0 / NULLIF(COUNT(DISTINCT session_id), 0)
+				WHEN APPROX_COUNT_DISTINCT( session_id) = 0 THEN 0
+				ELSE CAST(SUM(CASE WHEN event_name = 'page_view' THEN 1 ELSE 0 END) AS FLOAT) * 100.0 / NULLIF(APPROX_COUNT_DISTINCT( session_id), 0)
 			END as count`
 	case "visit_duration":
 		selectClause = "AVG(CASE WHEN session_duration > 0 THEN session_duration END) as count"
 	default:
-		selectClause = "COUNT(DISTINCT user_id) as count"
+		selectClause = "APPROX_COUNT_DISTINCT( user_id) as count"
 	}
 
 	// Determine granularity based on date range
@@ -1566,7 +1563,7 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 			timelineQuery = fmt.Sprintf(`
 				WITH session_page_counts AS (
 					SELECT 
-						strftime(DATE_TRUNC('hour', timestamp), '%%Y-%%m-%%d %%H:00:00') as date,
+						date_hour as date,
 						session_id,
 						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
 					FROM %s 
@@ -1583,7 +1580,7 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 		} else {
 			timelineQuery = fmt.Sprintf(`
 				SELECT 
-					strftime(DATE_TRUNC('hour', timestamp), '%%Y-%%m-%%d %%H:00:00') as date, 
+					date_hour as date, 
 					%s
 				FROM %s 
 				WHERE %s
@@ -1598,7 +1595,7 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 			timelineQuery = fmt.Sprintf(`
 				WITH session_page_counts AS (
 					SELECT 
-						strftime(DATE_TRUNC('day', timestamp), '%%Y-%%m-%%d') as date,
+						date_day as date,
 						session_id,
 						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
 					FROM %s 
@@ -1615,7 +1612,7 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 		} else {
 			timelineQuery = fmt.Sprintf(`
 				SELECT 
-					strftime(DATE_TRUNC('day', timestamp), '%%Y-%%m-%%d') as date, 
+					date_day as date, 
 					%s
 				FROM %s 
 				WHERE %s
@@ -1630,7 +1627,7 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 			timelineQuery = fmt.Sprintf(`
 				WITH session_page_counts AS (
 					SELECT 
-						strftime(DATE_TRUNC('month', timestamp), '%%Y-%%m-01') as date,
+						date_month as date,
 						session_id,
 						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
 					FROM %s 
@@ -1647,7 +1644,7 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 		} else {
 			timelineQuery = fmt.Sprintf(`
 				SELECT 
-					strftime(DATE_TRUNC('month', timestamp), '%%Y-%%m-01') as date, 
+					date_month as date, 
 					%s
 				FROM %s 
 				WHERE %s
@@ -1738,90 +1735,87 @@ func (r *eventRepository) GetTopPages(startDate, endDate time.Time, limit int, f
 	}, nil
 }
 
-// GetEntryExitPages returns entry and exit pages separately
 func (r *eventRepository) GetEntryExitPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error) {
 	parquetSource := r.getParquetSource()
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 	queryArgs := append(args, limit)
 
-	// Entry Pages
-	entryPagesQuery := fmt.Sprintf(`
-		WITH entry_pages AS (
-			SELECT DISTINCT ON (session_id) 
-				session_id, 
-				url
-			FROM %s 
-			WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
-			ORDER BY session_id, timestamp ASC
-		)
-		SELECT url, COUNT(*) as count
-		FROM entry_pages
-		GROUP BY url
-		ORDER BY count DESC
-		LIMIT ?
-	`, parquetSource, whereClause)
+	// Combined Query for Entry & Exit Pages
+	query := fmt.Sprintf(`
+WITH ordered AS (
+    SELECT
+        session_id,
+        url,
+        event_name,
+        timestamp
+    FROM %s
+    WHERE %s
+        AND event_name = 'page_view'
+        AND url IS NOT NULL
+        AND url != ''
+),
+entry_pages AS (
+    SELECT session_id, url
+    FROM (
+        SELECT
+            session_id,
+            url,
+            ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY timestamp ASC) AS rn
+        FROM ordered
+    )
+    WHERE rn = 1
+),
+exit_pages AS (
+    SELECT session_id, url
+    FROM (
+        SELECT
+            session_id,
+            url,
+            ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY timestamp DESC) AS rn
+        FROM ordered
+    )
+    WHERE rn = 1
+)
+SELECT * FROM (
+    SELECT 'entry' AS type, url, COUNT(*) AS count
+    FROM entry_pages
+    GROUP BY url
+    ORDER BY count DESC
+    LIMIT %d
+) AS entry_query
 
-	entryRows, err := r.db.Query(entryPagesQuery, queryArgs...)
+UNION ALL
+
+SELECT * FROM (
+    SELECT 'exit' AS type, url, COUNT(*) AS count
+    FROM exit_pages
+    GROUP BY url
+    ORDER BY count DESC
+    LIMIT %d
+) AS exit_query
+	`, parquetSource, whereClause, limit, limit)
+
+	rows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query failed: %w", err)
 	}
-	defer func() {
-		if err := entryRows.Close(); err != nil {
-			log.Printf("Warning: failed to close rows: %v", err)
-		}
-	}()
+	defer rows.Close()
 
 	entryPages := []map[string]interface{}{}
-	for entryRows.Next() {
-		var url string
-		var count int
-		if err := entryRows.Scan(&url, &count); err != nil {
-			continue
-		}
-		entryPages = append(entryPages, map[string]interface{}{
-			"url":   url,
-			"count": count,
-		})
-	}
-
-	// Exit Pages
-	exitPagesQuery := fmt.Sprintf(`
-		WITH exit_pages AS (
-			SELECT DISTINCT ON (session_id) 
-				session_id, 
-				url
-			FROM %s 
-			WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
-			ORDER BY session_id, timestamp DESC
-		)
-		SELECT url, COUNT(*) as count
-		FROM exit_pages
-		GROUP BY url
-		ORDER BY count DESC
-		LIMIT ?
-	`, parquetSource, whereClause)
-
-	exitRows, err := r.db.Query(exitPagesQuery, queryArgs...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := exitRows.Close(); err != nil {
-			log.Printf("Warning: failed to close rows: %v", err)
-		}
-	}()
-
 	exitPages := []map[string]interface{}{}
-	for exitRows.Next() {
-		var url string
+
+	for rows.Next() {
+		var pageType, url string
 		var count int
-		if err := exitRows.Scan(&url, &count); err != nil {
+		if err := rows.Scan(&pageType, &url, &count); err != nil {
 			continue
 		}
-		exitPages = append(exitPages, map[string]interface{}{
-			"url":   url,
-			"count": count,
-		})
+
+		if pageType == "entry" {
+			entryPages = append(entryPages, map[string]interface{}{"url": url, "count": count})
+		} else {
+			exitPages = append(exitPages, map[string]interface{}{"url": url, "count": count})
+		}
 	}
 
 	return map[string]interface{}{
@@ -2080,8 +2074,8 @@ func (r *eventRepository) GetChannels(startDate, endDate time.Time, filters map[
 		SELECT 
 			COALESCE(channel, 'Unknown') as channel_name,
 			COUNT(*) as total_events,
-			COUNT(DISTINCT user_id) as unique_users,
-			COUNT(DISTINCT session_id) as total_visits,
+			APPROX_COUNT_DISTINCT( user_id) as unique_users,
+			APPROX_COUNT_DISTINCT( session_id) as total_visits,
 			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views
 		FROM %s 
 		WHERE %s

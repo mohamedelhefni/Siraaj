@@ -214,9 +214,10 @@ func (ps *ParquetStorage) Flush() error {
 	csvFile.Close()
 
 	// Use DuckDB COPY to convert CSV to Parquet with ZSTD compression
+	// Sort by timestamp for better query performance (row group pruning)
 	var copyQuery string
 	if _, err := os.Stat(ps.filePath); os.IsNotExist(err) {
-		// File doesn't exist, create new
+		// File doesn't exist, create new (sorted by timestamp)
 		copyQuery = fmt.Sprintf(`
 			COPY (
 				SELECT * FROM read_csv('%s', 
@@ -224,10 +225,11 @@ func (ps *ParquetStorage) Flush() error {
 					header=true,
 					timestampformat='%%Y-%%m-%%d %%H:%%M:%%S.%%f'
 				)
+				ORDER BY timestamp
 			) TO '%s' (FORMAT 'PARQUET', CODEC 'ZSTD', ROW_GROUP_SIZE 100000)
 		`, ps.tempCSVPath, ps.filePath)
 	} else {
-		// File exists, append to it
+		// File exists, append to it (keep sorted by timestamp)
 		copyQuery = fmt.Sprintf(`
 			COPY (
 				SELECT * FROM (
@@ -239,6 +241,7 @@ func (ps *ParquetStorage) Flush() error {
 						timestampformat='%%Y-%%m-%%d %%H:%%M:%%S.%%f'
 					)
 				)
+				ORDER BY timestamp
 			) TO '%s' (FORMAT 'PARQUET', CODEC 'ZSTD', ROW_GROUP_SIZE 100000)
 		`, ps.filePath, ps.tempCSVPath, ps.filePath)
 

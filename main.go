@@ -74,6 +74,9 @@ func initDatabase(dbPath string) (*sql.DB, error) {
 		{"Disable preserve insertion order", "SET preserve_insertion_order=false"},
 		{"Enable query profiling", "SET enable_profiling=false"}, // Disable profiling in production
 		{"Set temp directory", "SET temp_directory='/tmp/duckdb_temp'"},
+		{"Enable parallel Parquet scan", "SET enable_http_metadata_cache=true"},
+		{"Force parallel execution", "SET force_parallelism=true"},
+		{"Optimize for throughput", "SET experimental_parallel_csv=true"},
 	}
 
 	for _, opt := range optimizations {
@@ -127,7 +130,7 @@ func main() {
 	// Initialize Parquet storage with buffering (needs DB connection)
 	parquetFilePath := os.Getenv("PARQUET_FILE")
 	if parquetFilePath == "" {
-		parquetFilePath = "data/events.parquet"
+		parquetFilePath = "data/events_optimized.parquet"
 	}
 
 	bufferSize := 10000               // Buffer 10k events before flush
