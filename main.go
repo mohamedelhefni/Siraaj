@@ -244,6 +244,26 @@ func main() {
 		}
 	})
 
+	// Storage stats endpoint
+	mux.HandleFunc("/api/debug/storage", func(w http.ResponseWriter, r *http.Request) {
+		fileCount, err := parquetStorage.GetFileCount()
+		if err != nil {
+			log.Printf("Error getting file count: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"parquet_files":        fileCount,
+			"max_before_merge":     100,
+			"merge_check_interval": "5m",
+			"data_directory":       parquetFilePath,
+		}); err != nil {
+			log.Printf("Error encoding storage stats: %v", err)
+		}
+	})
+
 	// Serve dashboard (SvelteKit app)
 	dashboardFS, err := fs.Sub(uiFiles, "ui/dashboard")
 	if err != nil {

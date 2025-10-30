@@ -637,10 +637,20 @@ func (cg *CSVGenerator) ImportToDatabase(dbPath string) error {
 }
 
 // ImportToParquet imports CSV data to Parquet using DuckDB COPY command
-func (cg *CSVGenerator) ImportToParquet(parquetPath string) error {
-	log.Printf("📥 Importing CSV file %s to Parquet file %s", cg.filepath, parquetPath)
+// Now uses directory-based structure for compatibility with append-only partitioned files
+func (cg *CSVGenerator) ImportToParquet(parquetDir string) error {
+	log.Printf("📥 Importing CSV file %s to Parquet directory %s", cg.filepath, parquetDir)
 
 	start := time.Now()
+
+	// Ensure directory exists
+	if err := os.MkdirAll(parquetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create parquet directory: %w", err)
+	}
+
+	// Generate filename with timestamp
+	timestamp := time.Now().UTC().Format("20060102_150405")
+	parquetPath := fmt.Sprintf("%s/events_loadtest_%s.parquet", parquetDir, timestamp)
 
 	// Open DuckDB connection
 	db, err := sql.Open("duckdb", "")
@@ -696,9 +706,10 @@ func (cg *CSVGenerator) ImportToParquet(parquetPath string) error {
 		log.Printf("📊 Parquet file size: %.2f MB", float64(fileInfo.Size())/(1024*1024))
 	}
 
-	// Count rows
+	// Count rows using glob pattern to match new structure
 	var rowCount int64
-	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM read_parquet('%s')", parquetPath)).Scan(&rowCount)
+	globPattern := fmt.Sprintf("%s/*.parquet", parquetDir)
+	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM read_parquet('%s')", globPattern)).Scan(&rowCount)
 	if err == nil {
 		rate := float64(rowCount) / duration.Seconds()
 		log.Printf("✅ Parquet import completed!")
@@ -794,7 +805,7 @@ func main() {
 
 	case "csv":
 		log.Printf("  CSV Path: %s", *csvPath)
-		log.Printf("  Parquet Path: %s", "../data/events.parquet")
+		log.Printf("  Parquet Directory: %s", "../data/events")
 
 		cg := NewCSVGenerator(*csvPath)
 
@@ -803,9 +814,9 @@ func main() {
 			log.Fatal("CSV generation failed:", err)
 		}
 
-		// Import to Parquet file
-		parquetPath := "../data/events.parquet"
-		if err := cg.ImportToParquet(parquetPath); err != nil {
+		// Import to Parquet directory (new structure)
+		parquetDir := "../data/events"
+		if err := cg.ImportToParquet(parquetDir); err != nil {
 			log.Fatal("Parquet import failed:", err)
 		}
 

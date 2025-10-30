@@ -20,6 +20,10 @@ const (
 	DefaultParquetDir = "data/events"
 	// Temp CSV path for buffering
 	TempCSVFile = "data/events_buffer.csv"
+	// Max files before triggering merge
+	MaxFilesBeforeMerge = 100
+	// Merge check interval
+	MergeCheckInterval = 5 * time.Minute
 )
 
 // ParquetStorage handles buffered writes to Parquet files using DuckDB COPY
@@ -33,6 +37,7 @@ type ParquetStorage struct {
 	flushInterval time.Duration
 	mu            sync.Mutex
 	flushMu       sync.Mutex // Separate mutex for flush operations
+	mergeMu       sync.Mutex // Separate mutex for merge operations
 	stopChan      chan struct{}
 	flushChan     chan struct{}
 	wg            sync.WaitGroup
@@ -74,6 +79,10 @@ func NewParquetStorage(db *sql.DB, dataDir string, bufferSize int, flushInterval
 	// Start background flusher
 	ps.wg.Add(1)
 	go ps.backgroundFlusher()
+
+	// Start background merger
+	ps.wg.Add(1)
+	go ps.backgroundMerger()
 
 	log.Printf("✓ Parquet storage initialized: dir=%s, buffer_size=%d, flush_interval=%v",
 		dataDir, bufferSize, flushInterval)
@@ -319,4 +328,141 @@ func (ps *ParquetStorage) Close() error {
 // Use with read_parquet('data/events/*.parquet') to query all files
 func (ps *ParquetStorage) GetFilePath() string {
 	return fmt.Sprintf("%s/*.parquet", ps.dataDir)
+}
+
+// backgroundMerger runs periodically to merge small Parquet files when there are too many
+func (ps *ParquetStorage) backgroundMerger() {
+	defer ps.wg.Done()
+
+	ticker := time.NewTicker(MergeCheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ps.stopChan:
+			return
+
+		case <-ticker.C:
+			// Check file count and merge if needed
+			if err := ps.checkAndMergeFiles(); err != nil {
+				log.Printf("❌ Error during file merge: %v", err)
+			}
+		}
+	}
+}
+
+// checkAndMergeFiles checks the number of Parquet files and merges them if needed
+func (ps *ParquetStorage) checkAndMergeFiles() error {
+	ps.mergeMu.Lock()
+	defer ps.mergeMu.Unlock()
+
+	// List all parquet files in directory
+	files, err := os.ReadDir(ps.dataDir)
+	if err != nil {
+		return fmt.Errorf("failed to read data directory: %w", err)
+	}
+
+	// Count parquet files
+	parquetFiles := []string{}
+	for _, file := range files {
+		if !file.IsDir() && len(file.Name()) > 8 && file.Name()[len(file.Name())-8:] == ".parquet" {
+			parquetFiles = append(parquetFiles, file.Name())
+		}
+	}
+
+	fileCount := len(parquetFiles)
+	if fileCount <= MaxFilesBeforeMerge {
+		return nil // No merge needed
+	}
+
+	log.Printf("🔄 Found %d Parquet files (max: %d), starting merge...", fileCount, MaxFilesBeforeMerge)
+	start := time.Now()
+
+	// Generate merged filename with timestamp
+	timestamp := time.Now().UTC().Format("20060102_150405")
+	mergedFile := fmt.Sprintf("%s/events_merged_%s.parquet", ps.dataDir, timestamp)
+	tempMergedFile := mergedFile + ".tmp"
+
+	// Use DuckDB to merge all files into one
+	// This is efficient as DuckDB handles the Parquet format natively
+	mergeQuery := fmt.Sprintf(`
+		COPY (
+			SELECT 
+				id,
+				timestamp,
+				date_trunc('hour', timestamp)  AS date_hour,
+				date_trunc('day', timestamp)   AS date_day,
+				date_trunc('month', timestamp) AS date_month,
+				event_name,
+				user_id,
+				session_id,
+				session_duration,
+				url,
+				referrer,
+				user_agent,
+				ip,
+				country,
+				browser,
+				os,
+				device,
+				is_bot,
+				project_id,
+				channel
+			FROM read_parquet('%s/*.parquet')
+			ORDER BY timestamp
+		) TO '%s' (FORMAT 'PARQUET', CODEC 'ZSTD', ROW_GROUP_SIZE 100000)
+	`, ps.dataDir, tempMergedFile)
+
+	_, err = ps.db.Exec(mergeQuery)
+	if err != nil {
+		// Clean up temp file on error
+		os.Remove(tempMergedFile)
+		return fmt.Errorf("failed to merge Parquet files: %w", err)
+	}
+
+	// Atomic rename
+	if err := os.Rename(tempMergedFile, mergedFile); err != nil {
+		os.Remove(tempMergedFile)
+		return fmt.Errorf("failed to rename merged file: %w", err)
+	}
+
+	// Get merged file size
+	mergedFileInfo, err := os.Stat(mergedFile)
+	if err != nil {
+		return fmt.Errorf("failed to stat merged file: %w", err)
+	}
+
+	// Delete old files
+	deletedCount := 0
+	for _, fileName := range parquetFiles {
+		filePath := fmt.Sprintf("%s/%s", ps.dataDir, fileName)
+		if err := os.Remove(filePath); err != nil {
+			log.Printf("⚠️  Warning: failed to delete old file %s: %v", fileName, err)
+		} else {
+			deletedCount++
+		}
+	}
+
+	duration := time.Since(start)
+	log.Printf("✅ Merged %d files into 1 file (%.2f MB) in %v",
+		deletedCount, float64(mergedFileInfo.Size())/(1024*1024), duration)
+
+	return nil
+}
+
+// GetFileCount returns the current number of Parquet files
+func (ps *ParquetStorage) GetFileCount() (int, error) {
+	files, err := os.ReadDir(ps.dataDir)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read data directory: %w", err)
+	}
+
+	count := 0
+	for _, file := range files {
+		if !file.IsDir() && len(file.Name()) > 8 && file.Name()[len(file.Name())-8:] == ".parquet" {
+			count++
+		}
+	}
+
+	return count, nil
 }
