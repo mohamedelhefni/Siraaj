@@ -200,23 +200,30 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	parquetSource := r.getParquetSource()
 
 	// Single optimized query using CTEs to scan data once
+	// Only select columns needed for aggregation to reduce memory usage
 	optimizedQuery := fmt.Sprintf(`
 	WITH date_filtered AS (
-		SELECT * FROM %s 
+		SELECT 
+			user_id,
+			session_id,
+			event_name,
+			session_duration,
+			is_bot
+		FROM %s 
 		WHERE %s
 	),
 	event_stats AS (
 		SELECT 
 			COUNT(*) as total_events,
-			APPROX_COUNT_DISTINCT( user_id) as unique_users,
-			APPROX_COUNT_DISTINCT( session_id) as total_visits,
+			APPROX_COUNT_DISTINCT(user_id) as unique_users,
+			APPROX_COUNT_DISTINCT(session_id) as total_visits,
 			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views,
-			APPROX_COUNT_DISTINCT( CASE WHEN event_name = 'page_view' THEN session_id END) as sessions_with_views,
+			APPROX_COUNT_DISTINCT(CASE WHEN event_name = 'page_view' THEN session_id END) as sessions_with_views,
 			AVG(CASE WHEN session_duration > 0 THEN session_duration END) as avg_session_duration,
 			COUNT(CASE WHEN is_bot = TRUE THEN 1 END) as bot_events,
 			COUNT(CASE WHEN is_bot = FALSE THEN 1 END) as human_events,
-			APPROX_COUNT_DISTINCT( CASE WHEN is_bot = TRUE THEN user_id END) as bot_users,
-			APPROX_COUNT_DISTINCT( CASE WHEN is_bot = FALSE THEN user_id END) as human_users
+			APPROX_COUNT_DISTINCT(CASE WHEN is_bot = TRUE THEN user_id END) as bot_users,
+			APPROX_COUNT_DISTINCT(CASE WHEN is_bot = FALSE THEN user_id END) as human_users
 		FROM date_filtered
 	)
 	SELECT * FROM event_stats;
@@ -258,20 +265,25 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	}
 
 	// Calculate bounce rate: sessions with only 1 page view / total sessions
+	// Optimized to avoid nested aggregation
 	var bounceRate float64
 	if totalVisits > 0 {
-		singlePageQuery := fmt.Sprintf(`
-			SELECT APPROX_COUNT_DISTINCT( session_id) 
-			FROM (
-				SELECT session_id, COUNT(*) as view_count
+		bounceRateQuery := fmt.Sprintf(`
+			WITH session_view_counts AS (
+				SELECT 
+					session_id,
+					COUNT(*) as view_count
 				FROM %s 
 				WHERE %s AND event_name = 'page_view'
 				GROUP BY session_id
-				HAVING view_count = 1
 			)
+			SELECT COUNT(*) as single_page_sessions
+			FROM session_view_counts
+			WHERE view_count = 1
 		`, parquetSource, whereClause)
+		
 		var singlePageSessions int
-		err = r.db.QueryRow(singlePageQuery, args...).Scan(&singlePageSessions)
+		err = r.db.QueryRow(bounceRateQuery, args...).Scan(&singlePageSessions)
 		if err == nil && sessionsWithViews > 0 {
 			bounceRate = float64(singlePageSessions) / float64(sessionsWithViews) * 100
 		}
@@ -523,14 +535,20 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	stats["top_pages"] = topPages
 
 	// Entry Pages (first page in each session)
+	// Using ROW_NUMBER() instead of DISTINCT ON for better DuckDB performance
 	entryPagesQuery := fmt.Sprintf(`
-		WITH entry_pages AS (
-			SELECT DISTINCT ON (session_id) 
+		WITH ranked_pages AS (
+			SELECT 
 				session_id, 
-				url
+				url,
+				ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY timestamp ASC) AS rn
 			FROM %s 
 			WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
-			ORDER BY session_id, timestamp ASC
+		),
+		entry_pages AS (
+			SELECT session_id, url
+			FROM ranked_pages
+			WHERE rn = 1
 		)
 		SELECT url, COUNT(*) as count
 		FROM entry_pages
@@ -566,14 +584,20 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	stats["entry_pages"] = entryPages
 
 	// Exit Pages (last page in each session)
+	// Using ROW_NUMBER() instead of DISTINCT ON for better DuckDB performance
 	exitPagesQuery := fmt.Sprintf(`
-		WITH exit_pages AS (
-			SELECT DISTINCT ON (session_id) 
+		WITH ranked_pages AS (
+			SELECT 
 				session_id, 
-				url
+				url,
+				ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY timestamp DESC) AS rn
 			FROM %s 
 			WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
-			ORDER BY session_id, timestamp DESC
+		),
+		exit_pages AS (
+			SELECT session_id, url
+			FROM ranked_pages
+			WHERE rn = 1
 		)
 		SELECT url, COUNT(*) as count
 		FROM exit_pages
@@ -1224,25 +1248,6 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 		if i < len(request.Steps)-1 {
 			nextStep := request.Steps[i+1]
 
-			// Build query to find time between this step and next step
-			timeQuery := fmt.Sprintf(`
-				WITH current_step AS (
-					SELECT user_id, timestamp 
-					FROM %s 
-					WHERE %s
-				),
-				next_step AS (
-					SELECT user_id, timestamp 
-					FROM %s 
-					WHERE %s
-				)
-				SELECT 
-					AVG(EXTRACT(EPOCH FROM (n.timestamp - c.timestamp))) as avg_time,
-					PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (n.timestamp - c.timestamp))) as median_time
-				FROM current_step c
-				INNER JOIN next_step n ON c.user_id = n.user_id AND n.timestamp > c.timestamp
-			`, parquetSource, stepWhereClause, parquetSource, stepWhereClause) // We'll need to build next step WHERE clause
-
 			// Build next step WHERE clause
 			nextStepWhereClause := baseWhereClause
 			nextStepArgs := make([]interface{}, len(baseArgs))
@@ -1256,6 +1261,29 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 				nextStepWhereClause += " AND url = ?"
 				nextStepArgs = append(nextStepArgs, nextStep.URL)
 			}
+
+			// Optimized time calculation using epoch_ms for better performance
+			timeQuery := fmt.Sprintf(`
+				WITH current_step AS (
+					SELECT user_id, epoch_ms(timestamp) as ts_ms
+					FROM %s 
+					WHERE %s
+				),
+				next_step AS (
+					SELECT user_id, epoch_ms(timestamp) as ts_ms
+					FROM %s 
+					WHERE %s
+				),
+				time_diffs AS (
+					SELECT (n.ts_ms - c.ts_ms) / 1000.0 as time_diff_seconds
+					FROM current_step c
+					INNER JOIN next_step n ON c.user_id = n.user_id AND n.ts_ms > c.ts_ms
+				)
+				SELECT 
+					AVG(time_diff_seconds) as avg_time,
+					APPROX_QUANTILE(time_diff_seconds, 0.5) as median_time
+				FROM time_diffs
+			`, parquetSource, stepWhereClause, parquetSource, nextStepWhereClause)
 
 			// Combine args for the time query
 			timeQueryArgs := append(stepArgs, nextStepArgs...)
@@ -1312,22 +1340,27 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 				lastArgs = append(lastArgs, lastStepDef.URL)
 			}
 
+			// Optimized completion time calculation using epoch_ms
 			completionTimeQuery := fmt.Sprintf(`
 				WITH first_step AS (
-					SELECT user_id, MIN(timestamp) as first_time 
+					SELECT user_id, MIN(epoch_ms(timestamp)) as first_time_ms
 					FROM %s 
 					WHERE %s
 					GROUP BY user_id
 				),
 				last_step AS (
-					SELECT user_id, MAX(timestamp) as last_time 
+					SELECT user_id, MAX(epoch_ms(timestamp)) as last_time_ms
 					FROM %s 
 					WHERE %s
 					GROUP BY user_id
+				),
+				completion_times AS (
+					SELECT (l.last_time_ms - f.first_time_ms) / 1000.0 as completion_seconds
+					FROM first_step f
+					INNER JOIN last_step l ON f.user_id = l.user_id AND l.last_time_ms > f.first_time_ms
 				)
-				SELECT AVG(EXTRACT(EPOCH FROM (l.last_time - f.first_time))) as avg_completion
-				FROM first_step f
-				INNER JOIN last_step l ON f.user_id = l.user_id AND l.last_time > f.first_time
+				SELECT AVG(completion_seconds) as avg_completion
+				FROM completion_times
 			`, parquetSource, firstWhereClause, parquetSource, lastWhereClause)
 
 			completionArgs := append(firstArgs, lastArgs...)
@@ -1450,18 +1483,22 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 	// Calculate bounce rate
 	var bounceRate float64
 	if sessionsWithViews > 0 {
-		singlePageQuery := fmt.Sprintf(`
-			SELECT APPROX_COUNT_DISTINCT( session_id) 
-			FROM (
-				SELECT session_id, COUNT(*) as view_count
+		bounceRateQuery := fmt.Sprintf(`
+			WITH session_view_counts AS (
+				SELECT 
+					session_id,
+					COUNT(*) as view_count
 				FROM %s 
 				WHERE %s AND event_name = 'page_view'
 				GROUP BY session_id
-				HAVING view_count = 1
 			)
+			SELECT COUNT(*) as single_page_sessions
+			FROM session_view_counts
+			WHERE view_count = 1
 		`, parquetSource, whereClause)
+		
 		var singlePageSessions int
-		err = r.db.QueryRow(singlePageQuery, args...).Scan(&singlePageSessions)
+		err = r.db.QueryRow(bounceRateQuery, args...).Scan(&singlePageSessions)
 		if err == nil {
 			bounceRate = float64(singlePageSessions) / float64(sessionsWithViews) * 100
 		}

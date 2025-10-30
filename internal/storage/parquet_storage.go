@@ -220,7 +220,28 @@ func (ps *ParquetStorage) Flush() error {
 		// File doesn't exist, create new (sorted by timestamp)
 		copyQuery = fmt.Sprintf(`
 			COPY (
-				SELECT * FROM read_csv('%s', 
+				SELECT 
+					id,
+					timestamp,
+					date_trunc('hour', timestamp)  AS date_hour,
+					date_trunc('day', timestamp)   AS date_day,
+					date_trunc('month', timestamp) AS date_month,
+					event_name,
+					user_id,
+					session_id,
+					session_duration,
+					url,
+					referrer,
+					user_agent,
+					ip,
+					country,
+					browser,
+					os,
+					device,
+					is_bot,
+					project_id,
+					channel
+				FROM read_csv('%s', 
 					AUTO_DETECT=TRUE,
 					header=true,
 					timestampformat='%%Y-%%m-%%d %%H:%%M:%%S.%%f'
@@ -235,7 +256,28 @@ func (ps *ParquetStorage) Flush() error {
 				SELECT * FROM (
 					SELECT * FROM read_parquet('%s')
 					UNION ALL
-					SELECT * FROM read_csv('%s', 
+					SELECT 
+						id,
+						timestamp,
+						date_trunc('hour', timestamp)  AS date_hour,
+						date_trunc('day', timestamp)   AS date_day,
+						date_trunc('month', timestamp) AS date_month,
+						event_name,
+						user_id,
+						session_id,
+						session_duration,
+						url,
+						referrer,
+						user_agent,
+						ip,
+						country,
+						browser,
+						os,
+						device,
+						is_bot,
+						project_id,
+						channel
+					FROM read_csv('%s', 
 						AUTO_DETECT=TRUE,
 						header=true,
 						timestampformat='%%Y-%%m-%%d %%H:%%M:%%S.%%f'

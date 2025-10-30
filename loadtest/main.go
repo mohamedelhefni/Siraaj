@@ -653,7 +653,27 @@ func (cg *CSVGenerator) ImportToParquet(parquetPath string) error {
 	// Sort by timestamp for optimal query performance
 	copyQuery := fmt.Sprintf(`
 		COPY (
-			SELECT * FROM read_csv('%s', 
+			SELECT 
+				timestamp,
+				date_trunc('hour', timestamp)  AS date_hour,
+				date_trunc('day', timestamp)   AS date_day,
+				date_trunc('month', timestamp) AS date_month,
+				event_name,
+				user_id,
+				session_id,
+				session_duration,
+				url,
+				referrer,
+				user_agent,
+				ip,
+				country,
+				browser,
+				os,
+				device,
+				is_bot,
+				project_id,
+				channel
+			FROM read_csv('%s', 
 				AUTO_DETECT=TRUE,
 				header=true,
 				timestampformat='%%Y-%%m-%%dT%%H:%%M:%%S.%%fZ'
