@@ -890,6 +890,7 @@ class AnalyticsCore {
     }
 }
 
+// Export both the class and a default instance
+export { AnalyticsCore };
 export const analytics = new AnalyticsCore();
 export type { AnalyticsConfig, EventData, DeviceInfo } from './types';
-
