@@ -281,7 +281,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 			FROM session_view_counts
 			WHERE view_count = 1
 		`, parquetSource, whereClause)
-		
+
 		var singlePageSessions int
 		err = r.db.QueryRow(bounceRateQuery, args...).Scan(&singlePageSessions)
 		if err == nil && sessionsWithViews > 0 {
@@ -1496,7 +1496,7 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 			FROM session_view_counts
 			WHERE view_count = 1
 		`, parquetSource, whereClause)
-		
+
 		var singlePageSessions int
 		err = r.db.QueryRow(bounceRateQuery, args...).Scan(&singlePageSessions)
 		if err == nil {

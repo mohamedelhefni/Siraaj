@@ -130,7 +130,7 @@ func main() {
 	// Initialize Parquet storage with buffering (needs DB connection)
 	parquetFilePath := os.Getenv("PARQUET_FILE")
 	if parquetFilePath == "" {
-		parquetFilePath = "data/events.parquet"
+		parquetFilePath = "data/events"
 	}
 
 	bufferSize := 10000               // Buffer 10k events before flush

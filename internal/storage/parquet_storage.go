@@ -16,31 +16,35 @@ const (
 	DefaultBufferSize = 10000
 	// Default flush interval
 	DefaultFlushInterval = 30 * time.Second
-	// Parquet file path
-	DefaultParquetFile = "data/events.parquet"
+	// Parquet file directory
+	DefaultParquetDir = "data/events"
 	// Temp CSV path for buffering
 	TempCSVFile = "data/events_buffer.csv"
 )
 
-// ParquetStorage handles buffered writes to a single Parquet file using DuckDB COPY
+// ParquetStorage handles buffered writes to Parquet files using DuckDB COPY
+// Uses append-only partitioned files for scalability
 type ParquetStorage struct {
 	db            *sql.DB
-	filePath      string
+	dataDir       string // Directory containing partition files
 	tempCSVPath   string
 	buffer        []domain.Event
 	bufferSize    int
 	flushInterval time.Duration
 	mu            sync.Mutex
+	flushMu       sync.Mutex // Separate mutex for flush operations
 	stopChan      chan struct{}
 	flushChan     chan struct{}
 	wg            sync.WaitGroup
 	idCounter     uint64
+	fileCounter   int64 // Counter for generating unique filenames
 }
 
 // NewParquetStorage creates a new Parquet storage with buffering
-func NewParquetStorage(db *sql.DB, filePath string, bufferSize int, flushInterval time.Duration) (*ParquetStorage, error) {
-	if filePath == "" {
-		filePath = DefaultParquetFile
+// Uses partitioned append-only files for better scalability
+func NewParquetStorage(db *sql.DB, dataDir string, bufferSize int, flushInterval time.Duration) (*ParquetStorage, error) {
+	if dataDir == "" {
+		dataDir = DefaultParquetDir
 	}
 	if bufferSize <= 0 {
 		bufferSize = DefaultBufferSize
@@ -50,14 +54,13 @@ func NewParquetStorage(db *sql.DB, filePath string, bufferSize int, flushInterva
 	}
 
 	// Ensure directory exists
-	dir := "data"
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create data directory: %w", err)
 	}
 
 	ps := &ParquetStorage{
 		db:            db,
-		filePath:      filePath,
+		dataDir:       dataDir,
 		tempCSVPath:   TempCSVFile,
 		buffer:        make([]domain.Event, 0, bufferSize),
 		bufferSize:    bufferSize,
@@ -65,14 +68,15 @@ func NewParquetStorage(db *sql.DB, filePath string, bufferSize int, flushInterva
 		stopChan:      make(chan struct{}),
 		flushChan:     make(chan struct{}, 1),
 		idCounter:     1,
+		fileCounter:   time.Now().Unix(), // Initialize with timestamp
 	}
 
 	// Start background flusher
 	ps.wg.Add(1)
 	go ps.backgroundFlusher()
 
-	log.Printf("✓ Parquet storage initialized: file=%s, buffer_size=%d, flush_interval=%v",
-		filePath, bufferSize, flushInterval)
+	log.Printf("✓ Parquet storage initialized: dir=%s, buffer_size=%d, flush_interval=%v",
+		dataDir, bufferSize, flushInterval)
 
 	return ps, nil
 }
@@ -159,8 +163,12 @@ func (ps *ParquetStorage) backgroundFlusher() {
 	}
 }
 
-// Flush writes buffered events to Parquet file using DuckDB COPY
+// Flush writes buffered events to a new Parquet file (append-only, no merge)
 func (ps *ParquetStorage) Flush() error {
+	// Use separate mutex to prevent concurrent flushes
+	ps.flushMu.Lock()
+	defer ps.flushMu.Unlock()
+
 	ps.mu.Lock()
 	if len(ps.buffer) == 0 {
 		ps.mu.Unlock()
@@ -213,94 +221,54 @@ func (ps *ParquetStorage) Flush() error {
 	}
 	csvFile.Close()
 
-	// Use DuckDB COPY to convert CSV to Parquet with ZSTD compression
-	// Sort by timestamp for better query performance (row group pruning)
-	var copyQuery string
-	if _, err := os.Stat(ps.filePath); os.IsNotExist(err) {
-		// File doesn't exist, create new (sorted by timestamp)
-		copyQuery = fmt.Sprintf(`
-			COPY (
-				SELECT 
-					id,
-					timestamp,
-					date_trunc('hour', timestamp)  AS date_hour,
-					date_trunc('day', timestamp)   AS date_day,
-					date_trunc('month', timestamp) AS date_month,
-					event_name,
-					user_id,
-					session_id,
-					session_duration,
-					url,
-					referrer,
-					user_agent,
-					ip,
-					country,
-					browser,
-					os,
-					device,
-					is_bot,
-					project_id,
-					channel
-				FROM read_csv('%s', 
-					AUTO_DETECT=TRUE,
-					header=true,
-					timestampformat='%%Y-%%m-%%d %%H:%%M:%%S.%%f'
-				)
-				ORDER BY timestamp
-			) TO '%s' (FORMAT 'PARQUET', CODEC 'ZSTD', ROW_GROUP_SIZE 100000)
-		`, ps.tempCSVPath, ps.filePath)
-	} else {
-		// File exists, append to it (keep sorted by timestamp)
-		copyQuery = fmt.Sprintf(`
-			COPY (
-				SELECT * FROM (
-					SELECT * FROM read_parquet('%s')
-					UNION ALL
-					SELECT 
-						id,
-						timestamp,
-						date_trunc('hour', timestamp)  AS date_hour,
-						date_trunc('day', timestamp)   AS date_day,
-						date_trunc('month', timestamp) AS date_month,
-						event_name,
-						user_id,
-						session_id,
-						session_duration,
-						url,
-						referrer,
-						user_agent,
-						ip,
-						country,
-						browser,
-						os,
-						device,
-						is_bot,
-						project_id,
-						channel
-					FROM read_csv('%s', 
-						AUTO_DETECT=TRUE,
-						header=true,
-						timestampformat='%%Y-%%m-%%d %%H:%%M:%%S.%%f'
-					)
-				)
-				ORDER BY timestamp
-			) TO '%s' (FORMAT 'PARQUET', CODEC 'ZSTD', ROW_GROUP_SIZE 100000)
-		`, ps.filePath, ps.tempCSVPath, ps.filePath)
+	// Generate unique filename using timestamp and counter
+	// This allows for append-only writes without merging
+	ps.fileCounter++
+	timestamp := time.Now().UTC().Format("20060102_150405")
+	outputFile := fmt.Sprintf("%s/events_%s_%d.parquet", ps.dataDir, timestamp, ps.fileCounter)
 
-		// Backup and remove old file
-		backupPath := ps.filePath + ".backup"
-		os.Rename(ps.filePath, backupPath)
-		defer os.Remove(backupPath)
-	}
+	// Convert CSV to Parquet with ZSTD compression
+	// Each file is independent and sorted by timestamp
+	copyQuery := fmt.Sprintf(`
+		COPY (
+			SELECT 
+				id,
+				timestamp,
+				date_trunc('hour', timestamp)  AS date_hour,
+				date_trunc('day', timestamp)   AS date_day,
+				date_trunc('month', timestamp) AS date_month,
+				event_name,
+				user_id,
+				session_id,
+				session_duration,
+				url,
+				referrer,
+				user_agent,
+				ip,
+				country,
+				browser,
+				os,
+				device,
+				is_bot,
+				project_id,
+				channel
+			FROM read_csv('%s', 
+				AUTO_DETECT=TRUE,
+				header=true,
+				timestampformat='%%Y-%%m-%%d %%H:%%M:%%S.%%f'
+			)
+			ORDER BY timestamp
+		) TO '%s' (FORMAT 'PARQUET', CODEC 'ZSTD', ROW_GROUP_SIZE 100000)
+	`, ps.tempCSVPath, outputFile)
 
 	_, err = ps.db.Exec(copyQuery)
 	if err != nil {
-		return fmt.Errorf("failed to copy to Parquet: %w", err)
+		return fmt.Errorf("failed to create Parquet file: %w", err)
 	}
 
 	duration := time.Since(start)
-	log.Printf("✅ Flushed %d events to Parquet in %v (%.0f events/sec)",
-		len(eventsToWrite), duration, float64(len(eventsToWrite))/duration.Seconds())
+	log.Printf("✅ Flushed %d events to %s in %v (%.0f events/sec)",
+		len(eventsToWrite), outputFile, duration, float64(len(eventsToWrite))/duration.Seconds())
 
 	return nil
 }
@@ -347,7 +315,8 @@ func (ps *ParquetStorage) Close() error {
 	return nil
 }
 
-// GetFilePath returns the Parquet file path for DuckDB queries
+// GetFilePath returns the Parquet directory path pattern for DuckDB queries
+// Use with read_parquet('data/events/*.parquet') to query all files
 func (ps *ParquetStorage) GetFilePath() string {
-	return ps.filePath
+	return fmt.Sprintf("%s/*.parquet", ps.dataDir)
 }
