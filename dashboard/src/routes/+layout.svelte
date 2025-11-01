@@ -1,6 +1,6 @@
 <script>
 	import '../app.css';
-	import favicon from '$lib/assets/favicon.svg';
+	import favicon from '$lib/assets/lantern.png';
 	import { page } from '$app/stores';
 
 	let { children } = $props();
@@ -14,7 +14,10 @@
 	<!-- Navigation -->
 	<nav class="bg-background border-b">
 		<div class="container mx-auto flex items-center gap-6 px-6 py-3">
-			<a href="/dashboard" class="flex items-center gap-2 text-lg font-bold"> 🏮 Siraaj </a>
+			<a href="/dashboard" class="flex items-center gap-2 text-lg font-bold">
+				<img src={favicon} alt="Siraaj Logo" class="h-10 w-10" />
+				Siraaj
+			</a>
 			<div class="flex gap-1">
 				<a
 					href="/dashboard"
