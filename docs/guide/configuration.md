@@ -8,59 +8,420 @@ Configure Siraaj using environment variables:
 
 ```bash
 # Server
-PORT=8080                    # Server port
-DB_PATH=analytics.db         # Database file path
+PORT=8080                           # Server port (default: 8080)
+DB_PATH=data/analytics.db           # DuckDB database path
+PARQUET_FILE=data/events            # Parquet storage directory
+
+# DuckDB Performance
+DUCKDB_MEMORY_LIMIT=4GB             # Memory limit (default: 4GB)
+DUCKDB_THREADS=4                    # Number of threads (default: 4)
 
 # CORS
-CORS=https://example.com,https://app.example.com
-
-# Geolocation (optional)
-GEODB_PATH=data/geodb/dbip-country.mmdb
-
-# Performance
-MAX_WORKERS=10               # Number of worker goroutines
-BUFFER_SIZE=1000            # Event buffer size
-FLUSH_INTERVAL=10s          # Auto-flush interval
+CORS=https://example.com,https://app.example.com  # Allowed origins (comma-separated)
 ```
 
-### Load from .env file
+### Load from File
+
+Create `.env` file:
 
 ```bash
-# Create .env file
-cat > .env << EOF
 PORT=8080
 DB_PATH=./data/analytics.db
-CORS=https://example.com
-EOF
+PARQUET_FILE=./data/events
+DUCKDB_MEMORY_LIMIT=4GB
+DUCKDB_THREADS=4
+CORS=https://example.com,https://app.example.com
+```
 
-# Load and run
+Load and run:
+
+```bash
 export $(cat .env | xargs)
 ./siraaj
 ```
 
-## Command-line Flags
+---
 
-Override environment variables with flags:
+## Server Configuration
+
+### Port
 
 ```bash
-./siraaj \
-  --port 3000 \
-  --db ./custom/analytics.db \
-  --cors "https://example.com,https://app.example.com"
+# Custom port
+PORT=3000 ./siraaj
+
+# Or with Docker
+docker run -d -p 3000:3000 -e PORT=3000 mohamedelhefni/siraaj:latest
 ```
 
-Available flags:
+### Database Path
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--port` | Server port | 8080 |
-| `--db` | Database path | analytics.db |
-| `--cors` | Allowed origins | * |
-| `--geodb` | GeoIP database path | data/geodb/dbip-country.mmdb |
+```bash
+# Absolute path
+DB_PATH=/var/lib/siraaj/analytics.db ./siraaj
 
-## Configuration File
+# Relative path
+DB_PATH=./custom/analytics.db ./siraaj
+```
 
-Create `config.yaml`:
+**Note:** DuckDB creates the database file automatically if it doesn't exist.
+
+---
+
+## Storage Configuration
+
+### Parquet Storage
+
+```bash
+# Set storage directory
+PARQUET_FILE=data/events ./siraaj
+
+# Docker
+docker run -d \
+  -e PARQUET_FILE=/data/events \
+  -v $(pwd)/data:/data \
+  mohamedelhefni/siraaj:latest
+```
+
+**Storage Structure:**
+- Events are buffered (10,000 events default)
+- Flushed every 30 seconds
+- Stored as compressed Parquet files
+- Automatic file merging when > 100 files
+
+---
+
+## DuckDB Performance Tuning
+
+### Memory Limit
+
+```bash
+# Increase for high-traffic sites
+DUCKDB_MEMORY_LIMIT=8GB ./siraaj
+
+# Decrease for resource-constrained environments
+DUCKDB_MEMORY_LIMIT=1GB ./siraaj
+```
+
+### Thread Count
+
+```bash
+# Match your CPU cores
+DUCKDB_THREADS=8 ./siraaj
+
+# For containers, set to container CPU limit
+DUCKDB_THREADS=2 ./siraaj
+```
+
+**Recommendations:**
+- **Low traffic** (< 10k events/day): 1-2 threads, 1GB memory
+- **Medium traffic** (10k-100k events/day): 2-4 threads, 4GB memory
+- **High traffic** (> 100k events/day): 4-8 threads, 8GB+ memory
+
+---
+
+## CORS Configuration
+
+### Allow Specific Domains
+
+```bash
+CORS=https://example.com,https://app.example.com ./siraaj
+```
+
+### Allow All Domains (Development Only)
+
+```bash
+CORS=* ./siraaj
+```
+
+:::warning Security
+Never use `CORS=*` in production! Always specify exact domains.
+:::
+
+### Docker CORS
+
+```yaml
+services:
+  siraaj:
+    image: mohamedelhefni/siraaj:latest
+    environment:
+      - CORS=https://example.com,https://app.example.com
+```
+
+---
+
+## Docker Configuration
+
+### Docker Compose
+
+Full production configuration:
+
+```yaml
+version: '3.8'
+
+services:
+  siraaj:
+    image: mohamedelhefni/siraaj:latest
+    container_name: siraaj
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      # Server
+      - PORT=8080
+      - DB_PATH=/data/analytics.db
+      - PARQUET_FILE=/data/events
+      
+      # Performance
+      - DUCKDB_MEMORY_LIMIT=4GB
+      - DUCKDB_THREADS=4
+      
+      # Security
+      - CORS=https://example.com,https://app.example.com
+      
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+```
+
+---
+
+## Data Retention
+
+DuckDB and Parquet storage grow over time. Clean old data periodically:
+
+### Manual Cleanup
+
+```sql
+-- Connect to database
+duckdb data/analytics.db
+
+-- Delete events older than 90 days
+DELETE FROM events WHERE timestamp < NOW() - INTERVAL 90 DAYS;
+
+-- Compact database
+VACUUM;
+```
+
+### Automated Cleanup Script
+
+```bash
+#!/bin/bash
+# cleanup.sh
+
+DB_PATH="data/analytics.db"
+RETENTION_DAYS=90
+
+duckdb "$DB_PATH" <<SQL
+DELETE FROM events 
+WHERE timestamp < CURRENT_TIMESTAMP - INTERVAL '$RETENTION_DAYS days';
+VACUUM;
+SQL
+
+echo "Cleanup complete. Deleted events older than $RETENTION_DAYS days"
+```
+
+Run with cron:
+
+```bash
+# Run daily at 2 AM
+0 2 * * * /path/to/cleanup.sh
+```
+
+---
+
+## Logging
+
+### Log Level
+
+Siraaj logs to stdout. Control verbosity:
+
+```bash
+# Production: info level (default)
+./siraaj 2>&1 | tee siraaj.log
+
+# Development: verbose logging
+./siraaj
+```
+
+### Docker Logs
+
+```bash
+# View logs
+docker logs siraaj
+
+# Follow logs
+docker logs -f siraaj
+
+# Last 100 lines
+docker logs --tail 100 siraaj
+```
+
+---
+
+## Health Checks
+
+### Health Endpoint
+
+```bash
+curl http://localhost:8080/api/health
+```
+
+Response:
+
+```json
+{
+  "status": "healthy",
+  "database": "connected"
+}
+```
+
+### Docker Healthcheck
+
+Already configured in recommended docker-compose.yml:
+
+```yaml
+healthcheck:
+  test: ["CMD", "wget", "--spider", "http://localhost:8080/api/health"]
+  interval: 30s
+  timeout: 3s
+  retries: 3
+  start_period: 5s
+```
+
+---
+
+## Production Checklist
+
+✅ Set specific CORS origins (not `*`)  
+✅ Configure adequate memory limit  
+✅ Set appropriate thread count  
+✅ Mount persistent volume for data  
+✅ Enable healthchecks  
+✅ Configure restart policy  
+✅ Set up log rotation  
+✅ Plan data retention policy  
+✅ Monitor disk space  
+✅ Test backup/restore  
+
+---
+
+## Environment-Specific Configs
+
+### Development
+
+```yaml
+version: '3.8'
+services:
+  siraaj:
+    image: mohamedelhefni/siraaj:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      - PORT=8080
+      - CORS=*  # Allow all in dev
+```
+
+### Staging
+
+```yaml
+version: '3.8'
+services:
+  siraaj:
+    image: mohamedelhefni/siraaj:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      - PORT=8080
+      - DUCKDB_MEMORY_LIMIT=2GB
+      - CORS=https://staging.example.com
+    restart: unless-stopped
+```
+
+### Production
+
+```yaml
+version: '3.8'
+services:
+  siraaj:
+    image: mohamedelhefni/siraaj:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      - PORT=8080
+      - DB_PATH=/data/analytics.db
+      - PARQUET_FILE=/data/events
+      - DUCKDB_MEMORY_LIMIT=8GB
+      - DUCKDB_THREADS=8
+      - CORS=https://example.com,https://app.example.com
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+```
+
+---
+
+## Troubleshooting
+
+### High Memory Usage
+
+```bash
+# Reduce memory limit
+DUCKDB_MEMORY_LIMIT=2GB ./siraaj
+```
+
+### Slow Queries
+
+```bash
+# Increase threads
+DUCKDB_THREADS=8 ./siraaj
+```
+
+### CORS Errors
+
+```bash
+# Check CORS configuration
+echo $CORS
+
+# Add your domain
+export CORS=https://example.com
+./siraaj
+```
+
+### Disk Space Issues
+
+```bash
+# Check database size
+du -h data/analytics.db
+
+# Check Parquet files
+du -sh data/events/
+
+# Clean old data (see Data Retention section)
+```
+
+---
+
+## Next Steps
+
+- [Funnels →](/guide/funnels)
+- [Channels →](/guide/channels)
+- [SDK Integration →](/sdk/overview)
+- [API Reference →](/api/overview)
 
 ```yaml
 server:

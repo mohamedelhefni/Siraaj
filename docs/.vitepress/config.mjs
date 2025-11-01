@@ -41,29 +41,10 @@ export default defineConfig({
           ]
         },
         {
-          text: 'Core Concepts',
-          items: [
-            { text: 'Architecture', link: '/guide/architecture' },
-            { text: 'Events & Tracking', link: '/guide/events-tracking' },
-            { text: 'Sessions', link: '/guide/sessions' },
-            { text: 'Privacy', link: '/guide/privacy' },
-          ]
-        },
-        {
           text: 'Features',
           items: [
-            { text: 'Dashboard', link: '/guide/dashboard' },
-            { text: 'Analytics', link: '/guide/analytics' },
             { text: 'Funnels', link: '/guide/funnels' },
             { text: 'Channels', link: '/guide/channels' },
-          ]
-        },
-        {
-          text: 'Deployment',
-          items: [
-            { text: 'Docker', link: '/guide/docker' },
-            { text: 'Production', link: '/guide/production' },
-            { text: 'Scaling', link: '/guide/scaling' },
           ]
         }
       ],
@@ -105,10 +86,6 @@ export default defineConfig({
           text: 'API Reference',
           items: [
             { text: 'Overview', link: '/api/overview' },
-            { text: 'Authentication', link: '/api/authentication' },
-            { text: 'Track Events', link: '/api/track-events' },
-            { text: 'Query Analytics', link: '/api/query-analytics' },
-            { text: 'Error Handling', link: '/api/error-handling' },
           ]
         }
       ]
@@ -119,7 +96,7 @@ export default defineConfig({
     ],
 
     footer: {
-      message: 'Released under the MIT License.',
+      message: 'Released under the AGPL-3.0 License.',
       copyright: 'Copyright © 2025 Mohamed Elhefni'
     },
 

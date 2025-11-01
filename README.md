@@ -1,22 +1,20 @@
 <div align="center">
   <img src="./logo.png" alt="Siraaj Logo" width="200"/>
   <h1>Siraaj Analytics</h1>
-  <p><strong>Fast, Simple, Self-Hosted Analytics</strong></p>
+  <p><strong>Privacy-First, Self-Hosted Web Analytics</strong></p>
   
   <p>
-    <a href="#features">Features</a> •
-    <a href="#quick-start">Quick Start</a> •
-    <a href="#installation">Installation</a> •
-    <a href="#documentation">Documentation</a> •
-    <a href="#api">API</a> •
-    <a href="#contributing">Contributing</a>
+    <a href="#-features">Features</a> •
+    <a href="#-quick-start">Quick Start</a> •
+    <a href="#-installation">Installation</a> •
+    <a href="#-documentation">Documentation</a>
   </p>
 
   <p>
     <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go" alt="Go Version"/>
     <img src="https://img.shields.io/badge/DuckDB-Powered-yellow?style=flat" alt="DuckDB"/>
     <img src="https://img.shields.io/badge/Svelte-5-FF3E00?style=flat&logo=svelte" alt="Svelte"/>
-    <img src="https://img.shields.io/badge/License-MIT-green?style=flat" alt="License"/>
+    <img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat" alt="License"/>
     <a href="https://github.com/mohamedelhefni/siraaj/actions/workflows/test.yml">
       <img src="https://github.com/mohamedelhefni/siraaj/actions/workflows/test.yml/badge.svg" alt="Tests"/>
     </a>
@@ -31,110 +29,41 @@
 
 ---
 
-## 🚀 Overview
+## 🚀 What is Siraaj?
 
-Siraaj is a lightweight, privacy-focused analytics platform that you can self-host. Built with Go and DuckDB, it provides real-time insights into your web traffic without compromising user privacy or relying on third-party services.
+Siraaj is a **lightweight, privacy-focused analytics platform** built with Go and DuckDB. It provides real-time insights into your web traffic without cookies, third-party tracking, or compromising user privacy.
 
-### Why Siraaj?
-
-- **🔒 Privacy First**: No cookies, no tracking across sites, fully GDPR compliant
-- **⚡ Blazing Fast**: Powered by DuckDB for lightning-fast analytics queries
-- **📊 Beautiful Dashboard**: Modern, responsive UI built with SvelteKit
-- **🎯 Simple Integration**: Drop-in JavaScript SDK, works anywhere
-- **🌍 Multi-Project**: Track multiple websites from one instance
-- **📈 Real-Time**: See your data as it happens
-- **💾 Self-Hosted**: Your data stays on your infrastructure
-- **🏗️ Clean Architecture**: Maintainable, testable, production-ready code
+**Key Highlights:**
+- 🔒 **Privacy-First**: No cookies, GDPR compliant, your data stays on your server
+- ⚡ **Lightning Fast**: DuckDB columnar storage delivers sub-50ms query performance
+- 📊 **Beautiful Dashboard**: Modern SvelteKit 5 UI with real-time updates
+- 🎯 **Simple Integration**: Drop-in JavaScript SDK (< 5KB gzipped)
+- 🌍 **Multi-Project**: Track unlimited websites from one instance
+- 🏗️ **Production-Ready**: Clean architecture, well-tested, Docker-ready
 
 ---
 
 ## ✨ Features
 
-### Analytics Capabilities
-
-- **📊 Core Metrics**
-  - Total events, unique visitors, page views
-  - Total visits (sessions), bounce rate
-  - Real-time online users
-
-- **📈 Trend Analysis**
-  - Compare current vs previous period
-  - Percentage change indicators
-  - Dynamic time granularity (hourly/daily/monthly)
-
-- **🌐 Geographic Insights**
-  - Country-level visitor tracking
-  - IP geolocation support (optional)
-
-- **🖥️ Technical Breakdown**
-  - Browser statistics
-  - Operating system distribution
-  - Device types (desktop/mobile/tablet)
-
-- **🔍 Traffic Analysis**
-  - Top pages and URLs
-  - Referrer sources
-  - Custom event tracking
-
-### Dashboard Features
-
-- **🎨 Interactive UI**
-  - Real-time data updates (10s, 30s, 1min, 5min intervals)
-  - Click-to-filter on all metrics
-  - URL parameter persistence (shareable links)
-  - Responsive design for all devices
-
-- **📅 Flexible Time Ranges**
-  - Today, Yesterday
-  - Last 7/30 days
-  - This/Last month
-  - Last 3/6 months
-  - This year
-  - Custom date range
-
-- **🔎 Advanced Filtering**
-  - Filter by project, source, country, browser, event
-  - Combine multiple filters
-  - Metric-specific chart views
+- **Core Analytics**: Page views, unique visitors, sessions, bounce rate, online users
+- **Traffic Channels**: Automatic classification (Direct, Organic, Social, Referral, Paid)
+- **Geographic Data**: Country-level tracking with optional MaxMind geolocation
+- **Technical Insights**: Browser, OS, device type distribution
+- **Custom Events**: Track any event with custom properties
+- **Funnel Analysis**: Measure conversion through multi-step funnels
+- **Real-Time Dashboard**: Live updates with configurable refresh intervals
+- **Advanced Filtering**: Filter by project, date, country, browser, OS, device, source
+- **Entry/Exit Pages**: Track where users enter and leave your site
+- **Bot Detection**: Automatic bot filtering with 50+ known bots
+- **Parquet Storage**: Efficient columnar storage with automatic file management
 
 ---
 
 ## 🏃 Quick Start
 
-### Prerequisites
-
-- Go 1.24 or higher
-- Node.js 18+ (for building dashboard)
-- pnpm (optional, or use npm)
-
-### Run in 3 Steps
+### Option 1: Docker (Recommended)
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/mohamedelhefni/siraaj.git
-cd siraaj
-
-# 2. Build the project
-go build -o siraaj
-
-# 3. Run the server
-./siraaj
-```
-
-The server will start on `http://localhost:8080`
-
-- **Dashboard**: http://localhost:8080/dashboard/
-
----
-
-## 📦 Installation
-
-### Method 2: Docker (Recommended)
-
-```bash
-# Pull and run the latest version
-docker pull mohamedelhefni/siraaj:latest
-
 docker run -d \
   -p 8080:8080 \
   -v $(pwd)/data:/data \
@@ -142,7 +71,33 @@ docker run -d \
   mohamedelhefni/siraaj:latest
 ```
 
-**With Docker Compose:**
+### Option 2: Binary
+
+```bash
+# Download and run
+curl -L https://github.com/mohamedelhefni/siraaj/releases/latest/download/siraaj-linux-amd64 -o siraaj
+chmod +x siraaj
+./siraaj
+```
+
+### Option 3: From Source
+
+```bash
+git clone https://github.com/mohamedelhefni/siraaj.git
+cd siraaj
+go build -o siraaj
+./siraaj
+```
+
+**Access the dashboard:** http://localhost:8080/dashboard/
+
+---
+
+## 📦 Installation
+
+### Docker Compose
+
+Create `docker-compose.yml`:
 
 ```yaml
 version: '3.8'
@@ -157,37 +112,30 @@ services:
     environment:
       - PORT=8080
       - DB_PATH=/data/analytics.db
+      - PARQUET_FILE=/data/events
+      - DUCKDB_MEMORY_LIMIT=4GB
+      - DUCKDB_THREADS=4
     restart: unless-stopped
 ```
 
-Save as `docker-compose.yml` and run:
-```bash
-docker-compose up -d
-```
+Run: `docker-compose up -d`
 
-### Method 3: Pre-built Binary
+### Build from Source
 
-```bash
-# Download the latest release
-curl -L https://github.com/mohamedelhefni/siraaj/releases/latest/download/siraaj-linux-amd64 -o siraaj
-chmod +x siraaj
-./siraaj
-```
-
-### Method 4: Build from Source
+**Prerequisites**: Go 1.24+, Node.js 18+, pnpm
 
 ```bash
-# Clone the repository
+# Clone repository
 git clone https://github.com/mohamedelhefni/siraaj.git
 cd siraaj
 
-# Build the dashboard (optional, already embedded)
+# Build dashboard (optional - already embedded)
 cd dashboard
 pnpm install
 pnpm build
 cd ..
 
-# Build the Go binary
+# Build Go binary
 go build -o siraaj
 
 # Run
@@ -196,108 +144,62 @@ go build -o siraaj
 
 ---
 
-## 📚 Documentation
+## 📚 Usage
 
-### JavaScript SDK Integration
+### Add to Your Website
 
-Add the SDK to your website:
+Include the SDK in your HTML:
 
 ```html
-<!-- Include the SDK -->
-<script src="http://your-server:8080/sdk/analytics.js"></script>
-
-<!-- Initialize -->
 <script>
-  const analytics = new Analytics({
-    apiUrl: 'http://your-server:8080',
-    projectId: 'my-website',
-    autoTrack: true, // Automatically track page views
-    debug: false
-  });
+  (function() {
+    var script = document.createElement('script');
+    script.src = 'http://your-server:8080/sdk/analytics.js';
+    script.defer = true;
+    document.head.appendChild(script);
+    
+    script.onload = function() {
+      window.siraaj = new Analytics({
+        apiUrl: 'http://your-server:8080',
+        projectId: 'my-website',
+        autoTrack: true
+      });
+    };
+  })();
 </script>
 ```
 
 ### Track Custom Events
 
 ```javascript
-// Track a custom event
-analytics.track('button_clicked', {
+// Track button clicks
+siraaj.track('button_clicked', {
   button_id: 'signup',
   location: 'hero'
 });
 
-// Track page views manually
-analytics.trackPageView();
-
-// Track with custom properties
-analytics.track('purchase', {
+// Track conversions
+siraaj.track('purchase', {
   product: 'Premium Plan',
   price: 99.99,
   currency: 'USD'
 });
 
 // Identify users (optional)
-analytics.identify('user-123', {
+siraaj.identify('user-123', {
   email: 'user@example.com',
   plan: 'premium'
 });
 ```
 
-### SDK Configuration Options
+### Framework Integrations
 
-```javascript
-const analytics = new Analytics({
-  apiUrl: 'http://localhost:8080',    // Your analytics server URL
-  projectId: 'default',               // Project identifier
-  autoTrack: true,                    // Auto-track page views
-  bufferSize: 10,                     // Events to buffer before sending
-  flushInterval: 30000,               // Auto-flush interval (ms)
-  debug: false,                       // Enable debug logging
-  respectDoNotTrack: true             // Honor DNT header
-});
+**React/Next.js:**
+```bash
+npm install @siraaj/analytics
 ```
 
-## 🏗️ Architecture
-
-Siraaj follows Clean Architecture principles:
-
-```
-siraaj/
-├── main.go                 # Application entry point
-├── internal/
-│   ├── domain/            # Business entities
-│   ├── repository/        # Data access layer
-│   ├── service/           # Business logic
-│   ├── handler/           # HTTP handlers
-│   ├── middleware/        # HTTP middleware
-│   └── migrations/        # Database migrations
-├── sdk/
-│   └── analytics.js       # JavaScript SDK
-├── dashboard/             # SvelteKit dashboard
-│   ├── src/
-│   │   ├── routes/        # Pages
-│   │   └── lib/           # Components
-│   └── package.json
-├── geolocation/           # GeoIP service
-└── ui/                    # Static assets
-```
-
-### Technology Stack
-
-**Backend:**
-- Go 1.24+ (HTTP server, business logic)
-- DuckDB (Analytics database, OLAP queries)
-- MaxMind DB-IP (Geolocation)
-
-**Frontend:**
-- SvelteKit 2.0 (UI framework)
-- Chart.js 4.4 (Data visualization)
-- Tailwind CSS (Styling)
-- shadcn-svelte (UI components)
-
-**SDK:**
-- Vanilla JavaScript (No dependencies)
-- UMD format (Works everywhere)
+See [SDK Documentation](./sdk/README.md) for React, Vue, Svelte, Next.js, and Nuxt integrations.
 
 ---
 
@@ -306,57 +208,181 @@ siraaj/
 ### Environment Variables
 
 ```bash
-# Server configuration
-PORT=8080
-DB_PATH=analytics.db
+# Server
+PORT=8080                          # Server port
+DB_PATH=data/analytics.db          # DuckDB database path
+PARQUET_FILE=data/events           # Parquet storage directory
+
+# DuckDB Performance
+DUCKDB_MEMORY_LIMIT=4GB            # Memory limit for DuckDB
+DUCKDB_THREADS=4                   # Number of threads
 
 # CORS (optional)
-CORS=https://mysite.com,https://app.mysite.com
+CORS=https://example.com,https://app.example.com
 ```
+
+### API Endpoints
+
+- `POST /api/track` - Track single event
+- `POST /api/track/batch` - Track multiple events
+- `GET /api/stats` - Get analytics statistics
+- `GET /api/stats/overview` - Dashboard overview
+- `GET /api/stats/timeline` - Timeline data
+- `GET /api/stats/pages` - Top pages
+- `GET /api/stats/countries` - Country distribution
+- `GET /api/stats/sources` - Traffic sources
+- `GET /api/stats/devices` - Browser/OS/Device stats
+- `GET /api/channels` - Channel analytics
+- `GET /api/online` - Real-time online users
+- `GET /api/projects` - List projects
+- `POST /api/funnel` - Funnel analysis
+- `GET /api/health` - Health check
+
+See [API Documentation](./docs/api/overview.md) for details.
 
 ---
 
-### Data Retention
+## 🏗️ Architecture
 
-Configure retention policies by manually cleaning old data:
+Siraaj follows **Clean Architecture** principles for maintainability and testability:
 
-```sql
--- Delete events older than 90 days
-DELETE FROM events WHERE timestamp < NOW() - INTERVAL 90 DAYS;
 ```
+siraaj/
+├── main.go                    # Application entry point
+├── internal/
+│   ├── domain/               # Business entities (Event, Stats)
+│   ├── repository/           # Data access layer (DuckDB/Parquet)
+│   ├── service/              # Business logic
+│   ├── handler/              # HTTP handlers
+│   ├── middleware/           # CORS, logging
+│   ├── migrations/           # Database migrations
+│   ├── storage/              # Parquet storage engine
+│   ├── botdetector/          # Bot detection (50+ known bots)
+│   └── channeldetector/      # Traffic channel classification
+├── sdk/
+│   ├── analytics.js          # Vanilla JS SDK
+│   └── dist/                 # Framework integrations (React, Vue, Svelte, etc.)
+├── dashboard/                # SvelteKit 5 dashboard
+├── geolocation/              # GeoIP service (MaxMind)
+└── docs/                     # VitePress documentation
+
+```
+
+**Tech Stack:**
+- **Backend**: Go 1.24, DuckDB (OLAP queries), Parquet (columnar storage)
+- **Frontend**: SvelteKit 5, Chart.js, Tailwind CSS, shadcn-svelte
+- **SDK**: Vanilla JS/TypeScript (UMD), framework adapters
+- **Storage**: DuckDB + Parquet files with automatic merging
+- **Deployment**: Docker, binary releases for Linux/macOS/Windows
 
 ---
 
-## 🛠️ Development
-
-### Development Workflow
+## 🧪 Testing
 
 ```bash
-# 1. Clone and setup
-git clone https://github.com/mohamedelhefni/siraaj.git
-cd siraaj
+# Run all tests
+make test
 
-# 2. Install dependencies
+# Run with coverage
+make test-coverage
+
+# Run specific tests
+make test-unit          # Unit tests only
+make test-integration   # Integration tests
+make test-race          # Race condition detection
+
+# Run benchmarks
+make bench
+```
+
+**Test Coverage**: ~85% with unit, integration, and benchmark tests
+
+---
+
+## 📈 Performance
+
+- **Query Speed**: < 50ms (p95) for analytics queries
+- **Event Tracking**: < 20ms (p95) for batch inserts
+- **Storage**: Columnar Parquet format with compression
+- **Concurrency**: Handles thousands of concurrent events
+- **Memory**: ~100MB base, configurable DuckDB memory limit
+
+**Optimizations:**
+- Parquet columnar storage with buffering (10k events)
+- Automatic file merging (< 100 files maintained)
+- DuckDB parallel query execution
+- Indexed queries on timestamp, project, channel
+- Bot traffic filtering
+
+---
+
+## 🔒 Privacy & Compliance
+
+- **No cookies**: Uses anonymous user/session IDs
+- **No cross-site tracking**: Data scoped per domain
+- **GDPR compliant**: No personal data collected by default
+- **Self-hosted**: Complete data ownership and control
+- **Bot filtering**: Excludes known bots from analytics
+- **IP anonymization**: Optional geolocation only stores country
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+**Development Setup:**
+```bash
+# Install dependencies
 go mod download
 cd dashboard && pnpm install && cd ..
 
-# 3. Run with hot reload
-air  # Backend with auto-reload
+# Run tests
+make test
 
-# In another terminal
-cd dashboard
-pnpm dev  # Frontend dev server on :5173
+# Run with hot reload (requires air)
+air
 ```
 
 ---
 
-## 📝 License
+## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+**Key Points:**
+- ✅ Free to use, modify, and distribute
+- ✅ Source code must be made available when distributed
+- ✅ Network use is distribution (if you modify and host publicly, share the code)
+- ✅ Commercial use allowed
+- ⚠️ Changes must be documented
+- ⚠️ Same license for derivatives
+
+See [LICENSE](LICENSE) file for full details.
+
+---
+
+## 🙏 Acknowledgments
+
+- **DuckDB** - Fast OLAP database engine
+- **SvelteKit** - Modern web framework
+- **MaxMind** - GeoIP database
+- All contributors and users of Siraaj
 
 ---
 
 <div align="center">
-  <p>Made with ❤️ by <a href="https://github.com/mohamedelhefni">Mohamed Elhefni</a></p>
+  <p>Built with ❤️ by <a href="https://github.com/mohamedelhefni">Mohamed Elhefni</a></p>
+  <p>
+    <a href="https://github.com/mohamedelhefni/siraaj">GitHub</a> •
+    <a href="https://github.com/mohamedelhefni/siraaj/issues">Issues</a> •
+    <a href="./docs">Documentation</a>
+  </p>
   <p>⭐ Star this repo if you find it useful!</p>
 </div>
