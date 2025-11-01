@@ -35,7 +35,7 @@ ssl/
 *.pem
 *.crt
 *.key
-
+node_modules
 # Editor/IDE
 # .idea/
 # .vscode/
