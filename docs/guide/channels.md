@@ -418,6 +418,5 @@ Consider that users may visit from multiple channels before converting.
 ## Next Steps
 
 - [Funnels →](/guide/funnels)
-- [Dashboard →](/guide/dashboard)
 - [Custom Events →](/sdk/custom-events)
 - [API Reference →](/api/overview)

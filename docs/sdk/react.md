@@ -535,4 +535,3 @@ Check out complete examples:
 
 - [Track Custom Events →](/sdk/custom-events)
 - [User Identification →](/sdk/user-identification)
-- [Performance Tracking →](/sdk/performance)

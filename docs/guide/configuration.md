@@ -737,8 +737,3 @@ curl -H "Origin: https://example.com" \
   http://localhost:8080/api/track
 ```
 
-## Next Steps
-
-- [Production Deployment →](/guide/production)
-- [Scaling Guide →](/guide/scaling)
-- [Dashboard Guide →](/guide/dashboard)

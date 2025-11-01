@@ -52,5 +52,4 @@ const analytics = new Analytics({
 
 ## Next Steps
 
-- [Performance Tracking →](/sdk/performance)
 - [Custom Events →](/sdk/custom-events)

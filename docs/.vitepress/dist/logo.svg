@@ -1,0 +1,30 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Circle background -->
+  <circle cx="100" cy="100" r="90" fill="url(#gradient)" opacity="0.1"/>
+  
+  <!-- Chart bars -->
+  <rect x="40" y="120" width="20" height="40" fill="url(#gradient)" rx="4"/>
+  <rect x="70" y="100" width="20" height="60" fill="url(#gradient)" rx="4"/>
+  <rect x="100" y="80" width="20" height="80" fill="url(#gradient)" rx="4"/>
+  <rect x="130" y="90" width="20" height="70" fill="url(#gradient)" rx="4"/>
+  <rect x="160" y="110" width="20" height="50" fill="url(#gradient)" rx="4"/>
+  
+  <!-- Trend line -->
+  <path d="M 40 130 Q 70 110, 100 90 T 160 120" 
+        stroke="url(#gradient)" 
+        stroke-width="3" 
+        fill="none" 
+        stroke-linecap="round"/>
+  
+  <!-- Dots on trend line -->
+  <circle cx="40" cy="130" r="4" fill="#3b82f6"/>
+  <circle cx="100" cy="90" r="4" fill="#3b82f6"/>
+  <circle cx="160" cy="120" r="4" fill="#3b82f6"/>
+</svg>

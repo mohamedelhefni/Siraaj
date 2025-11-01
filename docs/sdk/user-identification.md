@@ -99,4 +99,3 @@ analytics.setUserProperties({
 ## Next Steps
 
 - [Auto-Tracking →](/sdk/auto-tracking)
-- [Performance →](/sdk/performance)

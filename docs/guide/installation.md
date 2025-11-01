@@ -533,4 +533,4 @@ go build -o siraaj
 
 ---
 
-Need help? [Open an issue](https://github.com/mohamedelhefni/siraaj/issues) or check the [FAQ](/guide/faq).
+Need help? [Open an issue](https://github.com/mohamedelhefni/siraaj/issues)

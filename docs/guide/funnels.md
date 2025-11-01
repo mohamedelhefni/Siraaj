@@ -393,6 +393,5 @@ async function analyzePurchaseFunnel() {
 ## Next Steps
 
 - [Channels →](/guide/channels)
-- [Dashboard →](/guide/dashboard)
 - [Custom Events →](/sdk/custom-events)
 - [API Reference →](/api/overview)
