@@ -17,10 +17,13 @@ type Migration struct {
 var migrations = []Migration{
 	{
 		Version:     1,
-		Description: "Create events table",
+		Description: "Create events table with optimized schema",
 		Up: `CREATE TABLE IF NOT EXISTS events (
 			id UBIGINT PRIMARY KEY,
 			timestamp TIMESTAMP NOT NULL,
+			date_hour TIMESTAMP NOT NULL,
+			date_day DATE NOT NULL,
+			date_month DATE NOT NULL,
 			event_name VARCHAR NOT NULL,
 			user_id VARCHAR,
 			session_id VARCHAR,
@@ -33,9 +36,13 @@ var migrations = []Migration{
 			browser VARCHAR,
 			os VARCHAR,
 			device VARCHAR,
-			project_id VARCHAR DEFAULT 'default'
-		)`,
-		Down: `DROP TABLE IF EXISTS events`,
+			is_bot BOOLEAN DEFAULT FALSE,
+			project_id VARCHAR DEFAULT 'default',
+			channel VARCHAR
+		);
+		CREATE SEQUENCE IF NOT EXISTS id_sequence START 1;`,
+		Down: `DROP SEQUENCE IF EXISTS id_sequence;
+		DROP TABLE IF EXISTS events;`,
 	},
 	{
 		Version:     2,
@@ -45,109 +52,40 @@ var migrations = []Migration{
 	},
 	{
 		Version:     3,
-		Description: "Create indexes",
-		Up: `CREATE INDEX IF NOT EXISTS idx_timestamp ON events(timestamp DESC);
-		CREATE INDEX IF NOT EXISTS idx_event_name ON events(event_name);
-		CREATE INDEX IF NOT EXISTS idx_user_id ON events(user_id);
-		CREATE INDEX IF NOT EXISTS idx_country ON events(country);
-		CREATE INDEX IF NOT EXISTS idx_referrer ON events(referrer);
-		CREATE INDEX IF NOT EXISTS idx_project_id ON events(project_id);
-		CREATE INDEX IF NOT EXISTS idx_session_id ON events(session_id)`,
-		Down: `DROP INDEX IF EXISTS idx_timestamp;
-		DROP INDEX IF EXISTS idx_event_name;
-		DROP INDEX IF EXISTS idx_user_id;
-		DROP INDEX IF EXISTS idx_country;
-		DROP INDEX IF EXISTS idx_referrer;
-		DROP INDEX IF EXISTS idx_project_id;
-		DROP INDEX IF EXISTS idx_session_id`,
-	},
-	{
-		Version:     4,
-		Description: "Add is_bot column to events table",
-		Up:          `ALTER TABLE events ADD COLUMN IF NOT EXISTS is_bot BOOLEAN DEFAULT FALSE`,
-		Down:        `ALTER TABLE events DROP COLUMN IF EXISTS is_bot`,
-	},
-	{
-		Version:     5,
-		Description: "Create index on is_bot column",
-		Up:          `CREATE INDEX IF NOT EXISTS idx_is_bot ON events(is_bot)`,
-		Down:        `DROP INDEX IF EXISTS idx_is_bot`,
-	},
-	{
-		Version:     6,
-		Description: "Create composite indexes for common query patterns",
-		Up: `-- Composite index for timeline queries (most common query pattern)
-		CREATE INDEX IF NOT EXISTS idx_timestamp_event_name ON events(timestamp DESC, event_name);
+		Description: "Create optimized indexes for large-scale analytics",
+		Up: `-- Primary time-based indexes using date partitioning columns
+		CREATE INDEX IF NOT EXISTS idx_date_day ON events(date_day DESC);
+		CREATE INDEX IF NOT EXISTS idx_date_hour ON events(date_hour DESC);
 		
-		-- Composite index for filtered queries
-		CREATE INDEX IF NOT EXISTS idx_timestamp_project ON events(timestamp DESC, project_id);
+		-- Covering indexes for common analytics queries
+		CREATE INDEX IF NOT EXISTS idx_day_project_event ON events(date_day, project_id, event_name, is_bot);
+		CREATE INDEX IF NOT EXISTS idx_day_country ON events(date_day, country);
+		CREATE INDEX IF NOT EXISTS idx_day_channel ON events(date_day, channel);
 		
-		-- Composite index for session analysis
-		CREATE INDEX IF NOT EXISTS idx_session_timestamp ON events(session_id, timestamp);
+		-- Session and user analysis indexes
+		CREATE INDEX IF NOT EXISTS idx_session_timestamp ON events(session_id, timestamp) ;
+		CREATE INDEX IF NOT EXISTS idx_user_day ON events(user_id, date_day) ;
 		
-		-- Composite index for user journey analysis
-		CREATE INDEX IF NOT EXISTS idx_user_timestamp ON events(user_id, timestamp);
+		-- URL and referrer analysis indexes
+		CREATE INDEX IF NOT EXISTS idx_day_url ON events(date_day, url);
+		CREATE INDEX IF NOT EXISTS idx_day_referrer ON events(date_day, referrer);
 		
-		-- Composite index for URL-based queries
-		CREATE INDEX IF NOT EXISTS idx_timestamp_url ON events(timestamp DESC, url);
-		
-		-- Composite index for country filtering
-		CREATE INDEX IF NOT EXISTS idx_timestamp_country ON events(timestamp DESC, country);`,
-		Down: `DROP INDEX IF EXISTS idx_timestamp_event_name;
-		DROP INDEX IF EXISTS idx_timestamp_project;
+		-- Device analytics indexes
+		CREATE INDEX IF NOT EXISTS idx_day_browser ON events(date_day, browser);
+		CREATE INDEX IF NOT EXISTS idx_day_device ON events(date_day, device) ;
+		CREATE INDEX IF NOT EXISTS idx_day_os ON events(date_day, os) ;`,
+		Down: `DROP INDEX IF EXISTS idx_date_day;
+		DROP INDEX IF EXISTS idx_date_hour;
+		DROP INDEX IF EXISTS idx_day_project_event;
+		DROP INDEX IF EXISTS idx_day_country;
+		DROP INDEX IF EXISTS idx_day_channel;
 		DROP INDEX IF EXISTS idx_session_timestamp;
-		DROP INDEX IF EXISTS idx_user_timestamp;
-		DROP INDEX IF EXISTS idx_timestamp_url;
-		DROP INDEX IF EXISTS idx_timestamp_country`,
-	},
-	{
-		Version:     7,
-		Description: "Add additional performance indexes for analytics queries",
-		Up: `-- Composite index for bot filtering with timestamp
-		CREATE INDEX IF NOT EXISTS idx_timestamp_is_bot ON events(timestamp DESC, is_bot);
-		
-		-- Composite index for browser analytics
-		CREATE INDEX IF NOT EXISTS idx_timestamp_browser ON events(timestamp DESC, browser);
-		
-		-- Composite index for device analytics
-		CREATE INDEX IF NOT EXISTS idx_timestamp_device ON events(timestamp DESC, device);
-		
-		-- Composite index for OS analytics
-		CREATE INDEX IF NOT EXISTS idx_timestamp_os ON events(timestamp DESC, os);
-		
-		-- Composite index for referrer/source analytics
-		CREATE INDEX IF NOT EXISTS idx_timestamp_referrer ON events(timestamp DESC, referrer);
-		
-		-- Covering index for page view queries (includes all necessary columns)
-		CREATE INDEX IF NOT EXISTS idx_pageview_covering ON events(timestamp DESC, event_name, session_id, is_bot);
-		
-		-- Index for session duration analytics
-		CREATE INDEX IF NOT EXISTS idx_session_duration ON events(session_duration);`,
-		Down: `DROP INDEX IF EXISTS idx_timestamp_is_bot;
-		DROP INDEX IF EXISTS idx_timestamp_browser;
-		DROP INDEX IF EXISTS idx_timestamp_device;
-		DROP INDEX IF EXISTS idx_timestamp_os;
-		DROP INDEX IF EXISTS idx_timestamp_referrer;
-		DROP INDEX IF EXISTS idx_pageview_covering;
-		DROP INDEX IF EXISTS idx_session_duration`,
-	},
-	{
-		Version:     8,
-		Description: "Add channel column to events table",
-		Up:          `ALTER TABLE events ADD COLUMN IF NOT EXISTS channel VARCHAR`,
-		Down:        `ALTER TABLE events DROP COLUMN IF EXISTS channel`,
-	},
-	{
-		Version:     9,
-		Description: "Create index on channel column",
-		Up:          `CREATE INDEX IF NOT EXISTS idx_channel ON events(channel)`,
-		Down:        `DROP INDEX IF EXISTS idx_channel`,
-	},
-	{
-		Version:     10,
-		Description: "Create composite index for channel analytics",
-		Up:          `CREATE INDEX IF NOT EXISTS idx_timestamp_channel ON events(timestamp DESC, channel)`,
-		Down:        `DROP INDEX IF EXISTS idx_timestamp_channel`,
+		DROP INDEX IF EXISTS idx_user_day;
+		DROP INDEX IF EXISTS idx_day_url;
+		DROP INDEX IF EXISTS idx_day_referrer;
+		DROP INDEX IF EXISTS idx_day_browser;
+		DROP INDEX IF EXISTS idx_day_device;
+		DROP INDEX IF EXISTS idx_day_os`,
 	},
 }
 

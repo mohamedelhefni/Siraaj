@@ -5,11 +5,16 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/mohamedelhefni/siraaj/internal/domain"
-	"github.com/mohamedelhefni/siraaj/internal/storage"
+)
+
+const (
+	// Batch insert size for optimal performance
+	BatchInsertSize = 5000
 )
 
 type EventRepository interface {
@@ -33,19 +38,41 @@ type EventRepository interface {
 
 	// Channel analytics
 	GetChannels(startDate, endDate time.Time, filters map[string]string) ([]map[string]interface{}, error)
+
+	// Flush and Close for graceful shutdown
+	Flush() error
+	Close() error
 }
 
 type eventRepository struct {
-	db             *sql.DB
-	parquetStorage *storage.ParquetStorage
-	idCounter      atomic.Uint64
+	db         *sql.DB
+	idCounter  atomic.Uint64
+	buffer     []domain.Event
+	bufferMu   sync.Mutex
+	insertStmt *sql.Stmt
 }
 
-func NewEventRepository(db *sql.DB, parquetStorage *storage.ParquetStorage) EventRepository {
-	return &eventRepository{
-		db:             db,
-		parquetStorage: parquetStorage,
+func NewEventRepository(db *sql.DB) EventRepository {
+	repo := &eventRepository{
+		db:     db,
+		buffer: make([]domain.Event, 0, BatchInsertSize),
 	}
+
+	stmt, err := db.Prepare(`
+		INSERT INTO events (
+			id, timestamp, date_hour, date_day, date_month,
+			event_name, user_id, session_id, session_duration,
+			url, referrer, user_agent, ip, country,
+			browser, os, device, is_bot, project_id, channel
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		log.Printf("Warning: failed to prepare insert statement: %v", err)
+	} else {
+		repo.insertStmt = stmt
+	}
+
+	return repo
 }
 
 func (r *eventRepository) Create(event domain.Event) error {
@@ -53,15 +80,21 @@ func (r *eventRepository) Create(event domain.Event) error {
 		event.ProjectID = "default"
 	}
 
-	// Generate ID
 	event.ID = r.idCounter.Add(1)
+	event.Timestamp = event.Timestamp.UTC()
 
-	// Write to Parquet storage (buffered)
-	if r.parquetStorage != nil {
-		if err := r.parquetStorage.Write(event); err != nil {
-			log.Printf("Error writing to Parquet storage: %v", err)
-			return err
-		}
+	dateHour := event.Timestamp.Truncate(time.Hour)
+	dateDay := time.Date(event.Timestamp.Year(), event.Timestamp.Month(), event.Timestamp.Day(), 0, 0, 0, 0, time.UTC)
+	dateMonth := time.Date(event.Timestamp.Year(), event.Timestamp.Month(), 1, 0, 0, 0, 0, time.UTC)
+
+	if r.insertStmt != nil {
+		_, err := r.insertStmt.Exec(
+			event.ID, event.Timestamp, dateHour, dateDay, dateMonth,
+			event.EventName, event.UserID, event.SessionID, event.SessionDuration,
+			event.URL, event.Referrer, event.UserAgent, event.IP, event.Country,
+			event.Browser, event.OS, event.Device, event.IsBot, event.ProjectID, event.Channel,
+		)
+		return err
 	}
 
 	return nil
@@ -72,37 +105,74 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 		return nil
 	}
 
-	// Set project IDs and generate IDs
 	for i := range events {
 		if events[i].ProjectID == "" {
 			events[i].ProjectID = "default"
 		}
 		events[i].ID = r.idCounter.Add(1)
+		events[i].Timestamp = events[i].Timestamp.UTC()
 	}
 
-	// Write to Parquet storage (buffered)
-	if r.parquetStorage != nil {
-		if err := r.parquetStorage.WriteBatch(events); err != nil {
-			log.Printf("Error writing batch to Parquet storage: %v", err)
-			return err
-		}
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	valueStrings := make([]string, 0, len(events))
+	valueArgs := make([]interface{}, 0, len(events)*20)
+
+	for _, event := range events {
+		dateHour := event.Timestamp.Truncate(time.Hour)
+		dateDay := time.Date(event.Timestamp.Year(), event.Timestamp.Month(), event.Timestamp.Day(), 0, 0, 0, 0, time.UTC)
+		dateMonth := time.Date(event.Timestamp.Year(), event.Timestamp.Month(), 1, 0, 0, 0, 0, time.UTC)
+
+		valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		valueArgs = append(valueArgs,
+			event.ID, event.Timestamp, dateHour, dateDay, dateMonth,
+			event.EventName, event.UserID, event.SessionID, event.SessionDuration,
+			event.URL, event.Referrer, event.UserAgent, event.IP, event.Country,
+			event.Browser, event.OS, event.Device, event.IsBot, event.ProjectID, event.Channel,
+		)
 	}
 
+	query := fmt.Sprintf(`
+		INSERT INTO events (
+			id, timestamp, date_hour, date_day, date_month,
+			event_name, user_id, session_id, session_duration,
+			url, referrer, user_agent, ip, country,
+			browser, os, device, is_bot, project_id, channel
+		) VALUES %s
+	`, strings.Join(valueStrings, ","))
+
+	_, err = tx.Exec(query, valueArgs...)
+	if err != nil {
+		return fmt.Errorf("failed to insert batch: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+func (r *eventRepository) Flush() error {
+	return nil // No buffering needed with direct inserts
+}
+
+func (r *eventRepository) Close() error {
+	if r.insertStmt != nil {
+		return r.insertStmt.Close()
+	}
 	return nil
 }
 
 func (r *eventRepository) GetEvents(startDate, endDate time.Time, limit, offset int) (map[string]interface{}, error) {
-	// Query from Parquet file using DuckDB
-	parquetPath := r.parquetStorage.GetFilePath()
-
-	query := fmt.Sprintf(`
+	query := `
 		SELECT id, timestamp, event_name, user_id, session_id, session_duration, url, referrer,
 			user_agent, ip, country, browser, os, device, is_bot, project_id, channel
-		FROM read_parquet('%s')
-		WHERE timestamp BETWEEN ? AND ?
+		FROM events
+		WHERE date_day >= CAST(? AS DATE) AND date_day <= CAST(? AS DATE)
 		ORDER BY timestamp DESC
 		LIMIT ? OFFSET ?
-	`, parquetPath)
+	`
 
 	rows, err := r.db.Query(query, startDate, endDate, limit, offset)
 	if err != nil {
@@ -130,8 +200,8 @@ func (r *eventRepository) GetEvents(startDate, endDate time.Time, limit, offset 
 	}
 
 	// Get total count
-	var total int
-	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM read_parquet('%s') WHERE timestamp BETWEEN ? AND ?`, parquetPath)
+	var total int64
+	countQuery := `SELECT COUNT(*) FROM events WHERE date_day >= CAST(? AS DATE) AND date_day <= CAST(? AS DATE)`
 	err = r.db.QueryRow(countQuery, startDate, endDate).Scan(&total)
 	if err != nil {
 		return nil, err
@@ -153,7 +223,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	}
 
 	// Build WHERE clause based on filters
-	whereClause := "timestamp BETWEEN ? AND ?"
+	whereClause := "date_day >= CAST(? AS DATE) AND date_day <= CAST(? AS DATE)"
 	args := []interface{}{startDate, endDate}
 
 	if projectID, ok := filters["project"]; ok && projectID != "" {
@@ -197,7 +267,6 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	}
 
 	// Use a single query with CTEs for better performance
-	parquetSource := r.getParquetSource()
 
 	// Single optimized query using CTEs to scan data once
 	// Only select columns needed for aggregation to reduce memory usage
@@ -209,7 +278,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 			event_name,
 			session_duration,
 			is_bot
-		FROM %s 
+		FROM events 
 		WHERE %s
 	),
 	event_stats AS (
@@ -227,7 +296,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		FROM date_filtered
 	)
 	SELECT * FROM event_stats;
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	var totalEvents, uniqueUsers, totalVisits, pageViews, sessionsWithViews int
 	var avgSessionDuration sql.NullFloat64
@@ -273,14 +342,14 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 				SELECT 
 					session_id,
 					COUNT(*) as view_count
-				FROM %s 
+				FROM events 
 				WHERE %s AND event_name = 'page_view'
 				GROUP BY session_id
 			)
 			SELECT COUNT(*) as single_page_sessions
 			FROM session_view_counts
 			WHERE view_count = 1
-		`, parquetSource, whereClause)
+		`, whereClause)
 
 		var singlePageSessions int
 		err = r.db.QueryRow(bounceRateQuery, args...).Scan(&singlePageSessions)
@@ -293,12 +362,12 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	// Top Events with optimized query
 	query := fmt.Sprintf(`
 		SELECT event_name, COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s
 		GROUP BY event_name 
 		ORDER BY count DESC 
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 	queryArgs := append(args, limit)
 
 	topEventsRows, err := r.db.Query(query, queryArgs...)
@@ -372,7 +441,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 						date_hour as date,
 						session_id,
 						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
-					FROM %s 
+					FROM events 
 					WHERE %s
 					GROUP BY date, session_id
 				)
@@ -382,17 +451,17 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 				FROM session_page_counts
 				GROUP BY date
 				ORDER BY date
-			`, parquetSource, whereClause)
+			`, whereClause)
 		} else {
 			timelineQuery = fmt.Sprintf(`
 				SELECT 
 					date_hour AS date,
 					%s
-				FROM %s 
+				FROM events 
 				WHERE %s
 				GROUP BY date 
 				ORDER BY date
-			`, selectClause, parquetSource, whereClause)
+			`, selectClause, whereClause)
 		}
 		timeFormat = "hour"
 	} else if timelineDuration <= 90*24*time.Hour {
@@ -405,7 +474,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 						date_day as date,
 						session_id,
 						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
-					FROM %s 
+					FROM events 
 					WHERE %s
 					GROUP BY date, session_id
 				)
@@ -415,17 +484,17 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 				FROM session_page_counts
 				GROUP BY date
 				ORDER BY date
-			`, parquetSource, whereClause)
+			`, whereClause)
 		} else {
 			timelineQuery = fmt.Sprintf(`
 				SELECT 
 					date_day as date, 
 					%s
-				FROM %s 
+				FROM events 
 				WHERE %s
 				GROUP BY date 
 				ORDER BY date
-			`, selectClause, parquetSource, whereClause)
+			`, selectClause, whereClause)
 		}
 		timeFormat = "day"
 	} else {
@@ -438,7 +507,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 						date_month as date,
 						session_id,
 						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
-					FROM %s 
+					FROM events 
 					WHERE %s
 					GROUP BY date, session_id
 				)
@@ -448,17 +517,17 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 				FROM session_page_counts
 				GROUP BY date
 				ORDER BY date
-			`, parquetSource, whereClause)
+			`, whereClause)
 		} else {
 			timelineQuery = fmt.Sprintf(`
 				SELECT 
 					date_month as date, 
 					%s
-				FROM %s 
+				FROM events 
 				WHERE %s
 				GROUP BY date 
 				ORDER BY date
-			`, selectClause, parquetSource, whereClause)
+			`, selectClause, whereClause)
 		}
 		timeFormat = "month"
 	}
@@ -501,12 +570,12 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	// Top pages
 	query = fmt.Sprintf(`
 		SELECT url, COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s AND url IS NOT NULL AND url != ''
 		GROUP BY url 
 		ORDER BY count DESC 
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	topPagesRows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
@@ -542,7 +611,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 				session_id, 
 				url,
 				ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY timestamp ASC) AS rn
-			FROM %s 
+			FROM events 
 			WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
 		),
 		entry_pages AS (
@@ -555,7 +624,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		GROUP BY url
 		ORDER BY count DESC
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	entryPagesRows, err := r.db.Query(entryPagesQuery, queryArgs...)
 	if err != nil {
@@ -591,7 +660,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 				session_id, 
 				url,
 				ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY timestamp DESC) AS rn
-			FROM %s 
+			FROM events 
 			WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
 		),
 		exit_pages AS (
@@ -604,7 +673,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		GROUP BY url
 		ORDER BY count DESC
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	exitPagesRows, err := r.db.Query(exitPagesQuery, queryArgs...)
 	if err != nil {
@@ -635,12 +704,12 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	// Browsers
 	query = fmt.Sprintf(`
 		SELECT browser, COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s AND browser IS NOT NULL AND browser != ''
 		GROUP BY browser 
 		ORDER BY count DESC
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	browsersRows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
@@ -671,12 +740,12 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	// Devices
 	query = fmt.Sprintf(`
 		SELECT device, COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s AND device IS NOT NULL AND device != ''
 		GROUP BY device 
 		ORDER BY count DESC
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	devicesRows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
@@ -707,12 +776,12 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	// Operating Systems
 	query = fmt.Sprintf(`
 		SELECT os, COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s AND os IS NOT NULL AND os != ''
 		GROUP BY os 
 		ORDER BY count DESC
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	osRows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
@@ -743,12 +812,12 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	// Top Countries
 	query = fmt.Sprintf(`
 		SELECT country, COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s AND country IS NOT NULL AND country != ''
 		GROUP BY country 
 		ORDER BY count DESC 
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	countriesRows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
@@ -784,12 +853,12 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 				ELSE referrer
 			END as source,
 			COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s
 		GROUP BY source 
 		ORDER BY count DESC 
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	sourcesRows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
@@ -865,9 +934,9 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 			APPROX_COUNT_DISTINCT( user_id) as unique_users,
 			APPROX_COUNT_DISTINCT( session_id) as total_visits,
 			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views
-		FROM %s 
+		FROM events 
 		WHERE %s
-	`, parquetSource, prevWhereClause)
+	`,  prevWhereClause)
 
 	var prevTotalEvents, prevUniqueUsers, prevTotalVisits, prevPageViews int
 	err = r.db.QueryRow(prevQuery, prevArgs...).Scan(&prevTotalEvents, &prevUniqueUsers, &prevTotalVisits, &prevPageViews)
@@ -897,15 +966,14 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 
 func (r *eventRepository) GetOnlineUsers(timeWindow int) (map[string]interface{}, error) {
 	cutoffTime := time.Now().Add(-time.Duration(timeWindow) * time.Minute)
-	parquetSource := r.getParquetSource()
 
 	query := fmt.Sprintf(`
 		SELECT 
 			APPROX_COUNT_DISTINCT( user_id) as online_users,
 			APPROX_COUNT_DISTINCT( session_id) as active_sessions
-		FROM %s 
+		FROM events 
 		WHERE timestamp >= ?
-	`, parquetSource)
+	`)
 
 	var onlineUsers, activeSessions int
 	err := r.db.QueryRow(query, cutoffTime).Scan(&onlineUsers, &activeSessions)
@@ -922,8 +990,7 @@ func (r *eventRepository) GetOnlineUsers(timeWindow int) (map[string]interface{}
 }
 
 func (r *eventRepository) GetProjects() ([]string, error) {
-	parquetSource := r.getParquetSource()
-	query := fmt.Sprintf(`SELECT DISTINCT project_id FROM %s WHERE project_id IS NOT NULL AND project_id != '' ORDER BY project_id`, parquetSource)
+	query := fmt.Sprintf(`SELECT DISTINCT project_id FROM events WHERE project_id IS NOT NULL AND project_id != '' ORDER BY project_id`)
 
 	rows, err := r.db.Query(query)
 	if err != nil {
@@ -952,8 +1019,6 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 	if len(request.Steps) == 0 {
 		return nil, fmt.Errorf("at least one funnel step is required")
 	}
-
-	parquetSource := r.getParquetSource()
 
 	// Parse dates
 	startDate, err := time.Parse("2006-01-02", request.StartDate)
@@ -1054,9 +1119,9 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 					APPROX_COUNT_DISTINCT( user_id) as user_count,
 					APPROX_COUNT_DISTINCT( session_id) as session_count,
 					COUNT(*) as event_count
-				FROM %s 
+				FROM events 
 				WHERE %s
-			`, parquetSource, stepWhereClause)
+			`, stepWhereClause)
 
 			var userCount, sessionCount, eventCount int64
 			err := r.db.QueryRow(query, stepArgs...).Scan(&userCount, &sessionCount, &eventCount)
@@ -1132,7 +1197,7 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 						}
 					}
 
-					fmt.Fprintf(&cteBuilder, "%s AS (SELECT user_id, session_id, timestamp FROM %s WHERE %s)", cteName, parquetSource, cteWhereClause)
+					fmt.Fprintf(&cteBuilder, "%s AS (SELECT user_id, session_id, timestamp FROM events WHERE %s)", cteName,  cteWhereClause)
 					allCteArgs = append(allCteArgs, cteArgs...)
 				} else {
 					// Subsequent steps: join with previous step
@@ -1196,7 +1261,7 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 					}
 
 					prevCteName := fmt.Sprintf("step_%d", j)
-					fmt.Fprintf(&cteBuilder, "%s AS (SELECT e.user_id, e.session_id, e.timestamp FROM %s e INNER JOIN %s prev ON e.user_id = prev.user_id AND e.timestamp > prev.timestamp WHERE %s)", cteName, parquetSource, prevCteName, cteWhereClause)
+					fmt.Fprintf(&cteBuilder, "%s AS (SELECT e.user_id, e.session_id, e.timestamp FROM events e INNER JOIN %s prev ON e.user_id = prev.user_id AND e.timestamp > prev.timestamp WHERE %s)", cteName,  prevCteName, cteWhereClause)
 					allCteArgs = append(allCteArgs, cteArgs...)
 				}
 			}
@@ -1266,12 +1331,12 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 			timeQuery := fmt.Sprintf(`
 				WITH current_step AS (
 					SELECT user_id, epoch_ms(timestamp) as ts_ms
-					FROM %s 
+					FROM events 
 					WHERE %s
 				),
 				next_step AS (
 					SELECT user_id, epoch_ms(timestamp) as ts_ms
-					FROM %s 
+					FROM events 
 					WHERE %s
 				),
 				time_diffs AS (
@@ -1283,7 +1348,7 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 					AVG(time_diff_seconds) as avg_time,
 					APPROX_QUANTILE(time_diff_seconds, 0.5) as median_time
 				FROM time_diffs
-			`, parquetSource, stepWhereClause, parquetSource, nextStepWhereClause)
+			`,  stepWhereClause,  nextStepWhereClause)
 
 			// Combine args for the time query
 			timeQueryArgs := append(stepArgs, nextStepArgs...)
@@ -1344,13 +1409,13 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 			completionTimeQuery := fmt.Sprintf(`
 				WITH first_step AS (
 					SELECT user_id, MIN(epoch_ms(timestamp)) as first_time_ms
-					FROM %s 
+					FROM events 
 					WHERE %s
 					GROUP BY user_id
 				),
 				last_step AS (
 					SELECT user_id, MAX(epoch_ms(timestamp)) as last_time_ms
-					FROM %s 
+					FROM events 
 					WHERE %s
 					GROUP BY user_id
 				),
@@ -1361,7 +1426,7 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 				)
 				SELECT AVG(completion_seconds) as avg_completion
 				FROM completion_times
-			`, parquetSource, firstWhereClause, parquetSource, lastWhereClause)
+			`,  firstWhereClause,  lastWhereClause)
 
 			completionArgs := append(firstArgs, lastArgs...)
 
@@ -1378,7 +1443,7 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 
 // buildWhereClause constructs a WHERE clause and arguments from filters
 func buildWhereClause(startDate, endDate time.Time, filters map[string]string) (string, []interface{}) {
-	whereClause := "timestamp BETWEEN ? AND ?"
+	whereClause := "date_day >= CAST(? AS DATE) AND date_day <= CAST(? AS DATE)"
 	args := []interface{}{startDate, endDate}
 
 	if projectID, ok := filters["project"]; ok && projectID != "" {
@@ -1424,18 +1489,9 @@ func buildWhereClause(startDate, endDate time.Time, filters map[string]string) (
 	return whereClause, args
 }
 
-// getParquetSource returns the source for DuckDB queries (Parquet file or fallback to table)
-func (r *eventRepository) getParquetSource() string {
-	if r.parquetStorage != nil {
-		return fmt.Sprintf("read_parquet('%s')", r.parquetStorage.GetFilePath())
-	}
-	return "events" // Fallback to table if Parquet storage not available
-}
-
 // GetTopStats returns the main statistics (counts, rates, etc.)
 func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[string]string) (map[string]interface{}, error) {
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
-	parquetSource := r.getParquetSource()
 
 	// Get current period stats
 	query := fmt.Sprintf(`
@@ -1450,9 +1506,9 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 			COUNT(CASE WHEN is_bot = FALSE THEN 1 END) as human_events,
 			APPROX_COUNT_DISTINCT( CASE WHEN is_bot = TRUE THEN user_id END) as bot_users,
 			APPROX_COUNT_DISTINCT( CASE WHEN is_bot = FALSE THEN user_id END) as human_users
-		FROM %s 
+		FROM events 
 		WHERE %s
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	var totalEvents, uniqueUsers, totalVisits, pageViews, sessionsWithViews int
 	var botEvents, humanEvents, botUsers, humanUsers int
@@ -1488,14 +1544,14 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 				SELECT 
 					session_id,
 					COUNT(*) as view_count
-				FROM %s 
+				FROM events 
 				WHERE %s AND event_name = 'page_view'
 				GROUP BY session_id
 			)
 			SELECT COUNT(*) as single_page_sessions
 			FROM session_view_counts
 			WHERE view_count = 1
-		`, parquetSource, whereClause)
+		`, whereClause)
 
 		var singlePageSessions int
 		err = r.db.QueryRow(bounceRateQuery, args...).Scan(&singlePageSessions)
@@ -1529,9 +1585,9 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 			APPROX_COUNT_DISTINCT( user_id) as unique_users,
 			APPROX_COUNT_DISTINCT( session_id) as total_visits,
 			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views
-		FROM %s 
+		FROM events 
 		WHERE %s
-	`, parquetSource, prevWhereClause)
+	`,  prevWhereClause)
 
 	var prevTotalEvents, prevUniqueUsers, prevTotalVisits, prevPageViews int
 	err = r.db.QueryRow(prevQuery, prevArgs...).Scan(&prevTotalEvents, &prevUniqueUsers, &prevTotalVisits, &prevPageViews)
@@ -1561,7 +1617,6 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 // GetTimeline returns timeline data for visualization
 func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[string]string) (map[string]interface{}, error) {
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
-	parquetSource := r.getParquetSource()
 
 	// Determine what metric to display
 	metric := filters["metric"]
@@ -1603,7 +1658,7 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 						date_hour as date,
 						session_id,
 						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
-					FROM %s 
+					FROM events 
 					WHERE %s
 					GROUP BY date, session_id
 				)
@@ -1613,17 +1668,17 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 				FROM session_page_counts
 				GROUP BY date
 				ORDER BY date
-			`, parquetSource, whereClause)
+			`, whereClause)
 		} else {
 			timelineQuery = fmt.Sprintf(`
 				SELECT 
 					date_hour as date, 
 					%s
-				FROM %s 
+				FROM events 
 				WHERE %s
 				GROUP BY date 
 				ORDER BY date
-			`, selectClause, parquetSource, whereClause)
+			`, selectClause, whereClause)
 		}
 		timeFormat = "hour"
 	} else if timelineDuration <= 90*24*time.Hour {
@@ -1635,7 +1690,7 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 						date_day as date,
 						session_id,
 						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
-					FROM %s 
+					FROM events 
 					WHERE %s
 					GROUP BY date, session_id
 				)
@@ -1645,17 +1700,17 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 				FROM session_page_counts
 				GROUP BY date
 				ORDER BY date
-			`, parquetSource, whereClause)
+			`, whereClause)
 		} else {
 			timelineQuery = fmt.Sprintf(`
 				SELECT 
 					date_day as date, 
 					%s
-				FROM %s 
+				FROM events 
 				WHERE %s
 				GROUP BY date 
 				ORDER BY date
-			`, selectClause, parquetSource, whereClause)
+			`, selectClause, whereClause)
 		}
 		timeFormat = "day"
 	} else {
@@ -1667,7 +1722,7 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 						date_month as date,
 						session_id,
 						COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_view_count
-					FROM %s 
+					FROM events 
 					WHERE %s
 					GROUP BY date, session_id
 				)
@@ -1677,17 +1732,17 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 				FROM session_page_counts
 				GROUP BY date
 				ORDER BY date
-			`, parquetSource, whereClause)
+			`, whereClause)
 		} else {
 			timelineQuery = fmt.Sprintf(`
 				SELECT 
 					date_month as date, 
 					%s
-				FROM %s 
+				FROM events 
 				WHERE %s
 				GROUP BY date 
 				ORDER BY date
-			`, selectClause, parquetSource, whereClause)
+			`, selectClause, whereClause)
 		}
 		timeFormat = "month"
 	}
@@ -1731,18 +1786,17 @@ func (r *eventRepository) GetTimeline(startDate, endDate time.Time, filters map[
 // GetTopPages returns top pages with entry/exit pages
 func (r *eventRepository) GetTopPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error) {
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
-	parquetSource := r.getParquetSource()
 	queryArgs := append(args, limit)
 
 	// Top pages
 	query := fmt.Sprintf(`
 		SELECT url, COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s AND url IS NOT NULL AND url != ''
 		GROUP BY url 
 		ORDER BY count DESC 
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	rows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
@@ -1773,7 +1827,6 @@ func (r *eventRepository) GetTopPages(startDate, endDate time.Time, limit int, f
 }
 
 func (r *eventRepository) GetEntryExitPages(startDate, endDate time.Time, limit int, filters map[string]string) (map[string]interface{}, error) {
-	parquetSource := r.getParquetSource()
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 	queryArgs := append(args, limit)
 
@@ -1785,7 +1838,7 @@ WITH ordered AS (
         url,
         event_name,
         timestamp
-    FROM %s
+    FROM events
     WHERE %s
         AND event_name = 'page_view'
         AND url IS NOT NULL
@@ -1830,7 +1883,7 @@ SELECT * FROM (
     ORDER BY count DESC
     LIMIT %d
 ) AS exit_query
-	`, parquetSource, whereClause, limit, limit)
+	`, whereClause, limit, limit)
 
 	rows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
@@ -1863,18 +1916,17 @@ SELECT * FROM (
 
 // GetTopCountries returns top countries
 func (r *eventRepository) GetTopCountries(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error) {
-	parquetSource := r.getParquetSource()
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 	queryArgs := append(args, limit)
 
 	query := fmt.Sprintf(`
 		SELECT country, COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s AND country IS NOT NULL AND country != ''
 		GROUP BY country 
 		ORDER BY count DESC 
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	rows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
@@ -1904,7 +1956,6 @@ func (r *eventRepository) GetTopCountries(startDate, endDate time.Time, limit in
 
 // GetTopSources returns top referrer sources
 func (r *eventRepository) GetTopSources(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error) {
-	parquetSource := r.getParquetSource()
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 	queryArgs := append(args, limit)
 
@@ -1915,12 +1966,12 @@ func (r *eventRepository) GetTopSources(startDate, endDate time.Time, limit int,
 				ELSE referrer
 			END as source,
 			COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s
 		GROUP BY source 
 		ORDER BY count DESC 
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	rows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
@@ -1950,18 +2001,17 @@ func (r *eventRepository) GetTopSources(startDate, endDate time.Time, limit int,
 
 // GetTopEvents returns top event names
 func (r *eventRepository) GetTopEvents(startDate, endDate time.Time, limit int, filters map[string]string) ([]map[string]interface{}, error) {
-	parquetSource := r.getParquetSource()
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 	queryArgs := append(args, limit)
 
 	query := fmt.Sprintf(`
 		SELECT event_name, COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s
 		GROUP BY event_name 
 		ORDER BY count DESC 
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	rows, err := r.db.Query(query, queryArgs...)
 	if err != nil {
@@ -1995,17 +2045,16 @@ func (r *eventRepository) GetBrowsersDevicesOS(startDate, endDate time.Time, lim
 	queryArgs := append(args, limit)
 
 	result := make(map[string]interface{})
-	parquetSource := r.getParquetSource()
 
 	// Browsers
 	browsersQuery := fmt.Sprintf(`
 		SELECT browser, COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s AND browser IS NOT NULL AND browser != ''
 		GROUP BY browser 
 		ORDER BY count DESC
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	browsersRows, err := r.db.Query(browsersQuery, queryArgs...)
 	if err != nil {
@@ -2034,12 +2083,12 @@ func (r *eventRepository) GetBrowsersDevicesOS(startDate, endDate time.Time, lim
 	// Devices
 	devicesQuery := fmt.Sprintf(`
 		SELECT device, COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s AND device IS NOT NULL AND device != ''
 		GROUP BY device 
 		ORDER BY count DESC
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	devicesRows, err := r.db.Query(devicesQuery, queryArgs...)
 	if err != nil {
@@ -2068,12 +2117,12 @@ func (r *eventRepository) GetBrowsersDevicesOS(startDate, endDate time.Time, lim
 	// Operating Systems
 	osQuery := fmt.Sprintf(`
 		SELECT os, COUNT(*) as count 
-		FROM %s 
+		FROM events 
 		WHERE %s AND os IS NOT NULL AND os != ''
 		GROUP BY os 
 		ORDER BY count DESC
 		LIMIT ?
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	osRows, err := r.db.Query(osQuery, queryArgs...)
 	if err != nil {
@@ -2104,7 +2153,6 @@ func (r *eventRepository) GetBrowsersDevicesOS(startDate, endDate time.Time, lim
 
 // GetChannels returns traffic breakdown by channel with optional filters
 func (r *eventRepository) GetChannels(startDate, endDate time.Time, filters map[string]string) ([]map[string]interface{}, error) {
-	parquetSource := r.getParquetSource()
 	whereClause, args := buildWhereClause(startDate, endDate, filters)
 
 	query := fmt.Sprintf(`
@@ -2114,11 +2162,11 @@ func (r *eventRepository) GetChannels(startDate, endDate time.Time, filters map[
 			APPROX_COUNT_DISTINCT( user_id) as unique_users,
 			APPROX_COUNT_DISTINCT( session_id) as total_visits,
 			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views
-		FROM %s 
+		FROM events 
 		WHERE %s
 		GROUP BY channel 
 		ORDER BY total_events DESC
-	`, parquetSource, whereClause)
+	`, whereClause)
 
 	rows, err := r.db.Query(query, args...)
 	if err != nil {

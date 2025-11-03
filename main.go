@@ -20,7 +20,6 @@ import (
 	"github.com/mohamedelhefni/siraaj/internal/migrations"
 	"github.com/mohamedelhefni/siraaj/internal/repository"
 	"github.com/mohamedelhefni/siraaj/internal/service"
-	"github.com/mohamedelhefni/siraaj/internal/storage"
 )
 
 //go:embed all:ui/dashboard
@@ -127,27 +126,13 @@ func main() {
 
 	log.Println("✓ DuckDB initialized successfully")
 
-	// Initialize Parquet storage with buffering (needs DB connection)
-	parquetFilePath := os.Getenv("PARQUET_FILE")
-	if parquetFilePath == "" {
-		parquetFilePath = "data/events"
-	}
-
-	bufferSize := 10000               // Buffer 10k events before flush
-	flushInterval := 30 * time.Second // Flush every 30 seconds
-
-	parquetStorage, err := storage.NewParquetStorage(db, parquetFilePath, bufferSize, flushInterval)
-	if err != nil {
-		log.Fatalf("Failed to initialize Parquet storage: %v", err)
-	}
+	// Initialize repository directly with DuckDB
+	baseRepo := repository.NewEventRepository(db)
 	defer func() {
-		if err := parquetStorage.Close(); err != nil {
-			log.Printf("Warning: failed to close Parquet storage: %v", err)
+		if err := baseRepo.Close(); err != nil {
+			log.Printf("Warning: failed to close repository: %v", err)
 		}
 	}()
-
-	// Initialize layers with Parquet storage and caching
-	baseRepo := repository.NewEventRepository(db, parquetStorage)
 
 	eventService := service.NewEventService(baseRepo)
 	eventHandler := handler.NewEventHandler(eventService, geoService)
@@ -160,9 +145,9 @@ func main() {
 		<-sigChan
 		log.Println("\n🛑 Shutting down gracefully...")
 
-		// Close Parquet storage first to flush buffer
-		if err := parquetStorage.Close(); err != nil {
-			log.Printf("Error closing Parquet storage: %v", err)
+		// Close repository first to flush any pending data
+		if err := baseRepo.Close(); err != nil {
+			log.Printf("Error closing repository: %v", err)
 		}
 
 		// Close other resources
@@ -245,21 +230,21 @@ func main() {
 		}
 	})
 
-	// Storage stats endpoint
+	// Database stats endpoint
 	mux.HandleFunc("/api/debug/storage", func(w http.ResponseWriter, r *http.Request) {
-		fileCount, err := parquetStorage.GetFileCount()
+		var tableSize int64
+		err := db.QueryRow("SELECT COUNT(*) FROM events").Scan(&tableSize)
 		if err != nil {
-			log.Printf("Error getting file count: %v", err)
+			log.Printf("Error getting table size: %v", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]interface{}{
-			"parquet_files":        fileCount,
-			"max_before_merge":     100,
-			"merge_check_interval": "5m",
-			"data_directory":       parquetFilePath,
+			"total_events":  tableSize,
+			"storage_type":  "DuckDB Native",
+			"database_path": dbPath,
 		}); err != nil {
 			log.Printf("Error encoding storage stats: %v", err)
 		}
@@ -298,7 +283,7 @@ func main() {
 		fmt.Println("⚠️  Geolocation service disabled")
 	}
 	fmt.Println("✓ Clean Architecture implemented")
-	fmt.Printf("✓ Parquet storage enabled: %s (buffer: %d events, flush: %v)\n", parquetFilePath, bufferSize, flushInterval)
+	fmt.Printf("✓ DuckDB native storage: %s\n", dbPath)
 	fmt.Println()
 
 	// Apply middleware: CORS and Logging
