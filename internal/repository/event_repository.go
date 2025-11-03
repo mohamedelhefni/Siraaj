@@ -174,43 +174,65 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 	whereClause := "timestamp BETWEEN ? AND ?"
 	args := []interface{}{startDate, endDate}
 
+	// Build a separate WHERE clause without page filter for entry/exit queries
+	// (page filter would conflict with argMin/argMax aggregates)
+	whereClauseNoPage := whereClause
+	argsNoPage := []interface{}{startDate, endDate}
+
 	if projectID, ok := filters["project"]; ok && projectID != "" {
 		whereClause += " AND project_id = ?"
 		args = append(args, projectID)
+		whereClauseNoPage += " AND project_id = ?"
+		argsNoPage = append(argsNoPage, projectID)
 	}
 	if source, ok := filters["source"]; ok && source != "" {
 		whereClause += " AND referrer = ?"
 		args = append(args, source)
+		whereClauseNoPage += " AND referrer = ?"
+		argsNoPage = append(argsNoPage, source)
 	}
 	if country, ok := filters["country"]; ok && country != "" {
 		whereClause += " AND country = ?"
 		args = append(args, country)
+		whereClauseNoPage += " AND country = ?"
+		argsNoPage = append(argsNoPage, country)
 	}
 	if browser, ok := filters["browser"]; ok && browser != "" {
 		whereClause += " AND browser = ?"
 		args = append(args, browser)
+		whereClauseNoPage += " AND browser = ?"
+		argsNoPage = append(argsNoPage, browser)
 	}
 	if device, ok := filters["device"]; ok && device != "" {
 		whereClause += " AND device = ?"
 		args = append(args, device)
+		whereClauseNoPage += " AND device = ?"
+		argsNoPage = append(argsNoPage, device)
 	}
 	if os, ok := filters["os"]; ok && os != "" {
 		whereClause += " AND os = ?"
 		args = append(args, os)
+		whereClauseNoPage += " AND os = ?"
+		argsNoPage = append(argsNoPage, os)
 	}
 	if eventName, ok := filters["event"]; ok && eventName != "" {
 		whereClause += " AND event_name = ?"
 		args = append(args, eventName)
+		whereClauseNoPage += " AND event_name = ?"
+		argsNoPage = append(argsNoPage, eventName)
 	}
 	if page, ok := filters["page"]; ok && page != "" {
 		whereClause += " AND url = ?"
 		args = append(args, page)
+		// Don't add page filter to whereClauseNoPage
 	}
 	if botFilter, ok := filters["botFilter"]; ok && botFilter != "" {
 		if botFilter == "bot" {
 			whereClause += " AND is_bot = TRUE"
+			whereClauseNoPage += " AND is_bot = TRUE"
 		} else if botFilter == "human" {
 			whereClause += " AND is_bot = FALSE"
+			whereClauseNoPage += " AND is_bot = FALSE"
 		}
 	}
 
@@ -554,22 +576,32 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 
 	// Entry Pages (first page in each session) - optimized for ClickHouse using argMin
 	// argMin returns the url of the row with the minimum timestamp for each session
+	// Note: Use whereClauseNoPage to avoid conflicts with url aggregate
+	// Make a copy to avoid any slice aliasing issues
+	queryArgsNoPage := make([]interface{}, len(argsNoPage), len(argsNoPage)+1)
+	copy(queryArgsNoPage, argsNoPage)
+	queryArgsNoPage = append(queryArgsNoPage, limit)
+	
+	// Restructure query to filter url before aggregation to avoid ClickHouse error
 	entryPagesQuery := fmt.Sprintf(`
 		SELECT url, COUNT(*) as count
 		FROM (
 			SELECT 
 				session_id,
 				argMin(url, timestamp) as url
-			FROM %s 
-			WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
+			FROM (
+				SELECT session_id, url, timestamp
+				FROM %s 
+				WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
+			)
 			GROUP BY session_id
 		)
 		GROUP BY url
 		ORDER BY count DESC
 		LIMIT ?
-	`, tableName, whereClause)
+	`, tableName, whereClauseNoPage)
 
-	entryPagesRows, err := r.db.Query(entryPagesQuery, queryArgs...)
+	entryPagesRows, err := r.db.Query(entryPagesQuery, queryArgsNoPage...)
 	if err != nil {
 		return nil, err
 	}
@@ -597,22 +629,27 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 
 	// Exit Pages (last page in each session) - optimized for ClickHouse using argMax
 	// argMax returns the url of the row with the maximum timestamp for each session
+	// Note: Use whereClauseNoPage to avoid conflicts with url aggregate
+	// Restructure query to filter url before aggregation to avoid ClickHouse error
 	exitPagesQuery := fmt.Sprintf(`
 		SELECT url, COUNT(*) as count
 		FROM (
 			SELECT 
 				session_id,
 				argMax(url, timestamp) as url
-			FROM %s 
-			WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
+			FROM (
+				SELECT session_id, url, timestamp
+				FROM %s 
+				WHERE %s AND event_name = 'page_view' AND url IS NOT NULL AND url != ''
+			)
 			GROUP BY session_id
 		)
 		GROUP BY url
 		ORDER BY count DESC
 		LIMIT ?
-	`, tableName, whereClause)
+	`, tableName, whereClauseNoPage)
 
-	exitPagesRows, err := r.db.Query(exitPagesQuery, queryArgs...)
+	exitPagesRows, err := r.db.Query(exitPagesQuery, queryArgsNoPage...)
 	if err != nil {
 		return nil, err
 	}
@@ -1437,6 +1474,26 @@ func (r *eventRepository) getTableName() string {
 
 // GetTopStats returns the main statistics using materialized views
 func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[string]string) (map[string]interface{}, error) {
+	// Check if we have any filters other than project_id and metric
+	// If so, we need to query the events table directly instead of using the materialized view
+	// metric filter is used for timeline chart, not for stats filtering
+	hasDetailedFilters := false
+	for key, value := range filters {
+		if key != "project" && key != "project_id" && key != "metric" && value != "" {
+			hasDetailedFilters = true
+			fmt.Printf("Found detailed filter: %s = %s\n", key, value)
+			break
+		}
+	}
+
+	// If we have detailed filters, use the events table directly
+	if hasDetailedFilters {
+		fmt.Println("Using events table for GetTopStats due to detailed filters")
+		return r.GetStats(startDate, endDate, 50, filters)
+	}
+
+	// Otherwise, use the optimized materialized view for faster queries
+	fmt.Println("Using materialized view for GetTopStats")
 	// For materialized view, we use date columns instead of timestamp
 	startDateStr := startDate.Format("2006-01-02")
 	endDateStr := endDate.Format("2006-01-02")
@@ -1445,7 +1502,10 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 	additionalWhere := ""
 	var additionalArgs []interface{}
 
-	if projectID, exists := filters["project_id"]; exists {
+	if projectID, exists := filters["project"]; exists && projectID != "" {
+		additionalWhere = " AND project_id = ?"
+		additionalArgs = append(additionalArgs, projectID)
+	} else if projectID, exists := filters["project_id"]; exists && projectID != "" {
 		additionalWhere = " AND project_id = ?"
 		additionalArgs = append(additionalArgs, projectID)
 	}
@@ -1485,19 +1545,29 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 	}
 
 	// Calculate bounce rate with a separate query
+	// Apply the same filters for bounce rate calculation
+	whereClause := "timestamp BETWEEN ? AND ? AND event_name = 'page_view'"
+	bounceArgs := []interface{}{startDate, endDate}
+
+	if projectID, exists := filters["project"]; exists && projectID != "" {
+		whereClause += " AND project_id = ?"
+		bounceArgs = append(bounceArgs, projectID)
+	} else if projectID, exists := filters["project_id"]; exists && projectID != "" {
+		whereClause += " AND project_id = ?"
+		bounceArgs = append(bounceArgs, projectID)
+	}
+
 	var singlePageSessions int
-	bounceQuery := `
+	bounceQuery := fmt.Sprintf(`
 	SELECT COUNT(*) as single_page_sessions
 	FROM (
 		SELECT session_id
 		FROM events 
-		WHERE timestamp BETWEEN ? AND ? 
-			AND event_name = 'page_view'
+		WHERE %s
 		GROUP BY session_id
 		HAVING COUNT(*) = 1
-	)`
+	)`, whereClause)
 
-	bounceArgs := []interface{}{startDate, endDate}
 	err = r.db.QueryRow(bounceQuery, bounceArgs...).Scan(&singlePageSessions)
 	if err != nil {
 		// Log error but don't fail the entire request
