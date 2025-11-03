@@ -875,6 +875,7 @@
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
 						isSelected={isMetricSelected('users')}
+						loading={statsLoading}
 						onclick={() => handleMetricClick('users')}
 					/>
 
@@ -886,6 +887,7 @@
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
 						isSelected={isMetricSelected('visits')}
+						loading={statsLoading}
 						onclick={() => handleMetricClick('visits')}
 					/>
 
@@ -897,6 +899,7 @@
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
 						isSelected={isMetricSelected('page_views')}
+						loading={statsLoading}
 						onclick={() => handleMetricClick('page_views')}
 					/>
 
@@ -908,6 +911,7 @@
 						currentPeriod={currentPeriodLabel()}
 						previousPeriod={previousPeriodLabel()}
 						isSelected={isMetricSelected('events')}
+						loading={statsLoading}
 						onclick={() => handleMetricClick('events')}
 					/>
 
@@ -922,6 +926,7 @@
 						previousPeriod={previousPeriodLabel()}
 						formatValue={(val: number) => (val ? val.toFixed(2) : '0.00')}
 						isSelected={isMetricSelected('views_per_visit')}
+						loading={statsLoading}
 						onclick={() => handleMetricClick('views_per_visit')}
 					/>
 
@@ -935,6 +940,7 @@
 						formatValue={(val: number) => (val ? val.toFixed(0) + '%' : '0%')}
 						isNegativeBetter={true}
 						isSelected={isMetricSelected('bounce_rate')}
+						loading={statsLoading}
 						onclick={() => handleMetricClick('bounce_rate')}
 					/>
 
@@ -958,6 +964,7 @@
 							return `${hours}h ${minutes}m`;
 						}}
 						isSelected={isMetricSelected('visit_duration')}
+						loading={statsLoading}
 						onclick={() => handleMetricClick('visit_duration')}
 					/>
 
@@ -971,6 +978,7 @@
 						formatValue={(val: number) => (val ? val.toFixed(0) + '%' : '0%')}
 						isNegativeBetter={true}
 						isSelected={activeFilters.botFilter === 'bot'}
+						loading={statsLoading}
 						onclick={() => {
 							if (activeFilters.botFilter === 'bot') {
 								removeFilter('botFilter');
