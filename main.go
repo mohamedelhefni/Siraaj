@@ -15,7 +15,6 @@ import (
 
 	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/mohamedelhefni/siraaj/geolocation"
-	"github.com/mohamedelhefni/siraaj/internal/cache"
 	"github.com/mohamedelhefni/siraaj/internal/handler"
 	"github.com/mohamedelhefni/siraaj/internal/middleware"
 	"github.com/mohamedelhefni/siraaj/internal/migrations"
@@ -149,18 +148,8 @@ func main() {
 
 	// Initialize layers with Parquet storage and caching
 	baseRepo := repository.NewEventRepository(db, parquetStorage)
-	
-	// Initialize query cache
-	queryCache := cache.NewQueryCache(db)
-	
-	// Start auto-cleanup for cache (every 1 hour, 5 minute TTL)
-	queryCache.StartAutoCleanup(1*time.Hour, 5*time.Minute)
-	
-	// Wrap repository with caching layer (5 minute TTL)
-	cacheTTL := 5 * time.Minute
-	eventRepo := repository.NewCachedEventRepository(baseRepo, queryCache, cacheTTL)
-	
-	eventService := service.NewEventService(eventRepo)
+
+	eventService := service.NewEventService(baseRepo)
 	eventHandler := handler.NewEventHandler(eventService, geoService)
 
 	// Setup graceful shutdown
@@ -216,40 +205,6 @@ func main() {
 
 	// Channel analytics
 	mux.HandleFunc("/api/channels", eventHandler.GetChannelsHandler)
-
-	// Cache management endpoints
-	mux.HandleFunc("/api/cache/stats", func(w http.ResponseWriter, r *http.Request) {
-		stats, err := queryCache.GetStats()
-		if err != nil {
-			http.Error(w, "Failed to get cache stats", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(stats)
-	})
-
-	mux.HandleFunc("/api/cache/invalidate", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		queryType := r.URL.Query().Get("type")
-		if queryType != "" {
-			if err := queryCache.InvalidateByQueryType(queryType); err != nil {
-				http.Error(w, "Failed to invalidate cache", http.StatusInternalServerError)
-				return
-			}
-		} else {
-			if err := queryCache.InvalidateAll(); err != nil {
-				http.Error(w, "Failed to invalidate cache", http.StatusInternalServerError)
-				return
-			}
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
 
 	// Debug endpoint to show all events
 	mux.HandleFunc("/api/debug/events", func(w http.ResponseWriter, r *http.Request) {
