@@ -1,5 +1,5 @@
 {
-  "name": "@siraaj/analytics",
+  "name": "@hefni101/siraaj",
   "version": "1.0.0",
   "description": "Lightweight analytics SDK for all JavaScript frameworks",
   "main": "dist/analytics.umd.js",
@@ -70,7 +70,7 @@
     "javascript",
     "typescript"
   ],
-  "author": "Mohamed Elhefni",
+  "author": "Mohamed Elhefni mohamed.elhefni@outlook.com",
   "license": "MIT",
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.1",

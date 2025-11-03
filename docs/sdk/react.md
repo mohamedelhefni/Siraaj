@@ -5,11 +5,11 @@ Complete guide for integrating Siraaj Analytics into your React application.
 ## Installation
 
 ```bash
-npm install @siraaj/analytics
+npm install @hefni101/siraaj
 # or
-pnpm add @siraaj/analytics
+pnpm add @hefni101/siraaj
 # or
-yarn add @siraaj/analytics
+yarn add @hefni101/siraaj
 ```
 
 ## Quick Start
@@ -20,7 +20,7 @@ Wrap your app with the `AnalyticsProvider`:
 
 ```jsx
 // App.jsx or App.tsx
-import { AnalyticsProvider } from '@siraaj/analytics/react';
+import { AnalyticsProvider } from '@hefni101/siraaj/react';
 
 function App() {
   return (
@@ -43,7 +43,7 @@ export default App;
 ### 2. Use the Hook
 
 ```jsx
-import { useAnalytics } from '@siraaj/analytics/react';
+import { useAnalytics } from '@hefni101/siraaj/react';
 
 function SignupButton() {
   const { track } = useAnalytics();
@@ -70,7 +70,7 @@ function SignupButton() {
 Main hook for tracking events and identifying users.
 
 ```jsx
-import { useAnalytics } from '@siraaj/analytics/react';
+import { useAnalytics } from '@hefni101/siraaj/react';
 
 function MyComponent() {
   const { track, identify, pageView, reset } = useAnalytics();
@@ -117,7 +117,7 @@ function MyComponent() {
 Auto-track page views (useful with React Router):
 
 ```jsx
-import { usePageTracking } from '@siraaj/analytics/react';
+import { usePageTracking } from '@hefni101/siraaj/react';
 
 function App() {
   // Automatically tracks page views on route changes
@@ -134,7 +134,7 @@ function App() {
 With custom properties:
 
 ```jsx
-import { usePageTracking } from '@siraaj/analytics/react';
+import { usePageTracking } from '@hefni101/siraaj/react';
 import { useLocation } from 'react-router-dom';
 
 function App() {
@@ -159,7 +159,7 @@ function App() {
 Auto-identify users when they login:
 
 ```jsx
-import { useIdentify } from '@siraaj/analytics/react';
+import { useIdentify } from '@hefni101/siraaj/react';
 
 function App() {
   const { user } = useAuth();
@@ -181,7 +181,7 @@ function App() {
 
 ```jsx
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
-import { AnalyticsProvider, usePageTracking } from '@siraaj/analytics/react';
+import { AnalyticsProvider, usePageTracking } from '@hefni101/siraaj/react';
 
 function AnalyticsWrapper({ children }) {
   usePageTracking();
@@ -210,7 +210,7 @@ function App() {
 ```jsx
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useAnalytics } from '@siraaj/analytics/react';
+import { useAnalytics } from '@hefni101/siraaj/react';
 
 function RouteTracker() {
   const location = useLocation();
@@ -233,8 +233,8 @@ function RouteTracker() {
 Full type definitions included:
 
 ```tsx
-import { useAnalytics } from '@siraaj/analytics/react';
-import type { AnalyticsConfig } from '@siraaj/analytics';
+import { useAnalytics } from '@hefni101/siraaj/react';
+import type { AnalyticsConfig } from '@hefni101/siraaj';
 
 const config: AnalyticsConfig = {
   apiUrl: 'http://localhost:8080',
@@ -260,7 +260,7 @@ function MyComponent() {
 ### Track Form Submissions
 
 ```jsx
-import { useAnalytics } from '@siraaj/analytics/react';
+import { useAnalytics } from '@hefni101/siraaj/react';
 
 function ContactForm() {
   const { trackForm } = useAnalytics();
@@ -288,7 +288,7 @@ function ContactForm() {
 ### Track Clicks
 
 ```jsx
-import { useAnalytics } from '@siraaj/analytics/react';
+import { useAnalytics } from '@hefni101/siraaj/react';
 
 function NavBar() {
   const { trackClick } = useAnalytics();
@@ -312,7 +312,7 @@ function NavBar() {
 ### Track Errors
 
 ```jsx
-import { useAnalytics } from '@siraaj/analytics/react';
+import { useAnalytics } from '@hefni101/siraaj/react';
 import { useEffect } from 'react';
 
 function ErrorBoundary({ error, children }) {
@@ -338,7 +338,7 @@ function ErrorBoundary({ error, children }) {
 ### E-commerce Tracking
 
 ```jsx
-import { useAnalytics } from '@siraaj/analytics/react';
+import { useAnalytics } from '@hefni101/siraaj/react';
 
 function ProductPage({ product }) {
   const { track } = useAnalytics();
@@ -386,7 +386,7 @@ Access the analytics instance directly:
 
 ```jsx
 import { useContext } from 'react';
-import { AnalyticsContext } from '@siraaj/analytics/react';
+import { AnalyticsContext } from '@hefni101/siraaj/react';
 
 function MyComponent() {
   const analytics = useContext(AnalyticsContext);
@@ -408,7 +408,7 @@ For Next.js, use the dedicated Next.js integration:
 
 ```jsx
 // See /sdk/nextjs for details
-import { AnalyticsProvider } from '@siraaj/analytics/next';
+import { AnalyticsProvider } from '@hefni101/siraaj/next';
 ```
 
 [Next.js Integration Guide →](/sdk/nextjs)
@@ -444,7 +444,7 @@ function App() {
 
 ```jsx
 import { useCallback } from 'react';
-import { useAnalytics } from '@siraaj/analytics/react';
+import { useAnalytics } from '@hefni101/siraaj/react';
 
 function MyComponent() {
   const { track } = useAnalytics();
@@ -472,7 +472,7 @@ if (process.env.NODE_ENV === 'production') {
 
 ```jsx
 import { useEffect } from 'react';
-import { useAnalytics } from '@siraaj/analytics/react';
+import { useAnalytics } from '@hefni101/siraaj/react';
 
 function MyComponent() {
   const { track } = useAnalytics();

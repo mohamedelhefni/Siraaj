@@ -5,7 +5,7 @@ Integrate Siraaj Analytics into your Vue 3 application.
 ## Installation
 
 ```bash
-npm install @siraaj/analytics
+npm install @hefni101/siraaj
 ```
 
 ## Setup
@@ -15,7 +15,7 @@ npm install @siraaj/analytics
 ```javascript
 // main.js
 import { createApp } from 'vue';
-import { AnalyticsPlugin } from '@siraaj/analytics/vue';
+import { AnalyticsPlugin } from '@hefni101/siraaj/vue';
 import App from './App.vue';
 
 const app = createApp(App);
@@ -35,7 +35,7 @@ app.mount('#app');
 
 ```vue
 <script setup>
-import { useAnalytics, usePageTracking } from '@siraaj/analytics/vue';
+import { useAnalytics, usePageTracking } from '@hefni101/siraaj/vue';
 
 const { track, identify } = useAnalytics();
 
@@ -78,7 +78,7 @@ export default {
 
 ```javascript
 import { createRouter } from 'vue-router';
-import { useAnalytics } from '@siraaj/analytics/vue';
+import { useAnalytics } from '@hefni101/siraaj/vue';
 
 const router = createRouter({...});
 

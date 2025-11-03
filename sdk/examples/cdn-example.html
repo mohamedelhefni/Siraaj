@@ -192,16 +192,16 @@
     <script type="module">
         // Import Analytics from the ES module
         // When running locally from examples folder, use relative path to dist
-        import { analytics } from '../dist/analytics.esm.js';
+        import { analytics } from 'https://siraaj.live/sdk/analytics.esm.min.js';
 
-        // For production, use CDN with ES modules:
-        // import { analytics } from 'https://unpkg.com/@siraaj/analytics@latest/dist/analytics.esm.js';
-        // import { analytics } from 'https://cdn.jsdelivr.net/npm/@siraaj/analytics@latest/dist/analytics.esm.js';
+    // For production, use CDN with ES modules:
+    // import { analytics } from 'https://unpkg.com/@hefni101/siraaj@latest/dist/analytics.esm.js';
+    // import { analytics } from 'https://cdn.jsdelivr.net/npm/@hefni101/siraaj@latest/dist/analytics.esm.js';
 
         // Initialize Analytics
         analytics.init({
-            endpoint: 'http://185.14.92.169/:8080/api/track',  // Replace with your analytics server URL
-            apiKey: 'demo-project',                       // Replace with your API key/project ID
+            apiUrl: 'https://siraaj.live',  // Replace with your analytics server URL
+            projectId: 'local-project',                       // Replace with your API key/project ID
             autoTrack: true,                              // Auto-track clicks, forms, and errors
             batchSize: 10,                                // Buffer 10 events before sending
             flushInterval: 30000,                         // Flush every 30 seconds

@@ -5,14 +5,14 @@ Integrate Siraaj Analytics into your Svelte application.
 ## Installation
 
 ```bash
-npm install @siraaj/analytics
+npm install @hefni101/siraaj
 ```
 
 ## Setup
 
 ```javascript
 // main.js or +layout.js
-import { initAnalytics } from '@siraaj/analytics/svelte';
+import { initAnalytics } from '@hefni101/siraaj/svelte';
 
 initAnalytics({
   apiUrl: 'http://localhost:8080',
@@ -25,7 +25,7 @@ initAnalytics({
 
 ```svelte
 <script>
-import { createAnalytics, usePageTracking } from '@siraaj/analytics/svelte';
+import { createAnalytics, usePageTracking } from '@hefni101/siraaj/svelte';
 
 const { track, identify } = createAnalytics();
 
@@ -46,7 +46,7 @@ function handleClick() {
 
 ```javascript
 // src/routes/+layout.js
-import { initAnalytics } from '@siraaj/analytics/svelte';
+import { initAnalytics } from '@hefni101/siraaj/svelte';
 
 export const load = async () => {
   if (typeof window !== 'undefined') {

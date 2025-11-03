@@ -196,7 +196,7 @@ siraaj.identify('user-123', {
 
 **React/Next.js:**
 ```bash
-npm install @siraaj/analytics
+npm install @hefni101/siraaj
 ```
 
 See [SDK Documentation](./sdk/README.md) for React, Vue, Svelte, Next.js, and Nuxt integrations.

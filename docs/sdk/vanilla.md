@@ -45,13 +45,13 @@ The easiest way to get started:
 ## NPM/Module Installation
 
 ```bash
-npm install @siraaj/analytics
+npm install @hefni101/siraaj
 ```
 
 ### ES Modules
 
 ```javascript
-import { analytics } from '@siraaj/analytics';
+import { analytics } from '@hefni101/siraaj';
 
 analytics.init({
   apiUrl: 'http://localhost:8080',
@@ -68,7 +68,7 @@ analytics.track('page_viewed', {
 ### CommonJS
 
 ```javascript
-const { analytics } = require('@siraaj/analytics');
+const { analytics } = require('@hefni101/siraaj');
 
 analytics.init({
   apiUrl: 'http://localhost:8080',
@@ -479,8 +479,8 @@ document.getElementById('cta-btn').addEventListener('click', function() {
 ## TypeScript
 
 ```typescript
-import { analytics } from '@siraaj/analytics';
-import type { AnalyticsConfig } from '@siraaj/analytics';
+import { analytics } from '@hefni101/siraaj';
+import type { AnalyticsConfig } from '@hefni101/siraaj';
 
 const config: AnalyticsConfig = {
   apiUrl: 'http://localhost:8080',

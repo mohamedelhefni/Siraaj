@@ -5,7 +5,7 @@ Integrate Siraaj Analytics into your Nuxt 3 application.
 ## Installation
 
 ```bash
-npm install @siraaj/analytics
+npm install @hefni101/siraaj
 ```
 
 ## Setup
@@ -14,7 +14,7 @@ npm install @siraaj/analytics
 
 ```typescript
 // plugins/analytics.client.ts
-import { initNuxtAnalytics } from '@siraaj/analytics/nuxt';
+import { initNuxtAnalytics } from '@hefni101/siraaj/nuxt';
 
 export default defineNuxtPlugin(() => {
   initNuxtAnalytics({
@@ -42,7 +42,7 @@ export default defineNuxtConfig({
 
 ```vue
 <script setup>
-import { useNuxtAnalytics } from '@siraaj/analytics/nuxt';
+import { useNuxtAnalytics } from '@hefni101/siraaj/nuxt';
 
 // Auto-track route changes
 useNuxtAnalytics();

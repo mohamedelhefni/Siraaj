@@ -188,35 +188,24 @@
     </div>
 
     <!-- Include Siraaj Analytics SDK via UMD -->
-    <script src="../dist/analytics.umd.js"></script>
 
     <!-- For production, use CDN:
-    <script src="https://unpkg.com/@siraaj/analytics@latest/dist/analytics.umd.js"></script>
+    <script src="https://unpkg.com/@hefni101/siraaj@latest/dist/analytics.umd.js"></script>
     or
-    <script src="https://cdn.jsdelivr.net/npm/@siraaj/analytics@latest/dist/analytics.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@hefni101/siraaj@latest/dist/analytics.umd.js"></script>
     -->
 
+    <script src="https://siraaj.live/sdk/analytics.umd.min.js"></script>
     <script>
-        // Access the analytics instance from the global SiraajAnalytics namespace
-        // The UMD build exposes: SiraajAnalytics.analytics (default instance)
-        // and SiraajAnalytics.AnalyticsCore (class for creating new instances)
-
         const analytics = SiraajAnalytics.analytics || SiraajAnalytics.default;
-
-        // Initialize Analytics
         analytics.init({
-            apiUrl: 'http://localhost:8080',              // Replace with your analytics server URL
-            projectId: 'demo-project',                    // Replace with your project ID
+            apiUrl: 'https://siraaj.live',              // Replace with your analytics server URL
+            projectId: 'umd-local-project',                    // Replace with your project ID
             autoTrack: true,                              // Auto-track clicks, forms, and errors
             bufferSize: 10,                               // Buffer 10 events before sending
             flushInterval: 30000,                         // Flush every 30 seconds
             debug: true                                   // Enable debug logs in console
         });
-
-        console.log('📊 Siraaj Analytics initialized successfully');
-        console.log('Available:', SiraajAnalytics);
-
-        // Track initial page view
         analytics.pageView();
 
         // Track custom event

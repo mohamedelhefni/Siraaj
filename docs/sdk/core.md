@@ -13,13 +13,13 @@ The Siraaj Analytics core SDK is a lightweight, framework-agnostic JavaScript li
 ### NPM
 
 ```bash
-npm install @siraaj/analytics
+npm install @hefni101/siraaj
 ```
 
 ## Initialization
 
 ```javascript
-import { analytics } from '@siraaj/analytics';
+import { analytics } from '@hefni101/siraaj';
 
 analytics.init({
   apiUrl: 'http://localhost:8080',

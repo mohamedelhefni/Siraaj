@@ -16,21 +16,21 @@ Lightweight, framework-agnostic analytics SDK with first-class support for React
 
 ```bash
 # Using pnpm
-pnpm add @siraaj/analytics
+pnpm add @hefni101/siraaj
 
 # Using npm
-npm install @siraaj/analytics
+npm install @hefni101/siraaj
 
 # Using yarn
-yarn add @siraaj/analytics
+yarn add @hefni101/siraaj
 ```
 
 ## Quick Start
-
+pnpm add @hefni101/siraaj
 ### Vanilla JavaScript / TypeScript
-
+npm install @hefni101/siraaj
 ```javascript
-import { analytics } from '@siraaj/analytics';
+yarn add @hefni101/siraaj
 
 // Initialize
 analytics.init({
@@ -44,53 +44,54 @@ analytics.track('button_clicked', {
   buttonId: 'signup',
   location: 'header' 
 });
-
+import { useAnalytics, usePageTracking } from '@hefni101/siraaj/vue';
 // Track page views
 analytics.page();
 
 // Identify users
 analytics.identify('user-123', {
   email: 'user@example.com',
-  plan: 'premium',
+import { AnalyticsPlugin } from '@hefni101/siraaj/vue';
 });
 ```
 
 ### React
 
 ```jsx
-import { AnalyticsProvider, useAnalytics, usePageTracking } from '@siraaj/analytics/react';
+import { createAnalytics, usePageTracking } from '@hefni101/siraaj/svelte';
 
 function App() {
   return (
     <AnalyticsProvider config={{
       endpoint: 'https://your-analytics-server.com',
       apiKey: 'your-api-key',
-    }}>
+import { initAnalytics } from '@hefni101/siraaj/svelte';
       <YourApp />
     </AnalyticsProvider>
   );
 }
 
 function YourComponent() {
-  const { track, identify } = useAnalytics();
+import { AnalyticsProvider } from '@hefni101/siraaj/next';
   
   // Auto-track page views
   usePageTracking();
   
   const handleClick = () => {
     track('button_clicked', { button: 'signup' });
-  };
+import { initNuxtAnalytics } from '@hefni101/siraaj/nuxt';
   
   return <button onClick={handleClick}>Sign Up</button>;
 }
 ```
-
+import { useNuxtAnalytics } from '@hefni101/siraaj/nuxt';
 ### Vue 3
 
 ```vue
 <script setup>
-import { useAnalytics, usePageTracking } from '@siraaj/analytics/vue';
+import { useAnalytics, usePageTracking } from '@hefni101/siraaj/vue';
 
+import { AnalyticsProvider, useAnalytics } from '@hefni101/siraaj/preact';
 const { track, identify } = useAnalytics();
 
 // Auto-track page view
@@ -110,7 +111,7 @@ const handleClick = () => {
 
 ```javascript
 import { createApp } from 'vue';
-import { AnalyticsPlugin } from '@siraaj/analytics/vue';
+import { AnalyticsPlugin } from '@hefni101/siraaj/vue';
 import App from './App.vue';
 
 const app = createApp(App);
@@ -127,7 +128,7 @@ app.mount('#app');
 
 ```svelte
 <script>
-import { createAnalytics, usePageTracking } from '@siraaj/analytics/svelte';
+import { createAnalytics, usePageTracking } from '@hefni101/siraaj/svelte';
 
 const { track, userId } = createAnalytics();
 
@@ -146,7 +147,7 @@ const handleClick = () => {
 
 ```javascript
 // In your main file
-import { initAnalytics } from '@siraaj/analytics/svelte';
+import { initAnalytics } from '@hefni101/siraaj/svelte';
 
 initAnalytics({
   endpoint: 'https://your-analytics-server.com',
@@ -158,8 +159,8 @@ initAnalytics({
 
 ```tsx
 // app/layout.tsx
-import { AnalyticsProvider } from '@siraaj/analytics/next';
-import { initNextAnalytics } from '@siraaj/analytics/next';
+import { AnalyticsProvider } from '@hefni101/siraaj/next';
+import { initNextAnalytics } from '@hefni101/siraaj/next';
 
 initNextAnalytics({
   endpoint: 'https://your-analytics-server.com',
@@ -183,7 +184,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 // app/page.tsx
 'use client';
-import { useNextAnalytics, useAnalytics } from '@siraaj/analytics/next';
+import { useNextAnalytics, useAnalytics } from '@hefni101/siraaj/next';
 
 export default function Page() {
   const { track } = useAnalytics();
@@ -203,8 +204,8 @@ export default function Page() {
 
 ```tsx
 // pages/_app.tsx
-import { AnalyticsProvider } from '@siraaj/analytics/next';
-import { useNextPagesAnalytics } from '@siraaj/analytics/next';
+import { AnalyticsProvider } from '@hefni101/siraaj/next';
+import { useNextPagesAnalytics } from '@hefni101/siraaj/next';
 
 export default function App({ Component, pageProps }) {
   // Auto-track route changes
@@ -225,7 +226,7 @@ export default function App({ Component, pageProps }) {
 
 ```typescript
 // plugins/analytics.client.ts
-import { initNuxtAnalytics } from '@siraaj/analytics/nuxt';
+import { initNuxtAnalytics } from '@hefni101/siraaj/nuxt';
 
 export default defineNuxtPlugin(() => {
   initNuxtAnalytics({
@@ -235,7 +236,7 @@ export default defineNuxtPlugin(() => {
 });
 
 // composables/useTracking.ts
-import { useNuxtAnalytics } from '@siraaj/analytics/nuxt';
+import { useNuxtAnalytics } from '@hefni101/siraaj/nuxt';
 
 export function useTracking() {
   // Auto-track route changes
@@ -261,7 +262,7 @@ const handleClick = () => {
 ### Preact
 
 ```jsx
-import { AnalyticsProvider, useAnalytics } from '@siraaj/analytics/preact';
+import { AnalyticsProvider, useAnalytics } from '@hefni101/siraaj/preact';
 
 export function App() {
   return (

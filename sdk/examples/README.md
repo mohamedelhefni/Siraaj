@@ -25,24 +25,24 @@ Each example demonstrates:
 In production, install the SDK via npm/pnpm:
 
 ```bash
-pnpm add @siraaj/analytics
+pnpm add @hefni101/siraaj
 ```
 
 Then import the framework-specific package:
 
 ```javascript
 // React
-import { useAnalytics } from '@siraaj/analytics/react';
+import { useAnalytics } from '@hefni101/siraaj/react';
 
 // Vue
-import { useAnalytics } from '@siraaj/analytics/vue';
+import { useAnalytics } from '@hefni101/siraaj/vue';
 
 // Svelte
-import { createAnalytics } from '@siraaj/analytics/svelte';
+import { createAnalytics } from '@hefni101/siraaj/svelte';
 
 // Preact
-import { useAnalytics } from '@siraaj/analytics/preact';
+import { useAnalytics } from '@hefni101/siraaj/preact';
 
 // Vanilla JS
-import { analytics } from '@siraaj/analytics';
+import { analytics } from '@hefni101/siraaj';
 ```

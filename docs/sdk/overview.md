@@ -21,11 +21,11 @@ The simplest way to get started:
 ### NPM Package (Coming Soon)
 
 ```bash
-npm install @siraaj/analytics
+npm install @hefni101/siraaj
 # or
-pnpm add @siraaj/analytics
+pnpm add @hefni101/siraaj
 # or
-yarn add @siraaj/analytics
+yarn add @hefni101/siraaj
 ```
 
 ## Framework Support
@@ -34,7 +34,7 @@ Siraaj SDK works everywhere JavaScript runs:
 
 ### Vanilla JavaScript
 ```javascript
-import { analytics } from '@siraaj/analytics';
+import { analytics } from '@hefni101/siraaj';
 
 analytics.init({
   apiUrl: 'http://localhost:8080',
@@ -46,7 +46,7 @@ analytics.init({
 
 ### React
 ```jsx
-import { AnalyticsProvider, useAnalytics } from '@siraaj/analytics/react';
+import { AnalyticsProvider, useAnalytics } from '@hefni101/siraaj/react';
 
 function App() {
   return (
@@ -62,7 +62,7 @@ function App() {
 ### Vue 3
 ```vue
 <script setup>
-import { useAnalytics } from '@siraaj/analytics/vue';
+import { useAnalytics } from '@hefni101/siraaj/vue';
 
 const { track } = useAnalytics();
 </script>
@@ -73,7 +73,7 @@ const { track } = useAnalytics();
 ### Svelte
 ```svelte
 <script>
-import { createAnalytics } from '@siraaj/analytics/svelte';
+import { createAnalytics } from '@hefni101/siraaj/svelte';
 
 const { track } = createAnalytics();
 </script>
@@ -83,14 +83,14 @@ const { track } = createAnalytics();
 
 ### Next.js
 ```tsx
-import { AnalyticsProvider } from '@siraaj/analytics/next';
+import { AnalyticsProvider } from '@hefni101/siraaj/next';
 ```
 
 [Learn more →](/sdk/nextjs)
 
 ### Nuxt 3
 ```typescript
-import { useNuxtAnalytics } from '@siraaj/analytics/nuxt';
+import { useNuxtAnalytics } from '@hefni101/siraaj/nuxt';
 ```
 
 [Learn more →](/sdk/nuxt)
@@ -142,16 +142,18 @@ analytics.identify('user-123', {
 Track page navigation:
 
 ```javascript
-// Auto-tracked if autoTrack is enabled
+# or
+npm install @hefni101/siraaj
 analytics.pageView('/products');
-
+pnpm add @hefni101/siraaj
 // Or with custom properties
 analytics.pageView('/products', {
+yarn add @hefni101/siraaj
   category: 'electronics',
   subcategory: 'phones'
 });
 ```
-
+import { analytics } from '@hefni101/siraaj';
 ## Configuration Options
 
 ```typescript
@@ -161,7 +163,7 @@ interface AnalyticsConfig {
   projectId: string;           // Project identifier
   
   // Optional
-  autoTrack?: boolean;         // Auto-track page views (default: true)
+import { AnalyticsProvider, useAnalytics } from '@hefni101/siraaj/react';
   debug?: boolean;             // Enable debug logs (default: false)
   bufferSize?: number;         // Events per batch (default: 10)
   flushInterval?: number;      // Auto-flush interval in ms (default: 30000)
@@ -175,7 +177,7 @@ interface AnalyticsConfig {
 ```
 
 ## API Methods
-
+import { useAnalytics } from '@hefni101/siraaj/vue';
 ### `analytics.track(eventName, properties?)`
 
 Track a custom event.
@@ -184,7 +186,7 @@ Track a custom event.
 analytics.track('purchase_completed', {
   product_id: 'abc123',
   price: 29.99,
-  currency: 'USD'
+import { createAnalytics } from '@hefni101/siraaj/svelte';
 });
 ```
 
@@ -192,12 +194,12 @@ analytics.track('purchase_completed', {
 
 Track a page view.
 
-```javascript
+import { AnalyticsProvider } from '@hefni101/siraaj/next';
 analytics.pageView('/products/123', {
   product_name: 'Widget',
   category: 'electronics'
 });
-```
+import { useNuxtAnalytics } from '@hefni101/siraaj/nuxt';
 
 ### `analytics.identify(userId, traits?)`
 
@@ -291,7 +293,7 @@ All sizes are **gzipped**:
 Full TypeScript definitions included:
 
 ```typescript
-import type { AnalyticsConfig, EventData } from '@siraaj/analytics';
+import type { AnalyticsConfig, EventData } from '@hefni101/siraaj';
 
 const config: AnalyticsConfig = {
   apiUrl: 'http://localhost:8080',

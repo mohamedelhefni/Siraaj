@@ -5,14 +5,14 @@ Integrate Siraaj Analytics into your Preact application.
 ## Installation
 
 ```bash
-npm install @siraaj/analytics
+npm install @hefni101/siraaj
 ```
 
 ## Setup
 
 ```jsx
 import { render } from 'preact';
-import { AnalyticsProvider } from '@siraaj/analytics/preact';
+import { AnalyticsProvider } from '@hefni101/siraaj/preact';
 import App from './App';
 
 render(
@@ -30,7 +30,7 @@ render(
 ## Usage
 
 ```jsx
-import { useAnalytics } from '@siraaj/analytics/preact';
+import { useAnalytics } from '@hefni101/siraaj/preact';
 
 export function MyComponent() {
   const { track } = useAnalytics();

@@ -5,7 +5,7 @@ Complete guide for integrating Siraaj Analytics into Next.js applications (App R
 ## Installation
 
 ```bash
-npm install @siraaj/analytics
+npm install @hefni101/siraaj
 ```
 
 ## App Router (Next.js 13+)
@@ -14,7 +14,7 @@ npm install @siraaj/analytics
 
 ```tsx
 // app/layout.tsx
-import { AnalyticsProvider } from '@siraaj/analytics/next';
+import { AnalyticsProvider } from '@hefni101/siraaj/next';
 
 export default function RootLayout({ children }) {
   return (
@@ -40,7 +40,7 @@ export default function RootLayout({ children }) {
 ```tsx
 'use client';
 
-import { useAnalytics, useNextAnalytics } from '@siraaj/analytics/next';
+import { useAnalytics, useNextAnalytics } from '@hefni101/siraaj/next';
 
 export default function Page() {
   const { track } = useAnalytics();
@@ -60,8 +60,8 @@ export default function Page() {
 
 ```tsx
 // pages/_app.tsx
-import { AnalyticsProvider } from '@siraaj/analytics/next';
-import { useNextPagesAnalytics } from '@siraaj/analytics/next';
+import { AnalyticsProvider } from '@hefni101/siraaj/next';
+import { useNextPagesAnalytics } from '@hefni101/siraaj/next';
 
 export default function App({ Component, pageProps }) {
   // Auto-track route changes
