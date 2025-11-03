@@ -99,7 +99,13 @@
 
 	let loading = $state(true);
 	let statsLoading = $state(false);
-	let propertiesLoading = $state(false);
+	let timelineLoading = $state(false);
+	let pagesLoading = $state(false);
+	let entryExitLoading = $state(false);
+	let countriesLoading = $state(false);
+	let sourcesLoading = $state(false);
+	let eventsLoading = $state(false);
+	let devicesLoading = $state(false);
 	let onlineUsersLoading = $state(false);
 	let error = $state<string | null>(null);
 	let autoRefresh = $state(true);
@@ -317,174 +323,167 @@
 		} else {
 			// Subsequent loads - show component-level loaders
 			statsLoading = true;
-			propertiesLoading = true;
+			timelineLoading = true;
+			pagesLoading = true;
+			entryExitLoading = true;
+			countriesLoading = true;
+			sourcesLoading = true;
+			eventsLoading = true;
+			devicesLoading = true;
 			onlineUsersLoading = true;
 		}
 
 		error = null;
 
 		try {
-			// Load all stats endpoints in parallel for maximum performance
-			const [
-				topStatsData,
-				timelineData,
-				pagesData,
-				entryExitData,
-				countriesData,
-				sourcesData,
-				eventsData,
-				devicesData,
-				onlineUsersData,
-				comparisonData,
-				comparisonTimelineData
-			] = await Promise.all([
-				// Main stats (counts, rates, trends)
+			// Calculate comparison period once
+			const start = new Date(startDate);
+			const end = new Date(endDate);
+			const duration = end.getTime() - start.getTime();
+			const prevEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000);
+			const prevStart = new Date(prevEnd.getTime() - duration);
+
+			// Load stats and comparison together (they're displayed together in metric cards)
+			Promise.all([
 				fetchTopStats(startDate, endDate, activeFilters).catch((err) => {
 					console.error('Failed to load top stats:', err);
 					return null;
 				}),
+				fetchTopStats(
+					format(prevStart, 'yyyy-MM-dd'),
+					format(prevEnd, 'yyyy-MM-dd'),
+					activeFilters
+				).catch((err) => {
+					console.error('Failed to load comparison stats:', err);
+					return null;
+				})
+			]).then(([topStatsData, comparisonStatsData]) => {
+				if (topStatsData) stats = topStatsData;
+				if (comparisonStatsData) comparisonStats = comparisonStatsData;
+				statsLoading = false;
+			});
 
-				// Timeline chart data
+			// Load timeline and comparison timeline together (they render in the same chart)
+			Promise.all([
 				fetchTimeline(startDate, endDate, activeFilters).catch((err) => {
 					console.error('Failed to load timeline:', err);
 					return { timeline: [], timeline_format: 'day' };
 				}),
+				fetchTimeline(
+					format(prevStart, 'yyyy-MM-dd'),
+					format(prevEnd, 'yyyy-MM-dd'),
+					activeFilters
+				).catch((err) => {
+					console.error('Failed to load comparison timeline:', err);
+					return { timeline: [], timeline_format: 'day' };
+				})
+			]).then(([timelineData, comparisonTimelineData]) => {
+				if (timelineData) timeline = timelineData;
+				if (comparisonTimelineData) comparisonTimeline = comparisonTimelineData;
+				timelineLoading = false;
+			});
 
-				// Top pages
-				fetchTopPages(startDate, endDate, 10, activeFilters).catch((err) => {
+			// Load pages data
+			fetchTopPages(startDate, endDate, 10, activeFilters)
+				.then((data) => {
+					topPages = data;
+					pagesLoading = false;
+				})
+				.catch((err) => {
 					console.error('Failed to load pages:', err);
-					return { top_pages: [] };
-				}),
+					pagesLoading = false;
+				});
 
-				// Entry and exit pages
-				fetchEntryExitPages(startDate, endDate, 10, activeFilters).catch((err) => {
+			// Load entry/exit pages
+			fetchEntryExitPages(startDate, endDate, 10, activeFilters)
+				.then((data) => {
+					entryExitPages = data;
+					entryExitLoading = false;
+				})
+				.catch((err) => {
 					console.error('Failed to load entry/exit pages:', err);
-					return { entry_pages: [], exit_pages: [] };
-				}),
+					entryExitLoading = false;
+				});
 
-				// Top countries
-				fetchTopCountries(startDate, endDate, 10, activeFilters).catch((err) => {
+			// Load countries
+			fetchTopCountries(startDate, endDate, 10, activeFilters)
+				.then((data) => {
+					topCountries = data;
+					countriesLoading = false;
+				})
+				.catch((err) => {
 					console.error('Failed to load countries:', err);
-					return [];
-				}),
+					countriesLoading = false;
+				});
 
-				// Top sources
-				fetchTopSources(startDate, endDate, 10, activeFilters).catch((err) => {
+			// Load sources
+			fetchTopSources(startDate, endDate, 10, activeFilters)
+				.then((data) => {
+					topSources = data;
+					sourcesLoading = false;
+				})
+				.catch((err) => {
 					console.error('Failed to load sources:', err);
-					return [];
-				}),
+					sourcesLoading = false;
+				});
 
-				// Top events
-				fetchTopEvents(startDate, endDate, 10, activeFilters).catch((err) => {
+			// Load events
+			fetchTopEvents(startDate, endDate, 10, activeFilters)
+				.then((data) => {
+					topEvents = data;
+					eventsLoading = false;
+				})
+				.catch((err) => {
 					console.error('Failed to load events:', err);
-					return [];
-				}),
+					eventsLoading = false;
+				});
 
-				// Browsers, devices, OS
-				fetchBrowsersDevicesOS(startDate, endDate, 10, activeFilters).catch((err) => {
+			// Load devices
+			fetchBrowsersDevicesOS(startDate, endDate, 10, activeFilters)
+				.then((data) => {
+					browsersDevicesOS = data;
+					devicesLoading = false;
+				})
+				.catch((err) => {
 					console.error('Failed to load devices:', err);
-					return { browsers: [], devices: [], os: [] };
-				}),
+					devicesLoading = false;
+				});
 
-				// Online users
-				fetchOnlineUsers(5).catch((err) => {
+			// Load online users
+			fetchOnlineUsers(5)
+				.then((data) => {
+					onlineData = data as { online_users: number; active_sessions: number };
+					onlineUsersLoading = false;
+				})
+				.catch((err) => {
 					console.error('Failed to load online users:', err);
-					return { online_users: 0, active_sessions: 0 };
-				}),
+					onlineUsersLoading = false;
+				});
 
-				// Comparison stats (previous period)
-				(() => {
-					const start = new Date(startDate);
-					const end = new Date(endDate);
-					const duration = end.getTime() - start.getTime();
-					const prevEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000); // Day before start
-					const prevStart = new Date(prevEnd.getTime() - duration);
-
-					return fetchTopStats(
-						format(prevStart, 'yyyy-MM-dd'),
-						format(prevEnd, 'yyyy-MM-dd'),
-						activeFilters
-					).catch((err) => {
-						console.error('Failed to load comparison stats:', err);
-						return null;
-					});
-				})(),
-
-				// Comparison timeline (previous period)
-				(() => {
-					const start = new Date(startDate);
-					const end = new Date(endDate);
-					const duration = end.getTime() - start.getTime();
-					const prevEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000); // Day before start
-					const prevStart = new Date(prevEnd.getTime() - duration);
-
-					return fetchTimeline(
-						format(prevStart, 'yyyy-MM-dd'),
-						format(prevEnd, 'yyyy-MM-dd'),
-						activeFilters
-					).catch((err) => {
-						console.error('Failed to load comparison timeline:', err);
-						return { timeline: [], timeline_format: 'day' };
-					});
-				})()
+			// Wait for critical data to complete before updating lastRefresh
+			await Promise.all([
+				new Promise((resolve) => {
+					const check = () => {
+						if (!statsLoading && !timelineLoading) resolve(true);
+						else setTimeout(check, 50);
+					};
+					check();
+				})
 			]);
-
-			// Update all state
-			if (topStatsData) {
-				stats = topStatsData;
-			}
-
-			if (timelineData) {
-				timeline = timelineData;
-			}
-
-			if (pagesData) {
-				topPages = pagesData;
-			}
-
-			if (entryExitData) {
-				entryExitPages = entryExitData;
-			}
-
-			if (countriesData) {
-				topCountries = countriesData;
-			}
-
-			if (sourcesData) {
-				topSources = sourcesData;
-			}
-
-			if (eventsData) {
-				topEvents = eventsData;
-			}
-
-			if (devicesData) {
-				browsersDevicesOS = devicesData;
-			}
-
-			if (onlineUsersData) {
-				onlineData = onlineUsersData as { online_users: number; active_sessions: number };
-			}
-
-			if (comparisonData) {
-				comparisonStats = comparisonData;
-			}
-
-			if (comparisonTimelineData) {
-				comparisonTimeline = comparisonTimelineData;
-			}
 
 			lastRefresh = new Date();
 			updateURLParams();
-
-			// All loading complete
-			statsLoading = false;
-			propertiesLoading = false;
-			onlineUsersLoading = false;
 		} catch (err: any) {
 			error = err?.message || 'Failed to load stats';
+			// Reset all loading states
 			statsLoading = false;
-			propertiesLoading = false;
+			timelineLoading = false;
+			pagesLoading = false;
+			entryExitLoading = false;
+			countriesLoading = false;
+			sourcesLoading = false;
+			eventsLoading = false;
+			devicesLoading = false;
 			onlineUsersLoading = false;
 		} finally {
 			loading = false;
@@ -982,7 +981,7 @@
 					/>
 				</div>
 
-				{#if statsLoading}
+				{#if timelineLoading}
 					<div class="text-muted-foreground flex h-[300px] items-center justify-center">
 						<div class="flex flex-col items-center gap-2">
 							<div
@@ -1042,7 +1041,7 @@
 						</div>
 					</CardHeader>
 					<CardContent>
-						{#if statsLoading}
+						{#if pagesLoading || entryExitLoading}
 							<div class="text-muted-foreground flex min-h-[200px] items-center justify-center">
 								<div class="flex flex-col items-center gap-2">
 									<div
@@ -1090,7 +1089,7 @@
 					<CountriesPanel
 						countries={topCountries || []}
 						onclick={(item: any) => addFilter('country', item.name)}
-						loading={statsLoading}
+						loading={countriesLoading}
 					/>
 				</CardContent>
 			</Card>
@@ -1102,7 +1101,7 @@
 					<CardTitle class="text-base">Top Events</CardTitle>
 				</CardHeader>
 				<CardContent>
-					{#if statsLoading}
+					{#if eventsLoading}
 						<div class="text-muted-foreground flex min-h-[150px] items-center justify-center">
 							<div class="flex flex-col items-center gap-2">
 								<div
@@ -1130,7 +1129,7 @@
 					<CardTitle class="text-base">Top Sources</CardTitle>
 				</CardHeader>
 				<CardContent>
-					{#if statsLoading}
+					{#if sourcesLoading}
 						<div class="text-muted-foreground flex min-h-[150px] items-center justify-center">
 							<div class="flex flex-col items-center gap-2">
 								<div
@@ -1165,7 +1164,7 @@
 						onBrowserClick={(item: any) => addFilter('browser', item.name)}
 						onDeviceClick={(item: any) => addFilter('device', item.name)}
 						onOsClick={(item: any) => addFilter('os', item.name)}
-						loading={statsLoading}
+						loading={devicesLoading}
 					/>
 				</CardContent>
 			</Card>
