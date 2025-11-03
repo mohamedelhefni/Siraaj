@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	import { TrendingUp, TrendingDown, Minus } from 'lucide-svelte';
 	import { formatCompactNumber } from '$lib/utils/formatters.js';
 
@@ -8,10 +8,22 @@
 		previousValue = null,
 		currentPeriod = '',
 		previousPeriod = '',
-		formatValue = (val) => formatCompactNumber(val),
+		formatValue = (val: number) => formatCompactNumber(val),
 		isSelected = false,
 		isNegativeBetter = false,
+		loading = false,
 		onclick = () => {}
+	}: {
+		label: string;
+		currentValue: number;
+		previousValue?: number | null;
+		currentPeriod?: string;
+		previousPeriod?: string;
+		formatValue?: (val: number) => string;
+		isSelected?: boolean;
+		isNegativeBetter?: boolean;
+		loading?: boolean;
+		onclick?: () => void;
 	} = $props();
 
 	// Calculate percentage change
@@ -21,14 +33,14 @@
 	});
 
 	// Get trend icon based on change
-	function getTrendIcon(changeVal) {
+	function getTrendIcon(changeVal: number) {
 		if (changeVal > 0) return TrendingUp;
 		if (changeVal < 0) return TrendingDown;
 		return Minus;
 	}
 
 	// Get trend color based on change
-	function getTrendColor(changeVal) {
+	function getTrendColor(changeVal: number) {
 		if (changeVal === 0) return 'text-gray-600';
 
 		if (isNegativeBetter) {
@@ -46,35 +58,55 @@
 		? 'bg-accent'
 		: ''}"
 	{onclick}
+	disabled={loading}
 >
 	<div class="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
 		{label}
 	</div>
 
-	<!-- Current Period -->
-	<div class="mb-1">
-		<div class="text-2xl font-bold">{formatValue(currentValue)}</div>
-		{#if currentPeriod}
-			<div class="text-muted-foreground text-xs">{currentPeriod}</div>
-		{/if}
-	</div>
-
-	<!-- Previous Period (with fade) -->
-	{#if previousValue !== null}
-		<div class="mt-2 opacity-60">
-			<div class="text-lg font-semibold">{formatValue(previousValue)}</div>
-			{#if previousPeriod}
-				<div class="text-muted-foreground text-xs">{previousPeriod}</div>
+	{#if loading}
+		<!-- Loading Skeleton -->
+		<div class="mb-1">
+			<div class="bg-muted h-8 w-24 animate-pulse rounded"></div>
+			{#if currentPeriod}
+				<div class="bg-muted mt-1 h-3 w-16 animate-pulse rounded"></div>
 			{/if}
 		</div>
 
-		<!-- Change Indicator -->
-		{#if change() !== 0}
-			{@const TrendIcon = getTrendIcon(change())}
-			<div class="text-xs {getTrendColor(change())} mt-1 flex items-center gap-1">
-				<TrendIcon class="h-3 w-3" />
-				{Math.abs(change()).toFixed(0)}%
+		{#if previousValue !== null}
+			<div class="mt-2 opacity-60">
+				<div class="bg-muted h-6 w-20 animate-pulse rounded"></div>
+				{#if previousPeriod}
+					<div class="bg-muted mt-1 h-3 w-16 animate-pulse rounded"></div>
+				{/if}
 			</div>
+		{/if}
+	{:else}
+		<!-- Current Period -->
+		<div class="mb-1">
+			<div class="text-2xl font-bold">{formatValue(currentValue)}</div>
+			{#if currentPeriod}
+				<div class="text-muted-foreground text-xs">{currentPeriod}</div>
+			{/if}
+		</div>
+
+		<!-- Previous Period (with fade) -->
+		{#if previousValue !== null}
+			<div class="mt-2 opacity-60">
+				<div class="text-lg font-semibold">{formatValue(previousValue)}</div>
+				{#if previousPeriod}
+					<div class="text-muted-foreground text-xs">{previousPeriod}</div>
+				{/if}
+			</div>
+
+			<!-- Change Indicator -->
+			{#if change() !== 0}
+				{@const TrendIcon = getTrendIcon(change())}
+				<div class="text-xs {getTrendColor(change())} mt-1 flex items-center gap-1">
+					<TrendIcon class="h-3 w-3" />
+					{Math.abs(change()).toFixed(0)}%
+				</div>
+			{/if}
 		{/if}
 	{/if}
 </button>
