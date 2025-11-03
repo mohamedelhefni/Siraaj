@@ -12,7 +12,6 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -289,29 +288,41 @@ func (lt *DBLoadTester) InsertEventsBatch(events []Event) error {
 		return nil
 	}
 
-	tx, err := lt.db.Begin()
+	// Create a temporary CSV file for this batch
+	tmpFile, err := os.CreateTemp("", "batch_*.csv")
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
 
-	stmt, err := tx.Prepare(`
-		INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration,
-			url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id, channel)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`)
+	writer := csv.NewWriter(tmpFile)
+
+	// Get the current max ID
+	var maxID int64
+	err = lt.db.QueryRow("SELECT COALESCE(MAX(id), 0) FROM events").Scan(&maxID)
 	if err != nil {
+		tmpFile.Close()
 		return err
 	}
-	defer stmt.Close()
 
+	// Write events to CSV
 	for _, event := range events {
-		_, err := stmt.Exec(
-			event.Timestamp,
+		maxID++
+		dateHour := event.Timestamp.Truncate(time.Hour)
+		dateDay := time.Date(event.Timestamp.Year(), event.Timestamp.Month(), event.Timestamp.Day(), 0, 0, 0, 0, event.Timestamp.Location())
+		dateMonth := time.Date(event.Timestamp.Year(), event.Timestamp.Month(), 1, 0, 0, 0, 0, event.Timestamp.Location())
+
+		record := []string{
+			fmt.Sprintf("%d", maxID),
+			event.Timestamp.Format(time.RFC3339Nano),
+			dateHour.Format(time.RFC3339Nano),
+			dateDay.Format("2006-01-02"),
+			dateMonth.Format(time.RFC3339Nano),
 			event.EventName,
 			event.UserID,
 			event.SessionID,
-			event.SessionDuration,
+			fmt.Sprintf("%d", event.SessionDuration),
 			event.URL,
 			event.Referrer,
 			event.UserAgent,
@@ -320,16 +331,38 @@ func (lt *DBLoadTester) InsertEventsBatch(events []Event) error {
 			event.Browser,
 			event.OS,
 			event.Device,
-			event.IsBot,
+			fmt.Sprintf("%t", event.IsBot),
 			event.ProjectID,
 			event.Channel,
-		)
-		if err != nil {
-			return err
+		}
+		if err := writer.Write(record); err != nil {
+			tmpFile.Close()
+			return fmt.Errorf("error writing to temp CSV: %v", err)
 		}
 	}
 
-	return tx.Commit()
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		tmpFile.Close()
+		return err
+	}
+	tmpFile.Close()
+
+	// Use DuckDB's COPY command for ultra-fast bulk insert
+	query := fmt.Sprintf(`
+		COPY events (
+			id, timestamp, date_hour, date_day, date_month,
+			event_name, user_id, session_id, session_duration,
+			url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id, channel
+		) FROM '%s' (FORMAT CSV, HEADER false)
+	`, tmpPath)
+
+	_, err = lt.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("error executing COPY: %v", err)
+	}
+
+	return nil
 }
 
 func (lt *DBLoadTester) RunLoadTest(totalEvents int, batchSize int, numUsers int, projectID string) error {
@@ -617,10 +650,23 @@ func (cg *CSVGenerator) ImportToDatabase(dbPath string) error {
 	start := time.Now()
 
 	// Import CSV using DuckDB's INSERT INTO ... SELECT FROM read_csv_auto
-	// Use nextval('id_sequence') for auto-incrementing IDs
+	// Generate IDs using ROW_NUMBER()
 	query := fmt.Sprintf(`
-		INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration, url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id, channel)
-		SELECT nextval('id_sequence'), timestamp::TIMESTAMP, event_name, user_id, session_id, session_duration::INTEGER, url, referrer, user_agent, ip, country, browser, os, device, is_bot::BOOLEAN, project_id, channel
+		INSERT INTO events (
+			id, timestamp, date_hour, date_day, date_month,
+			event_name, user_id, session_id, session_duration,
+			url, referrer, user_agent, ip, country,
+			browser, os, device, is_bot, project_id, channel
+		)
+		SELECT 
+			ROW_NUMBER() OVER () as id,
+			timestamp::TIMESTAMP,
+			date_trunc('hour', timestamp::TIMESTAMP) as date_hour,
+			CAST(timestamp::TIMESTAMP AS DATE) as date_day,
+			date_trunc('month', timestamp::TIMESTAMP) as date_month,
+			event_name, user_id, session_id, session_duration::INTEGER,
+			url, referrer, user_agent, ip, country,
+			browser, os, device, is_bot::BOOLEAN, project_id, channel
 		FROM read_csv_auto('%s', header=true)
 	`, cg.filepath)
 
@@ -636,134 +682,12 @@ func (cg *CSVGenerator) ImportToDatabase(dbPath string) error {
 	return nil
 }
 
-// ImportToParquet imports CSV data to Parquet using DuckDB COPY command
-// Now uses directory-based structure for compatibility with append-only partitioned files
-func (cg *CSVGenerator) ImportToParquet(parquetDir string) error {
-	log.Printf("📥 Importing CSV file %s to Parquet directory %s", cg.filepath, parquetDir)
-
-	start := time.Now()
-
-	// Ensure directory exists
-	if err := os.MkdirAll(parquetDir, 0755); err != nil {
-		return fmt.Errorf("failed to create parquet directory: %w", err)
-	}
-
-	// Generate filename with timestamp
-	timestamp := time.Now().UTC().Format("20060102_150405")
-	parquetPath := fmt.Sprintf("%s/events_loadtest_%s.parquet", parquetDir, timestamp)
-
-	// Open DuckDB connection
-	db, err := sql.Open("duckdb", "")
-	if err != nil {
-		return fmt.Errorf("failed to open DuckDB: %w", err)
-	}
-	defer db.Close()
-
-	// Use DuckDB COPY to convert CSV to Parquet with ZSTD compression
-	// Sort by timestamp for optimal query performance
-	copyQuery := fmt.Sprintf(`
-		COPY (
-			SELECT 
-				timestamp,
-				date_trunc('hour', timestamp)  AS date_hour,
-				date_trunc('day', timestamp)   AS date_day,
-				date_trunc('month', timestamp) AS date_month,
-				event_name,
-				user_id,
-				session_id,
-				session_duration,
-				url,
-				referrer,
-				user_agent,
-				ip,
-				country,
-				browser,
-				os,
-				device,
-				is_bot,
-				project_id,
-				channel
-			FROM read_csv('%s', 
-				AUTO_DETECT=TRUE,
-				header=true,
-				timestampformat='%%Y-%%m-%%dT%%H:%%M:%%S.%%fZ'
-			)
-			ORDER BY timestamp
-		) TO '%s' (FORMAT 'PARQUET', CODEC 'ZSTD', ROW_GROUP_SIZE 100000)
-	`, cg.filepath, parquetPath)
-
-	log.Printf("🔄 Executing COPY command...")
-	_, err = db.Exec(copyQuery)
-	if err != nil {
-		return fmt.Errorf("failed to copy to Parquet: %w", err)
-	}
-
-	duration := time.Since(start)
-
-	// Get file size
-	fileInfo, err := os.Stat(parquetPath)
-	if err == nil {
-		log.Printf("📊 Parquet file size: %.2f MB", float64(fileInfo.Size())/(1024*1024))
-	}
-
-	// Count rows using glob pattern to match new structure
-	var rowCount int64
-	globPattern := fmt.Sprintf("%s/*.parquet", parquetDir)
-	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM read_parquet('%s')", globPattern)).Scan(&rowCount)
-	if err == nil {
-		rate := float64(rowCount) / duration.Seconds()
-		log.Printf("✅ Parquet import completed!")
-		log.Printf("📈 Total rows: %d", rowCount)
-		log.Printf("⏱️  Total time: %v", duration)
-		log.Printf("🚄 Average rate: %.0f rows/sec", rate)
-	}
-
-	return nil
-}
-
-// csvRecordToEvent converts CSV record to Event struct (for HTTP mode)
-func csvRecordToEvent(record []string, currentID *uint64) (Event, error) {
-	*currentID++
-
-	// Parse timestamp
-	timestamp, err := time.Parse(time.RFC3339, record[0])
-	if err != nil {
-		timestamp = time.Now()
-	}
-
-	// Parse session duration
-	sessionDuration, _ := strconv.Atoi(record[4])
-
-	// Parse is_bot
-	isBot, _ := strconv.ParseBool(record[13])
-
-	return Event{
-		ID:              *currentID,
-		Timestamp:       timestamp,
-		EventName:       record[1],
-		UserID:          record[2],
-		SessionID:       record[3],
-		SessionDuration: sessionDuration,
-		URL:             record[5],
-		Referrer:        record[6],
-		UserAgent:       record[7],
-		IP:              record[8],
-		Country:         record[9],
-		Browser:         record[10],
-		OS:              record[11],
-		Device:          record[12],
-		IsBot:           isBot,
-		ProjectID:       record[14],
-		Channel:         record[15],
-	}, nil
-}
-
 // ========== MAIN ==========
 
 func main() {
 	mode := flag.String("mode", "db", "Load test mode: 'db', 'http', or 'csv'")
 	events := flag.Int("events", 1000000, "Total number of events to generate")
-	batchSize := flag.Int("batch", 1000, "Batch size for DB mode")
+	batchSize := flag.Int("batch", 50000, "Batch size for DB mode")
 	workers := flag.Int("workers", 50, "Number of concurrent workers for HTTP mode")
 	users := flag.Int("users", 10000, "Number of unique users to simulate")
 	projectID := flag.String("project", "test_project", "Project ID for events")
@@ -805,7 +729,7 @@ func main() {
 
 	case "csv":
 		log.Printf("  CSV Path: %s", *csvPath)
-		log.Printf("  Parquet Directory: %s", "../data/events")
+		log.Printf("  Database: %s", *dbPath)
 
 		cg := NewCSVGenerator(*csvPath)
 
@@ -814,10 +738,9 @@ func main() {
 			log.Fatal("CSV generation failed:", err)
 		}
 
-		// Import to Parquet directory (new structure)
-		parquetDir := "../data/events"
-		if err := cg.ImportToParquet(parquetDir); err != nil {
-			log.Fatal("Parquet import failed:", err)
+		// Import to database
+		if err := cg.ImportToDatabase(*dbPath); err != nil {
+			log.Fatal("CSV import failed:", err)
 		}
 
 	default:
