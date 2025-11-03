@@ -666,13 +666,14 @@
 	// Watch for changes and redraw when necessary
 	$effect(() => {
 		// Track the dependencies
-		data;
-		comparisonData;
-		metric;
-		showComparison;
+		const currentData = data;
+		const currentComparisonData = comparisonData;
+		const currentMetric = metric;
+		const currentShowComparison = showComparison;
 
-		// Only redraw if we have a container and data, using untrack to prevent infinite loops
-		if (chartContainer && data.length > 0) {
+		// Only redraw if we have a container and data
+		// Use untrack to prevent the drawChart function from creating new dependencies
+		if (chartContainer && currentData && currentData.length > 0) {
 			untrack(() => {
 				drawChart();
 			});
