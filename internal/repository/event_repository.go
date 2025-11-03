@@ -1462,8 +1462,7 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
         countMerge(bot_events_state) AS bot_events,
         countMerge(human_events_state) AS human_events,
         uniqMerge(bot_users_state) AS bot_users,
-        uniqMerge(human_users_state) AS human_users,
-        countMerge(single_page_sessions_state) AS single_page_sessions
+        uniqMerge(human_users_state) AS human_users
     FROM events_daily_stats
     WHERE date BETWEEN ? AND ? %s
     `, additionalWhere)
@@ -1473,16 +1472,37 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 	args = append(args, additionalArgs...)
 
 	var totalEvents, uniqueUsers, totalVisits, pageViews, sessionsWithViews int
-	var botEvents, humanEvents, botUsers, humanUsers, singlePageSessions int
+	var botEvents, humanEvents, botUsers, humanUsers int
 	var avgSessionDuration sql.NullFloat64
 
 	fmt.Println("query is", query, args)
 	err := r.db.QueryRow(query, args...).Scan(
 		&totalEvents, &uniqueUsers, &totalVisits, &pageViews, &sessionsWithViews,
-		&avgSessionDuration, &botEvents, &humanEvents, &botUsers, &humanUsers, &singlePageSessions,
+		&avgSessionDuration, &botEvents, &humanEvents, &botUsers, &humanUsers,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query materialized view: %w", err)
+	}
+
+	// Calculate bounce rate with a separate query
+	var singlePageSessions int
+	bounceQuery := `
+	SELECT COUNT(*) as single_page_sessions
+	FROM (
+		SELECT session_id
+		FROM events 
+		WHERE timestamp BETWEEN ? AND ? 
+			AND event_name = 'page_view'
+		GROUP BY session_id
+		HAVING COUNT(*) = 1
+	)`
+
+	bounceArgs := []interface{}{startDate, endDate}
+	err = r.db.QueryRow(bounceQuery, bounceArgs...).Scan(&singlePageSessions)
+	if err != nil {
+		// Log error but don't fail the entire request
+		fmt.Printf("Failed to calculate bounce rate: %v\n", err)
+		singlePageSessions = 0
 	}
 
 	stats := make(map[string]interface{})
@@ -1505,6 +1525,7 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 		bounceRate = float64(singlePageSessions) / float64(sessionsWithViews) * 100
 	}
 	stats["bounce_rate"] = bounceRate
+	stats["single_page_sessions"] = singlePageSessions
 
 	// Bot statistics
 	stats["bot_events"] = botEvents
@@ -1521,7 +1542,7 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 	// Calculate trends using the same materialized view
 	duration := endDate.Sub(startDate)
 	prevStartDate := startDate.Add(-duration)
-	prevEndDate := startDate.Add(-time.Second) // Exclude current period
+	prevEndDate := startDate.Add(-time.Second)
 
 	prevStartStr := prevStartDate.Format("2006-01-02")
 	prevEndStr := prevEndDate.Format("2006-01-02")

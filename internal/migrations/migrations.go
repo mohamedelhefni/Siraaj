@@ -95,6 +95,41 @@ var migrations = []Migration{
 			GROUP BY url, day
 		)`,
 		Down: `ALTER TABLE events DROP PROJECTION IF EXISTS stats_by_page`,
+	}, {
+		Version:     6,
+		Description: "Create daily aggregated stats materialized view",
+		Up: `
+CREATE MATERIALIZED VIEW events_daily_stats
+ENGINE = AggregatingMergeTree()
+PARTITION BY toYYYYMM(date)
+ORDER BY (date, project_id)
+POPULATE AS
+SELECT
+    toDate(timestamp) as date,
+    project_id,
+    
+    -- Basic counts
+    countState() as total_events_state,
+    uniqState(user_id) as unique_users_state,
+    uniqState(session_id) as total_visits_state,
+    
+    -- Page view metrics
+    countStateIf(event_name = 'page_view') as page_views_state,
+    uniqStateIf(session_id, event_name = 'page_view') as sessions_with_views_state,
+    
+    -- Session duration
+    avgStateIf(session_duration, session_duration > 0) as avg_session_duration_state,
+    
+    -- Bot metrics
+    countStateIf(is_bot = 1) as bot_events_state,
+    countStateIf(is_bot = 0) as human_events_state,
+    uniqStateIf(user_id, is_bot = 1) as bot_users_state,
+    uniqStateIf(user_id, is_bot = 0) as human_users_state
+    
+FROM events
+GROUP BY date, project_id;
+		`,
+		Down: `DROP MATERIALIZED VIEW IF EXISTS events_daily_stats`,
 	},
 }
 
