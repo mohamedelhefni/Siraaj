@@ -2,7 +2,7 @@ module github.com/mohamedelhefni/siraaj/loadtest/funnel
 
 go 1.24.9
 
-require github.com/duckdb/duckdb-go/v2 v2.5.0
+require github.com/ClickHouse/clickhouse-go/v2 v2.30.0
 
 require (
 	github.com/apache/arrow-go/v18 v18.4.1 // indirect

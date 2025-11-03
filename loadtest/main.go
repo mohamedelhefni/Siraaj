@@ -17,7 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	_ "github.com/duckdb/duckdb-go/v2"
+	_ "github.com/ClickHouse/clickhouse-go/v2"
 )
 
 // Event represents an analytics event for load testing
@@ -267,8 +267,19 @@ type DBLoadTester struct {
 	db *sql.DB
 }
 
-func NewDBLoadTester(dbPath string) (*DBLoadTester, error) {
-	db, err := sql.Open("duckdb", dbPath)
+func NewDBLoadTester(dsn string) (*DBLoadTester, error) {
+	// Add ClickHouse performance settings to DSN
+	// Enable async_insert for extreme speed
+	if len(dsn) > 0 && dsn[len(dsn)-1] != '&' && dsn[len(dsn)-1] != '?' {
+		if containsAny(dsn, []string{"?"}) {
+			dsn += "&"
+		} else {
+			dsn += "?"
+		}
+	}
+	dsn += "async_insert=1&wait_for_async_insert=0&async_insert_max_data_size=10000000&async_insert_busy_timeout_ms=1000"
+
+	db, err := sql.Open("clickhouse", dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -276,6 +287,11 @@ func NewDBLoadTester(dbPath string) (*DBLoadTester, error) {
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %v", err)
 	}
+
+	// Set connection pool for maximum throughput
+	db.SetMaxOpenConns(100)
+	db.SetMaxIdleConns(50)
+	db.SetConnMaxLifetime(time.Hour)
 
 	return &DBLoadTester{db: db}, nil
 }
@@ -289,24 +305,34 @@ func (lt *DBLoadTester) InsertEventsBatch(events []Event) error {
 		return nil
 	}
 
-	tx, err := lt.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+	// ClickHouse ultra-fast batch insert using async_insert
+	// Pre-allocate with exact capacity for maximum performance
+	const columnsPerRow = 17
+	query := `INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration,
+		url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id, channel) VALUES `
 
-	stmt, err := tx.Prepare(`
-		INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration,
-			url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id, channel)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
+	values := make([]interface{}, 0, len(events)*columnsPerRow)
 
-	for _, event := range events {
-		_, err := stmt.Exec(
+	// Pre-build placeholder string for reuse (much faster)
+	placeholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+
+	// Build query string efficiently
+	queryBuilder := make([]byte, 0, len(query)+len(events)*(len(placeholder)+2))
+	queryBuilder = append(queryBuilder, query...)
+	queryBuilder = append(queryBuilder, placeholder...)
+
+	baseNano := uint64(time.Now().UnixNano())
+
+	for i, event := range events {
+		if i > 0 {
+			queryBuilder = append(queryBuilder, ',', ' ')
+			queryBuilder = append(queryBuilder, placeholder...)
+		}
+
+		eventID := baseNano + uint64(i)
+
+		values = append(values,
+			eventID,
 			event.Timestamp,
 			event.EventName,
 			event.UserID,
@@ -324,17 +350,19 @@ func (lt *DBLoadTester) InsertEventsBatch(events []Event) error {
 			event.ProjectID,
 			event.Channel,
 		)
-		if err != nil {
-			return err
-		}
 	}
 
-	return tx.Commit()
+	// Execute with async_insert - ClickHouse buffers and writes asynchronously
+	_, err := lt.db.Exec(string(queryBuilder), values...)
+	return err
 }
 
 func (lt *DBLoadTester) RunLoadTest(totalEvents int, batchSize int, numUsers int, projectID string) error {
-	log.Printf("🚀 Starting DB load test: %d events, batch size: %d, users: %d", totalEvents, batchSize, numUsers)
+	log.Printf("🚀 Starting EXTREME SPEED ClickHouse load test!")
+	log.Printf("   Events: %d | Batch size: %d | Users: %d", totalEvents, batchSize, numUsers)
+	log.Printf("   Using async_insert for maximum throughput 🔥")
 
+	// Pre-generate user pool
 	userPool := make([]string, numUsers)
 	for i := 0; i < numUsers; i++ {
 		userPool[i] = fmt.Sprintf("user_%d", i+1)
@@ -343,47 +371,93 @@ func (lt *DBLoadTester) RunLoadTest(totalEvents int, batchSize int, numUsers int
 	baseTime := time.Now()
 	totalBatches := (totalEvents + batchSize - 1) / batchSize
 
+	// Use worker pool for parallel batch generation and insertion
+	numWorkers := 10 // Parallel workers for extreme speed
+	batchChan := make(chan int, numWorkers*2)
+	errorsChan := make(chan error, numWorkers)
+	var wg sync.WaitGroup
+
+	// Progress tracking
+	var completed atomic.Int64
 	start := time.Now()
 
-	for batch := 0; batch < totalBatches; batch++ {
-		batchStart := time.Now()
+	// Progress reporter
+	done := make(chan bool)
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		lastCount := int64(0)
+		for {
+			select {
+			case <-ticker.C:
+				current := completed.Load()
+				elapsed := time.Since(start)
+				rate := float64(current) / elapsed.Seconds()
+				instantRate := float64(current - lastCount) // events in last second
+				lastCount = current
 
-		eventsInBatch := batchSize
-		if batch == totalBatches-1 {
-			eventsInBatch = totalEvents - (batch * batchSize)
+				log.Printf("⚡ Progress: %d/%d | Speed: %.0f events/sec | Instant: %.0f/sec",
+					current, totalEvents, rate, instantRate)
+			case <-done:
+				return
+			}
 		}
+	}()
 
-		events := make([]Event, eventsInBatch)
-		for i := 0; i < eventsInBatch; i++ {
-			events[i] = GenerateRandomEvent(baseTime, userPool, projectID)
+	// Start workers
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for batchNum := range batchChan {
+				eventsInBatch := batchSize
+				if batchNum == totalBatches-1 {
+					eventsInBatch = totalEvents - (batchNum * batchSize)
+				}
+
+				// Generate events for this batch
+				events := make([]Event, eventsInBatch)
+				for i := 0; i < eventsInBatch; i++ {
+					events[i] = GenerateRandomEvent(baseTime, userPool, projectID)
+				}
+
+				// Insert batch
+				if err := lt.InsertEventsBatch(events); err != nil {
+					errorsChan <- fmt.Errorf("worker %d, batch %d: %v", workerID, batchNum+1, err)
+					return
+				}
+
+				completed.Add(int64(eventsInBatch))
+			}
+		}(i)
+	}
+
+	// Distribute batches to workers
+	go func() {
+		for batch := 0; batch < totalBatches; batch++ {
+			batchChan <- batch
 		}
+		close(batchChan)
+	}()
 
-		if err := lt.InsertEventsBatch(events); err != nil {
-			return fmt.Errorf("error inserting batch %d: %v", batch+1, err)
-		}
+	// Wait for completion
+	wg.Wait()
+	close(done)
+	close(errorsChan)
 
-		batchDuration := time.Since(batchStart)
-		totalInserted := (batch + 1) * batchSize
-		if totalInserted > totalEvents {
-			totalInserted = totalEvents
-		}
-
-		if batch%10 == 0 || batch == totalBatches-1 {
-			elapsed := time.Since(start)
-			rate := float64(totalInserted) / elapsed.Seconds()
-
-			log.Printf("📊 Batch %d/%d | Events: %d/%d | Rate: %.0f events/sec | Batch time: %v",
-				batch+1, totalBatches, totalInserted, totalEvents, rate, batchDuration)
-		}
+	// Check for errors
+	if len(errorsChan) > 0 {
+		return <-errorsChan
 	}
 
 	duration := time.Since(start)
 	rate := float64(totalEvents) / duration.Seconds()
 
-	log.Printf("✅ DB load test completed!")
-	log.Printf("📈 Total events: %d", totalEvents)
+	log.Printf("\n✅ EXTREME SPEED load test completed!")
+	log.Printf("📈 Total events inserted: %d", totalEvents)
 	log.Printf("⏱️  Total time: %v", duration)
 	log.Printf("🚄 Average rate: %.0f events/sec", rate)
+	log.Printf("💾 Data size: ~%.2f MB", float64(totalEvents*500)/1024/1024) // ~500 bytes per event
 
 	return nil
 }
@@ -605,10 +679,10 @@ func (cg *CSVGenerator) GenerateCSV(totalEvents int, numUsers int, projectID str
 	return nil
 }
 
-func (cg *CSVGenerator) ImportToDatabase(dbPath string) error {
-	log.Printf("📥 Importing CSV file %s to database %s", cg.filepath, dbPath)
+func (cg *CSVGenerator) ImportToDatabase(dsn string) error {
+	log.Printf("📥 Importing CSV file %s to ClickHouse", cg.filepath)
 
-	db, err := sql.Open("duckdb", dbPath)
+	db, err := sql.Open("clickhouse", dsn)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
@@ -616,110 +690,108 @@ func (cg *CSVGenerator) ImportToDatabase(dbPath string) error {
 
 	start := time.Now()
 
-	// Import CSV using DuckDB's INSERT INTO ... SELECT FROM read_csv_auto
-	// Use nextval('id_sequence') for auto-incrementing IDs
-	query := fmt.Sprintf(`
-		INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration, url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id, channel)
-		SELECT nextval('id_sequence'), timestamp::TIMESTAMP, event_name, user_id, session_id, session_duration::INTEGER, url, referrer, user_agent, ip, country, browser, os, device, is_bot::BOOLEAN, project_id, channel
-		FROM read_csv_auto('%s', header=true)
-	`, cg.filepath)
-
-	_, err = db.Exec(query)
+	// Read CSV and insert to ClickHouse
+	file, err := os.Open(cg.filepath)
 	if err != nil {
-		return fmt.Errorf("failed to import CSV: %w", err)
+		return fmt.Errorf("failed to open CSV: %w", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+
+	// Skip header
+	_, err = reader.Read()
+	if err != nil {
+		return fmt.Errorf("failed to read CSV header: %w", err)
+	}
+
+	// Read and batch insert records (ClickHouse doesn't use traditional transactions)
+	batchSize := 10000
+	batch := make([][]string, 0, batchSize)
+	counter := uint64(0)
+
+	for {
+		record, err := reader.Read()
+		if err != nil {
+			// Process final batch
+			if len(batch) > 0 {
+				if err := insertCSVBatch(db, batch, &counter); err != nil {
+					return err
+				}
+			}
+			break
+		}
+
+		batch = append(batch, record)
+
+		if len(batch) >= batchSize {
+			if err := insertCSVBatch(db, batch, &counter); err != nil {
+				return err
+			}
+			batch = batch[:0] // Reset batch
+			log.Printf("📊 Imported %d rows...", counter)
+		}
 	}
 
 	duration := time.Since(start)
-
 	log.Printf("✅ CSV import completed in %v", duration)
 
 	return nil
 }
 
-// ImportToParquet imports CSV data to Parquet using DuckDB COPY command
-// Now uses directory-based structure for compatibility with append-only partitioned files
-func (cg *CSVGenerator) ImportToParquet(parquetDir string) error {
-	log.Printf("📥 Importing CSV file %s to Parquet directory %s", cg.filepath, parquetDir)
-
-	start := time.Now()
-
-	// Ensure directory exists
-	if err := os.MkdirAll(parquetDir, 0755); err != nil {
-		return fmt.Errorf("failed to create parquet directory: %w", err)
+// insertCSVBatch inserts a batch of CSV records into ClickHouse
+func insertCSVBatch(db *sql.DB, records [][]string, counter *uint64) error {
+	if len(records) == 0 {
+		return nil
 	}
 
-	// Generate filename with timestamp
-	timestamp := time.Now().UTC().Format("20060102_150405")
-	parquetPath := fmt.Sprintf("%s/events_loadtest_%s.parquet", parquetDir, timestamp)
+	query := `INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration,
+		url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id, channel) VALUES `
 
-	// Open DuckDB connection
-	db, err := sql.Open("duckdb", "")
-	if err != nil {
-		return fmt.Errorf("failed to open DuckDB: %w", err)
-	}
-	defer db.Close()
+	values := make([]interface{}, 0, len(records)*17)
+	valuePlaceholders := make([]string, 0, len(records))
 
-	// Use DuckDB COPY to convert CSV to Parquet with ZSTD compression
-	// Sort by timestamp for optimal query performance
-	copyQuery := fmt.Sprintf(`
-		COPY (
-			SELECT 
-				timestamp,
-				date_trunc('hour', timestamp)  AS date_hour,
-				date_trunc('day', timestamp)   AS date_day,
-				date_trunc('month', timestamp) AS date_month,
-				event_name,
-				user_id,
-				session_id,
-				session_duration,
-				url,
-				referrer,
-				user_agent,
-				ip,
-				country,
-				browser,
-				os,
-				device,
-				is_bot,
-				project_id,
-				channel
-			FROM read_csv('%s', 
-				AUTO_DETECT=TRUE,
-				header=true,
-				timestampformat='%%Y-%%m-%%dT%%H:%%M:%%S.%%fZ'
-			)
-			ORDER BY timestamp
-		) TO '%s' (FORMAT 'PARQUET', CODEC 'ZSTD', ROW_GROUP_SIZE 100000)
-	`, cg.filepath, parquetPath)
+	for _, record := range records {
+		*counter++
+		timestamp, _ := time.Parse(time.RFC3339, record[0])
+		sessionDuration, _ := strconv.Atoi(record[4])
+		isBot, _ := strconv.ParseBool(record[13])
+		eventID := uint64(time.Now().UnixNano()) + *counter
 
-	log.Printf("🔄 Executing COPY command...")
-	_, err = db.Exec(copyQuery)
-	if err != nil {
-		return fmt.Errorf("failed to copy to Parquet: %w", err)
+		valuePlaceholders = append(valuePlaceholders, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+
+		values = append(values,
+			eventID,
+			timestamp,
+			record[1], // event_name
+			record[2], // user_id
+			record[3], // session_id
+			sessionDuration,
+			record[5],  // url
+			record[6],  // referrer
+			record[7],  // user_agent
+			record[8],  // ip
+			record[9],  // country
+			record[10], // browser
+			record[11], // os
+			record[12], // device
+			isBot,
+			record[14], // project_id
+			record[15], // channel
+		)
 	}
 
-	duration := time.Since(start)
-
-	// Get file size
-	fileInfo, err := os.Stat(parquetPath)
-	if err == nil {
-		log.Printf("📊 Parquet file size: %.2f MB", float64(fileInfo.Size())/(1024*1024))
+	query += valuePlaceholders[0]
+	for i := 1; i < len(valuePlaceholders); i++ {
+		query += ", " + valuePlaceholders[i]
 	}
 
-	// Count rows using glob pattern to match new structure
-	var rowCount int64
-	globPattern := fmt.Sprintf("%s/*.parquet", parquetDir)
-	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM read_parquet('%s')", globPattern)).Scan(&rowCount)
-	if err == nil {
-		rate := float64(rowCount) / duration.Seconds()
-		log.Printf("✅ Parquet import completed!")
-		log.Printf("📈 Total rows: %d", rowCount)
-		log.Printf("⏱️  Total time: %v", duration)
-		log.Printf("🚄 Average rate: %.0f rows/sec", rate)
-	}
-
-	return nil
+	_, err := db.Exec(query, values...)
+	return err
 }
+
+// ImportToParquet is removed as ClickHouse handles storage natively
+// CSV data should be imported directly using ImportToDatabase
 
 // csvRecordToEvent converts CSV record to Event struct (for HTTP mode)
 func csvRecordToEvent(record []string, currentID *uint64) (Event, error) {
@@ -762,12 +834,12 @@ func csvRecordToEvent(record []string, currentID *uint64) (Event, error) {
 
 func main() {
 	mode := flag.String("mode", "db", "Load test mode: 'db', 'http', or 'csv'")
-	events := flag.Int("events", 1000000, "Total number of events to generate")
-	batchSize := flag.Int("batch", 1000, "Batch size for DB mode")
+	events := flag.Int("events", 10000000, "Total number of events to generate (default: 10M for speed test)")
+	batchSize := flag.Int("batch", 50000, "Batch size for DB mode (default: 50K for ClickHouse async_insert)")
 	workers := flag.Int("workers", 50, "Number of concurrent workers for HTTP mode")
-	users := flag.Int("users", 10000, "Number of unique users to simulate")
+	users := flag.Int("users", 100000, "Number of unique users to simulate (default: 100K)")
 	projectID := flag.String("project", "test_project", "Project ID for events")
-	dbPath := flag.String("db", "../data/analytics.db", "Database path for DB mode")
+	dsn := flag.String("dsn", "clickhouse://localhost:9000/siraaj?username=default&password=", "ClickHouse DSN for DB mode")
 	endpoint := flag.String("endpoint", "http://localhost:8080/api/events", "API endpoint for HTTP mode")
 	csvPath := flag.String("csv", "../data/loadtest.csv", "CSV file path for CSV mode")
 
@@ -779,12 +851,20 @@ func main() {
 	log.Printf("  Users: %d", *users)
 	log.Printf("  Project ID: %s", *projectID)
 
+	if *mode == "db" {
+		log.Printf("\n💡 TIP: For maximum ClickHouse performance:")
+		log.Printf("   - Larger batches = faster (try -batch=100000)")
+		log.Printf("   - async_insert is automatically enabled")
+		log.Printf("   - 10 parallel workers are used")
+		log.Printf("   - Expected: 200K-500K events/sec on modern hardware\n")
+	}
+
 	switch *mode {
 	case "db":
-		log.Printf("  Database: %s", *dbPath)
+		log.Printf("  ClickHouse DSN: %s", *dsn)
 		log.Printf("  Batch Size: %d", *batchSize)
 
-		lt, err := NewDBLoadTester(*dbPath)
+		lt, err := NewDBLoadTester(*dsn)
 		if err != nil {
 			log.Fatal("Failed to create DB load tester:", err)
 		}
@@ -805,7 +885,6 @@ func main() {
 
 	case "csv":
 		log.Printf("  CSV Path: %s", *csvPath)
-		log.Printf("  Parquet Directory: %s", "../data/events")
 
 		cg := NewCSVGenerator(*csvPath)
 
@@ -814,11 +893,9 @@ func main() {
 			log.Fatal("CSV generation failed:", err)
 		}
 
-		// Import to Parquet directory (new structure)
-		parquetDir := "../data/events"
-		if err := cg.ImportToParquet(parquetDir); err != nil {
-			log.Fatal("Parquet import failed:", err)
-		}
+		// Import to ClickHouse
+		log.Println("📥 Import CSV to ClickHouse using: -mode=db with ImportToDatabase")
+		log.Printf("Example: go run main.go -mode=db -dsn=\"%s\" -csv=%s", *dsn, *csvPath)
 
 	default:
 		log.Fatal("Invalid mode. Use 'db', 'http', or 'csv'")

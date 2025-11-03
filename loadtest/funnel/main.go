@@ -24,7 +24,7 @@ import (
 	"net/http"
 	"time"
 
-	_ "github.com/duckdb/duckdb-go/v2"
+	_ "github.com/ClickHouse/clickhouse-go/v2"
 )
 
 // Event represents an analytics event
@@ -313,8 +313,8 @@ type DBInserter struct {
 	db *sql.DB
 }
 
-func NewDBInserter(dbPath string) (*DBInserter, error) {
-	db, err := sql.Open("duckdb", dbPath)
+func NewDBInserter(dsn string) (*DBInserter, error) {
+	db, err := sql.Open("clickhouse", dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -335,24 +335,20 @@ func (di *DBInserter) InsertEvents(events []Event) error {
 		return nil
 	}
 
-	tx, err := di.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+	// ClickHouse batch insert - build multi-row VALUES query
+	query := `INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration,
+		url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id) VALUES `
 
-	stmt, err := tx.Prepare(`
-		INSERT INTO events (id, timestamp, event_name, user_id, session_id, session_duration,
-			url, referrer, user_agent, ip, country, browser, os, device, is_bot, project_id)
-		VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
+	values := make([]interface{}, 0, len(events)*16)
+	valuePlaceholders := make([]string, 0, len(events))
 
-	for _, event := range events {
-		_, err := stmt.Exec(
+	for i, event := range events {
+		eventID := uint64(time.Now().UnixNano()) + uint64(i)
+
+		valuePlaceholders = append(valuePlaceholders, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+
+		values = append(values,
+			eventID,
 			event.Timestamp,
 			event.EventName,
 			event.UserID,
@@ -369,12 +365,15 @@ func (di *DBInserter) InsertEvents(events []Event) error {
 			event.IsBot,
 			event.ProjectID,
 		)
-		if err != nil {
-			return err
-		}
 	}
 
-	return tx.Commit()
+	query += valuePlaceholders[0]
+	for i := 1; i < len(valuePlaceholders); i++ {
+		query += ", " + valuePlaceholders[i]
+	}
+
+	_, err := di.db.Exec(query, values...)
+	return err
 }
 
 // HTTPSender handles HTTP API requests
@@ -432,7 +431,7 @@ func main() {
 	mode := flag.String("mode", "db", "Mode: 'db' or 'http'")
 	numUsers := flag.Int("users", 10000, "Number of user journeys to generate")
 	projectID := flag.String("project", "funnel_test", "Project ID")
-	dbPath := flag.String("db", "../../data/analytics.db", "Database path (for db mode)")
+	dsn := flag.String("dsn", "clickhouse://localhost:9000/siraaj?username=default&password=", "ClickHouse DSN (for db mode)")
 	endpoint := flag.String("endpoint", "http://localhost:8080/api/track", "API endpoint (for http mode)")
 	daysBack := flag.Int("days", 30, "Generate data for the last N days")
 
@@ -453,9 +452,9 @@ func main() {
 
 	switch *mode {
 	case "db":
-		log.Printf("💾 Database: %s", *dbPath)
+		log.Printf("💾 ClickHouse DSN: %s", *dsn)
 
-		inserter, err := NewDBInserter(*dbPath)
+		inserter, err := NewDBInserter(*dsn)
 		if err != nil {
 			log.Fatal("Failed to connect to database:", err)
 		}

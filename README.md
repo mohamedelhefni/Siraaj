@@ -12,7 +12,7 @@
 
   <p>
     <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go" alt="Go Version"/>
-    <img src="https://img.shields.io/badge/DuckDB-Powered-yellow?style=flat" alt="DuckDB"/>
+    <img src="https://img.shields.io/badge/ClickHouse-Powered-FFCC00?style=flat&logo=clickhouse" alt="ClickHouse"/>
     <img src="https://img.shields.io/badge/Svelte-5-FF3E00?style=flat&logo=svelte" alt="Svelte"/>
     <img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat" alt="License"/>
     <a href="https://github.com/mohamedelhefni/siraaj/actions/workflows/test.yml">
@@ -31,11 +31,11 @@
 
 ## 🚀 What is Siraaj?
 
-Siraaj is a **lightweight, privacy-focused analytics platform** built with Go and DuckDB. It provides real-time insights into your web traffic without cookies, third-party tracking, or compromising user privacy.
+Siraaj is a **lightweight, privacy-focused analytics platform** built with Go and ClickHouse. It provides real-time insights into your web traffic without cookies, third-party tracking, or compromising user privacy.
 
 **Key Highlights:**
 - 🔒 **Privacy-First**: No cookies, GDPR compliant, your data stays on your server
-- ⚡ **Lightning Fast**: DuckDB columnar storage delivers sub-50ms query performance
+- ⚡ **Lightning Fast**: ClickHouse columnar database delivers sub-50ms query performance
 - 📊 **Beautiful Dashboard**: Modern SvelteKit 5 UI with real-time updates
 - 🎯 **Simple Integration**: Drop-in JavaScript SDK (< 5KB gzipped)
 - 🌍 **Multi-Project**: Track unlimited websites from one instance
@@ -55,7 +55,7 @@ Siraaj is a **lightweight, privacy-focused analytics platform** built with Go an
 - **Advanced Filtering**: Filter by project, date, country, browser, OS, device, source
 - **Entry/Exit Pages**: Track where users enter and leave your site
 - **Bot Detection**: Automatic bot filtering with 50+ known bots
-- **Parquet Storage**: Efficient columnar storage with automatic file management
+- **Scalable Storage**: ClickHouse MergeTree engine for efficient data storage and retrieval
 
 ---
 

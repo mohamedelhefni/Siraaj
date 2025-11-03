@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/duckdb/duckdb-go/v2"
+	_ "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/mohamedelhefni/siraaj/geolocation"
 	"github.com/mohamedelhefni/siraaj/internal/handler"
 	"github.com/mohamedelhefni/siraaj/internal/middleware"
@@ -27,8 +27,8 @@ import (
 var uiFiles embed.FS
 
 // initDatabase initializes the database connection and runs migrations
-func initDatabase(dbPath string) (*sql.DB, error) {
-	db, err := sql.Open("duckdb", dbPath)
+func initDatabase(dsn string) (*sql.DB, error) {
+	db, err := sql.Open("clickhouse", dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -39,49 +39,18 @@ func initDatabase(dbPath string) (*sql.DB, error) {
 	}
 
 	// Set connection pool settings
-	db.SetMaxOpenConns(5)
-	db.SetMaxIdleConns(2)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(time.Hour)
 
-	// Enable DuckDB optimizations
-	// Increase memory limit to handle larger datasets (default is ~488MB)
-	memoryLimit := os.Getenv("DUCKDB_MEMORY_LIMIT")
-	if memoryLimit == "" {
-		memoryLimit = "4GB" // Default to 4GB for better performance with large datasets
-	}
-	if _, err = db.Exec(fmt.Sprintf("PRAGMA memory_limit='%s'", memoryLimit)); err != nil {
-		log.Printf("Warning: Could not set memory limit: %v", err)
-	} else {
-		log.Printf("✓ DuckDB memory limit set to: %s", memoryLimit)
-	}
-
-	threads := os.Getenv("DUCKDB_THREADS")
-	if threads == "" {
-		threads = "4" // Use 4 threads for M3 chip (better utilization)
-	}
-	if _, err = db.Exec(fmt.Sprintf("PRAGMA threads=%s", threads)); err != nil {
-		log.Printf("Warning: Could not set threads: %v", err)
-	} else {
-		log.Printf("✓ DuckDB threads set to: %s", threads)
-	}
-
-	// Enable aggressive query optimizations for OLAP workloads
-	optimizations := []struct {
-		name  string
-		query string
-	}{
-		{"Enable parallel execution", "SET enable_object_cache=true"},
-		{"Disable preserve insertion order", "SET preserve_insertion_order=false"},
-		{"Enable query profiling", "SET enable_profiling=false"}, // Disable profiling in production
-		{"Set temp directory", "SET temp_directory='/tmp/duckdb_temp'"},
-		{"Enable parallel Parquet scan", "SET enable_http_metadata_cache=true"},
-		{"Force parallel execution", "SET force_parallelism=true"},
-		{"Optimize for throughput", "SET experimental_parallel_csv=true"},
-	}
-
-	for _, opt := range optimizations {
-		if _, err := db.Exec(opt.query); err != nil {
-			log.Printf("Warning: Could not apply %s: %v", opt.name, err)
+	// ClickHouse settings are configured via DSN or SET queries
+	// Example: Set max_memory_usage if needed
+	maxMemory := os.Getenv("CLICKHOUSE_MAX_MEMORY")
+	if maxMemory != "" {
+		if _, err = db.Exec(fmt.Sprintf("SET max_memory_usage = %s", maxMemory)); err != nil {
+			log.Printf("Warning: Could not set max_memory_usage: %v", err)
+		} else {
+			log.Printf("✓ ClickHouse max_memory_usage set to: %s", maxMemory)
 		}
 	}
 
@@ -110,12 +79,12 @@ func main() {
 	}
 
 	// Initialize database first (needed for Parquet storage)
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		dbPath = "data/analytics.db"
+	clickhouseDSN := os.Getenv("CLICKHOUSE_DSN")
+	if clickhouseDSN == "" {
+		clickhouseDSN = "clickhouse://localhost:9000/siraaj?username=default&password="
 	}
 
-	db, err := initDatabase(dbPath)
+	db, err := initDatabase(clickhouseDSN)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -125,24 +94,24 @@ func main() {
 		}
 	}()
 
-	log.Println("✓ DuckDB initialized successfully")
+	log.Println("✓ ClickHouse initialized successfully")
 
-	// Initialize Parquet storage with buffering (needs DB connection)
+	// Initialize storage layer (no-op for ClickHouse, kept for compatibility)
 	parquetFilePath := os.Getenv("PARQUET_FILE")
 	if parquetFilePath == "" {
 		parquetFilePath = "data/events"
 	}
 
-	bufferSize := 10000               // Buffer 10k events before flush
-	flushInterval := 30 * time.Second // Flush every 30 seconds
+	bufferSize := 10000               // Not used with ClickHouse
+	flushInterval := 30 * time.Second // Not used with ClickHouse
 
 	parquetStorage, err := storage.NewParquetStorage(db, parquetFilePath, bufferSize, flushInterval)
 	if err != nil {
-		log.Fatalf("Failed to initialize Parquet storage: %v", err)
+		log.Fatalf("Failed to initialize storage: %v", err)
 	}
 	defer func() {
 		if err := parquetStorage.Close(); err != nil {
-			log.Printf("Warning: failed to close Parquet storage: %v", err)
+			log.Printf("Warning: failed to close storage: %v", err)
 		}
 	}()
 
@@ -160,9 +129,9 @@ func main() {
 		<-sigChan
 		log.Println("\n🛑 Shutting down gracefully...")
 
-		// Close Parquet storage first to flush buffer
+		// Close storage first
 		if err := parquetStorage.Close(); err != nil {
-			log.Printf("Error closing Parquet storage: %v", err)
+			log.Printf("Error closing storage: %v", err)
 		}
 
 		// Close other resources
@@ -247,19 +216,10 @@ func main() {
 
 	// Storage stats endpoint
 	mux.HandleFunc("/api/debug/storage", func(w http.ResponseWriter, r *http.Request) {
-		fileCount, err := parquetStorage.GetFileCount()
-		if err != nil {
-			log.Printf("Error getting file count: %v", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]interface{}{
-			"parquet_files":        fileCount,
-			"max_before_merge":     100,
-			"merge_check_interval": "5m",
-			"data_directory":       parquetFilePath,
+			"storage_type": "ClickHouse native",
+			"database":     "ClickHouse",
 		}); err != nil {
 			log.Printf("Error encoding storage stats: %v", err)
 		}
@@ -290,7 +250,7 @@ func main() {
 	fmt.Printf("🌍 Geo Test:   http://localhost:%s/api/geo\n", port)
 	fmt.Printf("❤️  Health:    http://localhost:%s/api/health\n", port)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("✓ Server ready - Using official DuckDB Go driver")
+	fmt.Println("✓ Server ready - Using ClickHouse database")
 	fmt.Println("✓ Svelte Dashboard embedded and ready")
 	if geoService != nil {
 		fmt.Println("✓ Geolocation service enabled")
@@ -298,7 +258,7 @@ func main() {
 		fmt.Println("⚠️  Geolocation service disabled")
 	}
 	fmt.Println("✓ Clean Architecture implemented")
-	fmt.Printf("✓ Parquet storage enabled: %s (buffer: %d events, flush: %v)\n", parquetFilePath, bufferSize, flushInterval)
+	fmt.Println("✓ Using ClickHouse columnar database for high-performance analytics")
 	fmt.Println()
 
 	// Apply middleware: CORS and Logging
