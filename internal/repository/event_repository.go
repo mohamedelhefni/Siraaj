@@ -123,8 +123,9 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 		dateDay := time.Date(event.Timestamp.Year(), event.Timestamp.Month(), event.Timestamp.Day(), 0, 0, 0, 0, time.UTC)
 		dateMonth := time.Date(event.Timestamp.Year(), event.Timestamp.Month(), 1, 0, 0, 0, 0, time.UTC)
 
-		valueStrings = append(valueStrings, "(nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 		valueArgs = append(valueArgs,
+			0, // Placeholder for ID, will be replaced with nextval in the query
 			event.Timestamp, dateHour, dateDay, dateMonth,
 			event.EventName, event.UserID, event.SessionID, event.SessionDuration,
 			event.URL, event.Referrer, event.UserAgent, event.IP, event.Country,
@@ -132,7 +133,8 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 		)
 	}
 
-	query := fmt.Sprintf(`
+	// Build the query with placeholders, then replace the ID placeholders with nextval
+	placeholderQuery := fmt.Sprintf(`
 		INSERT INTO events (
 			id, timestamp, date_hour, date_day, date_month,
 			event_name, user_id, session_id, session_duration,
@@ -140,8 +142,20 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 			browser, os, device, is_bot, project_id, channel
 		) VALUES %s
 	`, strings.Join(valueStrings, ","))
+	
+	// Replace the first ? in each row with nextval('id_sequence')
+	// This is safe because we know the first ? in each (?, ?, ...) is for ID
+	query := strings.ReplaceAll(placeholderQuery, "(?, ", "(nextval('id_sequence'), ")
+	
+	// Remove the placeholder ID values from valueArgs
+	filteredArgs := make([]interface{}, 0, len(events)*19)
+	for i := 0; i < len(events); i++ {
+		// Skip the first argument (ID placeholder) for each event
+		start := i * 20
+		filteredArgs = append(filteredArgs, valueArgs[start+1:start+20]...)
+	}
 
-	_, err = tx.Exec(query, valueArgs...)
+	_, err = tx.Exec(query, filteredArgs...)
 	if err != nil {
 		return fmt.Errorf("failed to insert batch: %w", err)
 	}
