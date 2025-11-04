@@ -6,7 +6,6 @@ import (
 	"log"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/mohamedelhefni/siraaj/internal/domain"
@@ -46,7 +45,6 @@ type EventRepository interface {
 
 type eventRepository struct {
 	db         *sql.DB
-	idCounter  atomic.Uint64
 	buffer     []domain.Event
 	bufferMu   sync.Mutex
 	insertStmt *sql.Stmt
@@ -64,7 +62,7 @@ func NewEventRepository(db *sql.DB) EventRepository {
 			event_name, user_id, session_id, session_duration,
 			url, referrer, user_agent, ip, country,
 			browser, os, device, is_bot, project_id, channel
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		log.Printf("Warning: failed to prepare insert statement: %v", err)
@@ -80,7 +78,6 @@ func (r *eventRepository) Create(event domain.Event) error {
 		event.ProjectID = "default"
 	}
 
-	event.ID = r.idCounter.Add(1)
 	event.Timestamp = event.Timestamp.UTC()
 
 	dateHour := event.Timestamp.Truncate(time.Hour)
@@ -89,7 +86,7 @@ func (r *eventRepository) Create(event domain.Event) error {
 
 	if r.insertStmt != nil {
 		_, err := r.insertStmt.Exec(
-			event.ID, event.Timestamp, dateHour, dateDay, dateMonth,
+			event.Timestamp, dateHour, dateDay, dateMonth,
 			event.EventName, event.UserID, event.SessionID, event.SessionDuration,
 			event.URL, event.Referrer, event.UserAgent, event.IP, event.Country,
 			event.Browser, event.OS, event.Device, event.IsBot, event.ProjectID, event.Channel,
@@ -109,7 +106,6 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 		if events[i].ProjectID == "" {
 			events[i].ProjectID = "default"
 		}
-		events[i].ID = r.idCounter.Add(1)
 		events[i].Timestamp = events[i].Timestamp.UTC()
 	}
 
@@ -120,16 +116,16 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 	defer tx.Rollback()
 
 	valueStrings := make([]string, 0, len(events))
-	valueArgs := make([]interface{}, 0, len(events)*20)
+	valueArgs := make([]interface{}, 0, len(events)*19)
 
 	for _, event := range events {
 		dateHour := event.Timestamp.Truncate(time.Hour)
 		dateDay := time.Date(event.Timestamp.Year(), event.Timestamp.Month(), event.Timestamp.Day(), 0, 0, 0, 0, time.UTC)
 		dateMonth := time.Date(event.Timestamp.Year(), event.Timestamp.Month(), 1, 0, 0, 0, 0, time.UTC)
 
-		valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		valueStrings = append(valueStrings, "(nextval('id_sequence'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 		valueArgs = append(valueArgs,
-			event.ID, event.Timestamp, dateHour, dateDay, dateMonth,
+			event.Timestamp, dateHour, dateDay, dateMonth,
 			event.EventName, event.UserID, event.SessionID, event.SessionDuration,
 			event.URL, event.Referrer, event.UserAgent, event.IP, event.Country,
 			event.Browser, event.OS, event.Device, event.IsBot, event.ProjectID, event.Channel,
@@ -936,7 +932,7 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views
 		FROM events 
 		WHERE %s
-	`,  prevWhereClause)
+	`, prevWhereClause)
 
 	var prevTotalEvents, prevUniqueUsers, prevTotalVisits, prevPageViews int
 	err = r.db.QueryRow(prevQuery, prevArgs...).Scan(&prevTotalEvents, &prevUniqueUsers, &prevTotalVisits, &prevPageViews)
@@ -1197,7 +1193,7 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 						}
 					}
 
-					fmt.Fprintf(&cteBuilder, "%s AS (SELECT user_id, session_id, timestamp FROM events WHERE %s)", cteName,  cteWhereClause)
+					fmt.Fprintf(&cteBuilder, "%s AS (SELECT user_id, session_id, timestamp FROM events WHERE %s)", cteName, cteWhereClause)
 					allCteArgs = append(allCteArgs, cteArgs...)
 				} else {
 					// Subsequent steps: join with previous step
@@ -1261,7 +1257,7 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 					}
 
 					prevCteName := fmt.Sprintf("step_%d", j)
-					fmt.Fprintf(&cteBuilder, "%s AS (SELECT e.user_id, e.session_id, e.timestamp FROM events e INNER JOIN %s prev ON e.user_id = prev.user_id AND e.timestamp > prev.timestamp WHERE %s)", cteName,  prevCteName, cteWhereClause)
+					fmt.Fprintf(&cteBuilder, "%s AS (SELECT e.user_id, e.session_id, e.timestamp FROM events e INNER JOIN %s prev ON e.user_id = prev.user_id AND e.timestamp > prev.timestamp WHERE %s)", cteName, prevCteName, cteWhereClause)
 					allCteArgs = append(allCteArgs, cteArgs...)
 				}
 			}
@@ -1348,7 +1344,7 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 					AVG(time_diff_seconds) as avg_time,
 					APPROX_QUANTILE(time_diff_seconds, 0.5) as median_time
 				FROM time_diffs
-			`,  stepWhereClause,  nextStepWhereClause)
+			`, stepWhereClause, nextStepWhereClause)
 
 			// Combine args for the time query
 			timeQueryArgs := append(stepArgs, nextStepArgs...)
@@ -1426,7 +1422,7 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 				)
 				SELECT AVG(completion_seconds) as avg_completion
 				FROM completion_times
-			`,  firstWhereClause,  lastWhereClause)
+			`, firstWhereClause, lastWhereClause)
 
 			completionArgs := append(firstArgs, lastArgs...)
 
@@ -1587,7 +1583,7 @@ func (r *eventRepository) GetTopStats(startDate, endDate time.Time, filters map[
 			COUNT(CASE WHEN event_name = 'page_view' THEN 1 END) as page_views
 		FROM events 
 		WHERE %s
-	`,  prevWhereClause)
+	`, prevWhereClause)
 
 	var prevTotalEvents, prevUniqueUsers, prevTotalVisits, prevPageViews int
 	err = r.db.QueryRow(prevQuery, prevArgs...).Scan(&prevTotalEvents, &prevUniqueUsers, &prevTotalVisits, &prevPageViews)
