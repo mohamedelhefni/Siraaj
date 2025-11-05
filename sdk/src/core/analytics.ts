@@ -695,11 +695,12 @@ class AnalyticsCore {
 
         const ua = navigator.userAgent;
 
+        // Check Android before Linux (Android UA contains both)
+        if (ua.includes('Android')) return 'Android';
+        if (ua.includes('iOS') || ua.includes('iPhone') || ua.includes('iPad')) return 'iOS';
         if (ua.includes('Win')) return 'Windows';
         if (ua.includes('Mac')) return 'MacOS';
         if (ua.includes('Linux')) return 'Linux';
-        if (ua.includes('Android')) return 'Android';
-        if (ua.includes('iOS') || ua.includes('iPhone') || ua.includes('iPad')) return 'iOS';
 
         return 'Unknown';
     }

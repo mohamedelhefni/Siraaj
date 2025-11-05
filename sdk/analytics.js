@@ -345,11 +345,12 @@
      */
     _getOS() {
       const ua = navigator.userAgent;
+      // Check Android before Linux (Android UA contains both)
+      if (ua.indexOf('Android') > -1) return 'Android';
+      if (ua.indexOf('iOS') > -1 || ua.indexOf('iPhone') > -1 || ua.indexOf('iPad') > -1) return 'iOS';
       if (ua.indexOf('Win') > -1) return 'Windows';
       if (ua.indexOf('Mac') > -1) return 'MacOS';
       if (ua.indexOf('Linux') > -1) return 'Linux';
-      if (ua.indexOf('Android') > -1) return 'Android';
-      if (ua.indexOf('iOS') > -1 || ua.indexOf('iPhone') > -1 || ua.indexOf('iPad') > -1) return 'iOS';
       return 'Unknown';
     }
 
