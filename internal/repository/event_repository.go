@@ -142,11 +142,11 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 			browser, os, device, is_bot, project_id, channel
 		) VALUES %s
 	`, strings.Join(valueStrings, ","))
-	
+
 	// Replace the first ? in each row with nextval('id_sequence')
 	// This is safe because we know the first ? in each (?, ?, ...) is for ID
 	query := strings.ReplaceAll(placeholderQuery, "(?, ", "(nextval('id_sequence'), ")
-	
+
 	// Remove the placeholder ID values from valueArgs
 	filteredArgs := make([]interface{}, 0, len(events)*19)
 	for i := 0; i < len(events); i++ {
@@ -1493,6 +1493,27 @@ func buildWhereClause(startDate, endDate time.Time, filters map[string]string) (
 			whereClause += " AND is_bot = TRUE"
 		} else if botFilter == "human" {
 			whereClause += " AND is_bot = FALSE"
+		}
+	}
+	// Add metric filter - filter events based on the selected metric
+	if metric, ok := filters["metric"]; ok && metric != "" {
+		switch metric {
+		case "page_views":
+			whereClause += " AND event_name = 'page_view'"
+		case "users":
+			// No additional filter needed for users metric
+		case "visits":
+			// No additional filter needed for visits metric
+		case "events":
+			// No additional filter needed for all events
+		case "bounce_rate":
+			// Bounce rate is calculated from page_view events
+			whereClause += " AND event_name = 'page_view'"
+		case "visit_duration":
+			// Visit duration uses all events in a session
+		case "views_per_visit":
+			// Views per visit is calculated from page_view events
+			whereClause += " AND event_name = 'page_view'"
 		}
 	}
 

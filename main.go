@@ -250,12 +250,14 @@ func main() {
 		}
 	})
 
-	// Serve dashboard (SvelteKit app)
+	// Serve dashboard (SvelteKit app) with optional BasicAuth
 	dashboardFS, err := fs.Sub(uiFiles, "ui/dashboard")
 	if err != nil {
 		log.Printf("Warning: Could not load dashboard: %v", err)
 	} else {
-		mux.Handle("/dashboard/", http.StripPrefix("/dashboard", http.FileServer(http.FS(dashboardFS))))
+		dashboardHandler := http.StripPrefix("/dashboard", http.FileServer(http.FS(dashboardFS)))
+		// Apply BasicAuth middleware to dashboard routes
+		mux.Handle("/dashboard/", middleware.BasicAuth(dashboardHandler))
 	}
 
 	// Serve UI (must be last as it's a catch-all)
@@ -277,6 +279,11 @@ func main() {
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("✓ Server ready - Using official DuckDB Go driver")
 	fmt.Println("✓ Svelte Dashboard embedded and ready")
+	if os.Getenv("DASHBOARD_USERNAME") != "" && os.Getenv("DASHBOARD_PASSWORD") != "" {
+		fmt.Println("🔒 Dashboard protected with Basic Authentication")
+	} else {
+		fmt.Println("⚠️  Dashboard is publicly accessible (set DASHBOARD_USERNAME and DASHBOARD_PASSWORD to enable auth)")
+	}
 	if geoService != nil {
 		fmt.Println("✓ Geolocation service enabled")
 	} else {
