@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/mohamedelhefni/siraaj/internal/domain"
@@ -46,7 +45,6 @@ type EventRepository interface {
 type eventRepository struct {
 	db         *sql.DB
 	buffer     []domain.Event
-	bufferMu   sync.Mutex
 	insertStmt *sql.Stmt
 }
 
@@ -113,7 +111,11 @@ func (r *eventRepository) CreateBatch(events []domain.Event) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			log.Printf("Warning: failed to rollback transaction: %v", err)
+		}
+	}()
 
 	valueStrings := make([]string, 0, len(events))
 	valueArgs := make([]interface{}, 0, len(events)*19)
@@ -269,9 +271,10 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 		args = append(args, page)
 	}
 	if botFilter, ok := filters["botFilter"]; ok && botFilter != "" {
-		if botFilter == "bot" {
+		switch botFilter {
+		case "bot":
 			whereClause += " AND is_bot = TRUE"
-		} else if botFilter == "human" {
+		case "human":
 			whereClause += " AND is_bot = FALSE"
 		}
 	}
@@ -977,13 +980,13 @@ func (r *eventRepository) GetStats(startDate, endDate time.Time, limit int, filt
 func (r *eventRepository) GetOnlineUsers(timeWindow int) (map[string]interface{}, error) {
 	cutoffTime := time.Now().Add(-time.Duration(timeWindow) * time.Minute)
 
-	query := fmt.Sprintf(`
+	query := `
 		SELECT 
 			APPROX_COUNT_DISTINCT( user_id) as online_users,
 			APPROX_COUNT_DISTINCT( session_id) as active_sessions
 		FROM events 
 		WHERE timestamp >= ?
-	`)
+	`
 
 	var onlineUsers, activeSessions int
 	err := r.db.QueryRow(query, cutoffTime).Scan(&onlineUsers, &activeSessions)
@@ -1000,7 +1003,7 @@ func (r *eventRepository) GetOnlineUsers(timeWindow int) (map[string]interface{}
 }
 
 func (r *eventRepository) GetProjects() ([]string, error) {
-	query := fmt.Sprintf(`SELECT DISTINCT project_id FROM events WHERE project_id IS NOT NULL AND project_id != '' ORDER BY project_id`)
+	query := `SELECT DISTINCT project_id FROM events WHERE project_id IS NOT NULL AND project_id != '' ORDER BY project_id`
 
 	rows, err := r.db.Query(query)
 	if err != nil {
@@ -1074,9 +1077,10 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 		baseArgs = append(baseArgs, os)
 	}
 	if botFilter, ok := request.Filters["botFilter"]; ok && botFilter != "" {
-		if botFilter == "bot" {
+		switch botFilter {
+		case "bot":
 			baseWhereClause += " AND is_bot = TRUE"
-		} else if botFilter == "human" {
+		case "human":
 			baseWhereClause += " AND is_bot = FALSE"
 		}
 	}
@@ -1237,9 +1241,10 @@ func (r *eventRepository) GetFunnelAnalysis(request domain.FunnelRequest) (*doma
 						cteArgs = append(cteArgs, os)
 					}
 					if botFilter, ok := request.Filters["botFilter"]; ok && botFilter != "" {
-						if botFilter == "bot" {
+						switch botFilter {
+						case "bot":
 							cteWhereClause += " AND e.is_bot = TRUE"
-						} else if botFilter == "human" {
+						case "human":
 							cteWhereClause += " AND e.is_bot = FALSE"
 						}
 					}
@@ -1489,9 +1494,10 @@ func buildWhereClause(startDate, endDate time.Time, filters map[string]string) (
 		args = append(args, page)
 	}
 	if botFilter, ok := filters["botFilter"]; ok && botFilter != "" {
-		if botFilter == "bot" {
+		switch botFilter {
+		case "bot":
 			whereClause += " AND is_bot = TRUE"
-		} else if botFilter == "human" {
+		case "human":
 			whereClause += " AND is_bot = FALSE"
 		}
 	}
@@ -1920,7 +1926,11 @@ SELECT * FROM (
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Warning: failed to close rows: %v", err)
+		}
+	}()
 
 	entryPages := []map[string]interface{}{}
 	exitPages := []map[string]interface{}{}

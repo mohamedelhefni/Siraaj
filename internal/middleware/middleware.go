@@ -97,5 +97,7 @@ func BasicAuth(next http.Handler) http.Handler {
 func requireAuth(w http.ResponseWriter) {
 	w.Header().Set("WWW-Authenticate", `Basic realm="Siraaj Dashboard"`)
 	w.WriteHeader(http.StatusUnauthorized)
-	w.Write([]byte("401 Unauthorized - Authentication required\n"))
+	if _, err := w.Write([]byte("401 Unauthorized - Authentication required\n")); err != nil {
+		log.Printf("Error writing auth response: %v", err)
+	}
 }

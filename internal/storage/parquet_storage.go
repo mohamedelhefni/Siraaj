@@ -199,16 +199,22 @@ func (ps *ParquetStorage) Flush() error {
 		return fmt.Errorf("failed to create temp CSV: %w", err)
 	}
 	defer func() {
-		csvFile.Close()
-		os.Remove(ps.tempCSVPath) // Clean up temp file
+		if err := csvFile.Close(); err != nil {
+			log.Printf("Warning: failed to close CSV file: %v", err)
+		}
+		if err := os.Remove(ps.tempCSVPath); err != nil {
+			log.Printf("Warning: failed to remove temp CSV file: %v", err)
+		}
 	}()
 
 	// Write CSV data
-	fmt.Fprintf(csvFile, "id,timestamp,event_name,user_id,session_id,session_duration,url,referrer,user_agent,ip,country,browser,os,device,is_bot,project_id,channel\n")
+	if _, err := fmt.Fprintf(csvFile, "id,timestamp,event_name,user_id,session_id,session_duration,url,referrer,user_agent,ip,country,browser,os,device,is_bot,project_id,channel\n"); err != nil {
+		return fmt.Errorf("failed to write CSV header: %w", err)
+	}
 	for _, event := range eventsToWrite {
 		// Format timestamp as ISO8601 string for DuckDB
 		timestampStr := event.Timestamp.UTC().Format("2006-01-02 15:04:05.000000")
-		fmt.Fprintf(csvFile, "%d,%s,%s,%s,%s,%d,%s,%s,%s,%s,%s,%s,%s,%s,%t,%s,%s\n",
+		if _, err := fmt.Fprintf(csvFile, "%d,%s,%s,%s,%s,%d,%s,%s,%s,%s,%s,%s,%s,%s,%t,%s,%s\n",
 			event.ID,
 			timestampStr,
 			escapeCsv(event.EventName),
@@ -226,9 +232,14 @@ func (ps *ParquetStorage) Flush() error {
 			event.IsBot,
 			escapeCsv(event.ProjectID),
 			escapeCsv(event.Channel),
-		)
+		); err != nil {
+			return fmt.Errorf("failed to write CSV row: %w", err)
+		}
 	}
-	csvFile.Close()
+
+	if err := csvFile.Close(); err != nil {
+		return fmt.Errorf("failed to close CSV file: %w", err)
+	}
 
 	// Generate unique filename using timestamp and counter
 	// This allows for append-only writes without merging
@@ -416,7 +427,9 @@ func (ps *ParquetStorage) checkAndMergeFiles() error {
 	_, err = ps.db.Exec(mergeQuery)
 	if err != nil {
 		// Clean up temp file on error
-		os.Remove(tempMergedFile)
+		if removeErr := os.Remove(tempMergedFile); removeErr != nil {
+			log.Printf("Warning: failed to remove temp merged file: %v", removeErr)
+		}
 		return fmt.Errorf("failed to merge Parquet files: %w", err)
 	}
 
