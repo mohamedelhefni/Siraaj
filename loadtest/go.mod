@@ -2,13 +2,9 @@ module github.com/mohamedelhefni/siraaj/loadtest
 
 go 1.24.9
 
-require (
-	github.com/duckdb/duckdb-go/v2 v2.5.0
-	github.com/parquet-go/parquet-go v0.25.1
-)
+require github.com/duckdb/duckdb-go/v2 v2.5.0
 
 require (
-	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/apache/arrow-go/v18 v18.4.1 // indirect
 	github.com/duckdb/duckdb-go-bindings v0.1.21 // indirect
 	github.com/duckdb/duckdb-go-bindings/darwin-amd64 v0.1.21 // indirect

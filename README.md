@@ -217,9 +217,15 @@ PARQUET_FILE=data/events           # Parquet storage directory
 DUCKDB_MEMORY_LIMIT=4GB            # Memory limit for DuckDB
 DUCKDB_THREADS=4                   # Number of threads
 
+# Dashboard Authentication (optional)
+DASHBOARD_USERNAME=admin           # Username for dashboard access
+DASHBOARD_PASSWORD=your-password   # Password for dashboard access
+
 # CORS (optional)
 CORS=https://example.com,https://app.example.com
 ```
+
+> **Note:** If `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` are set, the dashboard will require basic authentication. If not set, the dashboard will be publicly accessible.
 
 ### API Endpoints
 
