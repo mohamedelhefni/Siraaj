@@ -55,7 +55,7 @@ Siraaj is a lightweight analytics platform built with Go and DuckDB. It provides
 - **Date ranges** - Predefined and custom date selection
 
 ### 🚀 Developer Friendly
-- **Simple SDK** - < 5KB gzipped vanilla JavaScript
+- **Simple SDK** - < 16KB gzipped vanilla JavaScript
 - **Framework support** - React, Vue, Svelte, Next.js, Nuxt, Preact
 - **RESTful API** - Comprehensive HTTP API
 - **TypeScript** - Full type definitions
@@ -95,7 +95,7 @@ graph LR
 | Self-hosted | ✅ | ❌ | ✅ (limited) | ✅ |
 | Privacy-focused | ✅ | ❌ | ✅ | ✅ |
 | Real-time | ✅ | ⚠️ Delayed | ✅ | ✅ |
-| SDK size | < 5KB | ~45KB | ~1KB | ~22KB |
+| SDK size | < 16KB | ~45KB | ~1KB | ~22KB |
 | Query speed | < 50ms | N/A | ~100ms | ~200ms |
 | Channel attribution | ✅ | ✅ | ❌ | ✅ |
 | Funnel analysis | ✅ | ✅ | ❌ | ✅ |

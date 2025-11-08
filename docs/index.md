@@ -103,7 +103,7 @@ analytics.identify('user-123', {
 Siraaj is built for developers who need a **fast**, **privacy-focused**, and **self-hosted** analytics solution. Unlike traditional analytics platforms:
 
 - ✅ **No external dependencies** - All data stays on your server
-- ✅ **Lightweight** - SDK is < 5KB gzipped
+- ✅ **Lightweight** - SDK is < 16KB gzipped
 - ✅ **Fast queries** - DuckDB columnar storage for instant insights
 - ✅ **Open source** - MIT licensed, contribute and customize
 - ✅ **Developer friendly** - Clean APIs, TypeScript support, comprehensive docs
@@ -112,7 +112,7 @@ Siraaj is built for developers who need a **fast**, **privacy-focused**, and **s
 
 <div class="stats-grid">
   <div class="stat-item">
-    <div class="stat-value">< 5KB</div>
+    <div class="stat-value">< 16KB</div>
     <div class="stat-label">SDK Size</div>
   </div>
   <div class="stat-item">

@@ -54,7 +54,7 @@ analytics.init({
 ## Why This SDK?
 
 ### 🪶 Lightweight
-- **< 5KB gzipped** - Tiny bundle size
+- **< 16KB gzipped** - Tiny bundle size
 - **Zero dependencies** - Pure vanilla JavaScript
 - **No impact on performance** - Async loading and batching
 
