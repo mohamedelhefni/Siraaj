@@ -61,12 +61,7 @@ export default {
           text: 'Frameworks',
           items: [
             { text: 'Vanilla JavaScript', link: '/sdk/vanilla' },
-            { text: 'React', link: '/sdk/react' },
-            { text: 'Vue', link: '/sdk/vue' },
-            { text: 'Svelte', link: '/sdk/svelte' },
-            { text: 'Next.js', link: '/sdk/nextjs' },
-            { text: 'Nuxt', link: '/sdk/nuxt' },
-            { text: 'Preact', link: '/sdk/preact' },
+
           ]
         },
         {

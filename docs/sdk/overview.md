@@ -1,40 +1,49 @@
 # SDK Overview
 
-Siraaj provides a comprehensive JavaScript SDK with first-class support for multiple frameworks and environments.
+Siraaj provides a lightweight, easy-to-use JavaScript SDK that works everywhere. No framework required, no complex setup - just include the script and start tracking!
 
 ## Installation
 
-### CDN (Browser)
+### CDN / Self-Hosted (Easiest)
 
-The simplest way to get started:
+The simplest way to get started - add this to your HTML:
 
 ```html
-<script src="http://your-server:8080/sdk/analytics.js"></script>
+<script src="http://localhost:8080/sdk/analytics.js"></script>
 <script>
-  const analytics = new Analytics({
-    apiUrl: 'http://your-server:8080',
+  var analytics = new SiraajAnalytics.AnalyticsCore({
+    apiUrl: 'http://localhost:8080',
+    projectId: 'my-website',
+    autoTrack: true
+  });
+  
+  analytics.init({
+    apiUrl: 'http://localhost:8080',
     projectId: 'my-website'
   });
 </script>
 ```
 
-### NPM Package (Coming Soon)
+That's it! Auto-tracking is now enabled. 🎉
+
+### NPM Package
 
 ```bash
-npm install @hefni101/siraaj
+npm install @siraaj/sdk
 # or
-pnpm add @hefni101/siraaj
+pnpm add @siraaj/sdk
 # or
-yarn add @hefni101/siraaj
+yarn add @siraaj/sdk
 ```
 
-## Framework Support
-
-Siraaj SDK works everywhere JavaScript runs:
-
-### Vanilla JavaScript
 ```javascript
-import { analytics } from '@hefni101/siraaj';
+import { AnalyticsCore } from '@siraaj/sdk';
+
+const analytics = new AnalyticsCore({
+  apiUrl: 'http://localhost:8080',
+  projectId: 'my-app',
+  autoTrack: true
+});
 
 analytics.init({
   apiUrl: 'http://localhost:8080',
@@ -42,80 +51,57 @@ analytics.init({
 });
 ```
 
-[Learn more →](/sdk/vanilla)
+## Why This SDK?
 
-### React
-```jsx
-import { AnalyticsProvider, useAnalytics } from '@hefni101/siraaj/react';
+### 🪶 Lightweight
+- **< 5KB gzipped** - Tiny bundle size
+- **Zero dependencies** - Pure vanilla JavaScript
+- **No impact on performance** - Async loading and batching
 
-function App() {
-  return (
-    <AnalyticsProvider config={{ apiUrl: '...', projectId: '...' }}>
-      <YourApp />
-    </AnalyticsProvider>
-  );
-}
-```
+### ⚡ Simple
+- **3 lines of code** to get started
+- **Auto-tracking** - No need to manually track everything
+- **Works everywhere** - Any website, any framework
 
-[Learn more →](/sdk/react)
+### 🎯 Powerful
+- **Custom events** - Track anything you want
+- **User identification** - Know who your users are
+- **E-commerce ready** - Built-in support for purchases, carts, etc.
 
-### Vue 3
-```vue
-<script setup>
-import { useAnalytics } from '@hefni101/siraaj/vue';
-
-const { track } = useAnalytics();
-</script>
-```
-
-[Learn more →](/sdk/vue)
-
-### Svelte
-```svelte
-<script>
-import { createAnalytics } from '@hefni101/siraaj/svelte';
-
-const { track } = createAnalytics();
-</script>
-```
-
-[Learn more →](/sdk/svelte)
-
-### Next.js
-```tsx
-import { AnalyticsProvider } from '@hefni101/siraaj/next';
-```
-
-[Learn more →](/sdk/nextjs)
-
-### Nuxt 3
-```typescript
-import { useNuxtAnalytics } from '@hefni101/siraaj/nuxt';
-```
-
-[Learn more →](/sdk/nuxt)
+### 🔒 Privacy-First
+- **No cookies** - Uses sessionStorage and localStorage
+- **Respects DNT** - Honors Do Not Track
+- **Sampling support** - Track only what you need
 
 ## Core Features
 
 ### Auto-Tracking
 
-Enable automatic tracking of:
-- Page views
-- Link clicks
-- Form submissions
-- JavaScript errors
+Enable automatic tracking with one option:
 
 ```javascript
-const analytics = new Analytics({
+const analytics = new SiraajAnalytics.AnalyticsCore({
   apiUrl: 'http://localhost:8080',
   projectId: 'my-website',
-  autoTrack: true  // Enable auto-tracking
+  autoTrack: true  // ✨ Magic happens here
+});
+
+analytics.init({
+  apiUrl: 'http://localhost:8080',
+  projectId: 'my-website'
 });
 ```
 
+This automatically tracks:
+- ✅ Page views
+- ✅ Link clicks
+- ✅ Form submissions
+- ✅ JavaScript errors
+- ✅ Page visibility changes
+
 ### Custom Events
 
-Track any custom event:
+Track any event you want:
 
 ```javascript
 analytics.track('button_clicked', {
@@ -123,18 +109,40 @@ analytics.track('button_clicked', {
   location: 'hero',
   variant: 'primary'
 });
+
+analytics.track('video_played', {
+  video_id: 'intro-video',
+  duration: 120,
+  quality: '1080p'
+});
+
+analytics.track('search_performed', {
+  query: 'analytics',
+  results_count: 42
+});
 ```
 
 ### User Identification
 
-Identify users for cohort analysis:
+Identify users for better insights:
 
 ```javascript
+// On login
 analytics.identify('user-123', {
   email: 'user@example.com',
+  name: 'John Doe',
   plan: 'premium',
   signup_date: '2024-01-01'
 });
+
+// Update user properties
+analytics.setUserProperties({
+  plan: 'enterprise',
+  mrr: 299
+});
+
+// On logout
+analytics.reset();
 ```
 
 ### Page Views
@@ -142,51 +150,64 @@ analytics.identify('user-123', {
 Track page navigation:
 
 ```javascript
-# or
-npm install @hefni101/siraaj
+// Simple page view
+analytics.pageView();
+
+// With custom URL
 analytics.pageView('/products');
-pnpm add @hefni101/siraaj
-// Or with custom properties
-analytics.pageView('/products', {
-yarn add @hefni101/siraaj
-  category: 'electronics',
-  subcategory: 'phones'
+
+// With properties
+analytics.pageView('/products/123', {
+  product_name: 'Awesome Widget',
+  category: 'electronics'
 });
 ```
-import { analytics } from '@hefni101/siraaj';
+
 ## Configuration Options
 
-```typescript
-interface AnalyticsConfig {
+```javascript
+const analytics = new SiraajAnalytics.AnalyticsCore({
   // Required
-  apiUrl: string;              // Your Siraaj server URL
-  projectId: string;           // Project identifier
+  apiUrl: 'http://localhost:8080',    // Your Siraaj server URL
+  projectId: 'my-website',            // Project identifier
   
-  // Optional
-import { AnalyticsProvider, useAnalytics } from '@hefni101/siraaj/react';
-  debug?: boolean;             // Enable debug logs (default: false)
-  bufferSize?: number;         // Events per batch (default: 10)
-  flushInterval?: number;      // Auto-flush interval in ms (default: 30000)
-  timeout?: number;            // Request timeout in ms (default: 10000)
-  maxRetries?: number;         // Max retry attempts (default: 3)
-  useBeacon?: boolean;         // Use sendBeacon API (default: true)
-  sampling?: number;           // Sample rate 0-1 (default: 1.0)
-  respectDoNotTrack?: boolean; // Honor DNT header (default: true)
-  enablePerformanceTracking?: boolean; // Track Web Vitals (default: false)
-}
+  // Optional - Auto-tracking
+  autoTrack: true,                    // Enable auto-tracking (default: true)
+  
+  // Optional - Debugging
+  debug: false,                       // Enable console logs (default: false)
+  
+  // Optional - Performance
+  bufferSize: 10,                     // Events per batch (default: 10)
+  flushInterval: 30000,               // Auto-flush ms (default: 30000)
+  timeout: 10000,                     // Request timeout ms (default: 10000)
+  maxRetries: 3,                      // Retry attempts (default: 3)
+  useBeacon: true,                    // Use sendBeacon API (default: true)
+  
+  // Optional - Privacy
+  sampling: 1.0,                      // Sample rate 0-1 (default: 1.0)
+  respectDoNotTrack: true,            // Honor DNT header (default: true)
+  
+  // Optional - Advanced
+  enablePerformanceTracking: false,   // Track Web Vitals (default: false)
+  maxQueueSize: 50                    // Max failed events queue (default: 50)
+});
 ```
 
 ## API Methods
-import { useAnalytics } from '@hefni101/siraaj/vue';
+
 ### `analytics.track(eventName, properties?)`
 
-Track a custom event.
+Track a custom event with optional properties.
 
 ```javascript
 analytics.track('purchase_completed', {
-  product_id: 'abc123',
-  price: 29.99,
-import { createAnalytics } from '@hefni101/siraaj/svelte';
+  order_id: 'order-123',
+  total: 99.99,
+  currency: 'USD',
+  items: [
+    { product_id: 'prod-456', quantity: 1 }
+  ]
 });
 ```
 
@@ -194,12 +215,12 @@ import { createAnalytics } from '@hefni101/siraaj/svelte';
 
 Track a page view.
 
-import { AnalyticsProvider } from '@hefni101/siraaj/next';
+```javascript
 analytics.pageView('/products/123', {
   product_name: 'Widget',
   category: 'electronics'
 });
-import { useNuxtAnalytics } from '@hefni101/siraaj/nuxt';
+```
 
 ### `analytics.identify(userId, traits?)`
 
@@ -241,7 +262,7 @@ Track an error.
 
 ```javascript
 try {
-  // risky operation
+  riskyOperation();
 } catch (error) {
   analytics.trackError(error, {
     component: 'checkout',
@@ -260,10 +281,9 @@ await analytics.flush();
 
 ### `analytics.reset()`
 
-Reset session and user ID.
+Reset session and user ID (call on logout).
 
 ```javascript
-// Call on logout
 analytics.reset();
 ```
 
@@ -271,34 +291,31 @@ analytics.reset();
 
 All sizes are **gzipped**:
 
-| Package | Size | Description |
-|---------|------|-------------|
-| Core | < 3 KB | Vanilla JS/TS |
-| React | < 4 KB | React hooks + core |
-| Vue | < 4 KB | Vue composables + core |
-| Svelte | < 4 KB | Svelte stores + core |
-| Next.js | < 4 KB | Next.js integration + core |
-| Nuxt | < 4 KB | Nuxt integration + core |
-| Preact | < 4 KB | Preact hooks + core |
+| File | Size | Description |
+|------|------|-------------|
+| `analytics.min.js` | **< 5 KB** | Minified UMD build for browsers |
+| `analytics.js` | ~8 KB | Full UMD build with source maps |
+| `dist/analytics.esm.js` | ~8 KB | ES Module for bundlers |
 
 ## Browser Support
 
-- Chrome/Edge ≥ 90
-- Firefox ≥ 88
-- Safari ≥ 14
-- All modern browsers with ES2020 support
+- ✅ Chrome/Edge ≥ 90
+- ✅ Firefox ≥ 88
+- ✅ Safari ≥ 14
+- ✅ All modern browsers with ES2020 support
 
 ## TypeScript Support
 
 Full TypeScript definitions included:
 
 ```typescript
-import type { AnalyticsConfig, EventData } from '@hefni101/siraaj';
+import type { AnalyticsConfig, EventData } from '@siraaj/sdk';
 
 const config: AnalyticsConfig = {
   apiUrl: 'http://localhost:8080',
   projectId: 'my-app',
-  debug: true
+  debug: true,
+  autoTrack: true
 };
 ```
 
@@ -309,21 +326,21 @@ const config: AnalyticsConfig = {
 Automatically respects the DNT header:
 
 ```javascript
-const analytics = new Analytics({
-  apiUrl: '...',
-  projectId: '...',
+const analytics = new SiraajAnalytics.AnalyticsCore({
+  apiUrl: 'http://localhost:8080',
+  projectId: 'my-website',
   respectDoNotTrack: true  // default: true
 });
 ```
 
 ### Sampling
 
-Reduce tracking volume with sampling:
+Track only a percentage of users:
 
 ```javascript
-const analytics = new Analytics({
-  apiUrl: '...',
-  projectId: '...',
+const analytics = new SiraajAnalytics.AnalyticsCore({
+  apiUrl: 'http://localhost:8080',
+  projectId: 'my-website',
   sampling: 0.5  // Track 50% of users
 });
 ```
@@ -331,20 +348,20 @@ const analytics = new Analytics({
 ### No Cookies
 
 Siraaj uses `sessionStorage` and `localStorage` instead of cookies:
-- No cookie banners needed
-- No third-party tracking
-- Session-based analytics
+- ✅ No cookie banners needed
+- ✅ No third-party tracking
+- ✅ Session-based analytics
 
 ## Performance
 
 ### Batching
 
-Events are automatically batched:
+Events are automatically batched to reduce requests:
 
 ```javascript
-const analytics = new Analytics({
-  bufferSize: 20,      // Send after 20 events
-  flushInterval: 30000 // Or every 30 seconds
+const analytics = new SiraajAnalytics.AnalyticsCore({
+  bufferSize: 20,       // Send after 20 events
+  flushInterval: 30000  // Or every 30 seconds
 });
 ```
 
@@ -353,9 +370,9 @@ const analytics = new Analytics({
 Failed requests are automatically retried with exponential backoff:
 
 ```javascript
-const analytics = new Analytics({
-  maxRetries: 3,       // Retry up to 3 times
-  timeout: 10000       // 10 second timeout
+const analytics = new SiraajAnalytics.AnalyticsCore({
+  maxRetries: 3,        // Retry up to 3 times
+  timeout: 10000        // 10 second timeout
 });
 ```
 
@@ -364,76 +381,21 @@ const analytics = new Analytics({
 Uses `navigator.sendBeacon` for reliability during page unload:
 
 ```javascript
-const analytics = new Analytics({
+const analytics = new SiraajAnalytics.AnalyticsCore({
   useBeacon: true  // default: true
 });
 ```
 
 ## Next Steps
 
-Choose your framework:
+- 📖 [Detailed Vanilla JS Guide →](/sdk/vanilla)
+- 🎯 [Track Custom Events →](/sdk/custom-events)
+- 👤 [User Identification →](/sdk/user-identification)
+- ⚙️ [Configuration Options →](/sdk/configuration)
+- 🚀 [Auto-Tracking →](/sdk/auto-tracking)
 
-<div class="grid-container">
-  <a href="/sdk/vanilla" class="grid-item">
-    <h3>📦 Vanilla JS</h3>
-    <p>Pure JavaScript integration</p>
-  </a>
-  
-  <a href="/sdk/react" class="grid-item">
-    <h3>⚛️ React</h3>
-    <p>Hooks and providers</p>
-  </a>
-  
-  <a href="/sdk/vue" class="grid-item">
-    <h3>💚 Vue</h3>
-    <p>Composables and plugins</p>
-  </a>
-  
-  <a href="/sdk/svelte" class="grid-item">
-    <h3>🧡 Svelte</h3>
-    <p>Stores and actions</p>
-  </a>
-  
-  <a href="/sdk/nextjs" class="grid-item">
-    <h3>▲ Next.js</h3>
-    <p>App & Pages Router</p>
-  </a>
-  
-  <a href="/sdk/nuxt" class="grid-item">
-    <h3>💚 Nuxt</h3>
-    <p>Plugins and composables</p>
-  </a>
-</div>
+## Need Help?
 
-<style>
-.grid-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin: 2rem 0;
-}
-
-.grid-item {
-  padding: 1.5rem;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 8px;
-  text-decoration: none;
-  transition: all 0.2s;
-}
-
-.grid-item:hover {
-  border-color: var(--vp-c-brand);
-  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.1);
-}
-
-.grid-item h3 {
-  margin: 0 0 0.5rem 0;
-  font-size: 1.1rem;
-}
-
-.grid-item p {
-  margin: 0;
-  color: var(--vp-c-text-2);
-  font-size: 0.9rem;
-}
-</style>
+- 💬 [GitHub Issues](https://github.com/mohamedelhefni/siraaj/issues)
+- 📧 Email: mohamed.elhefni@outlook.com
+- 📚 [Full Documentation](/guide/introduction)

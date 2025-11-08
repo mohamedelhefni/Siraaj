@@ -1,10 +1,38 @@
 # Vanilla JavaScript
 
-Use Siraaj Analytics with pure JavaScript - no framework required.
+Use Siraaj Analytics with pure JavaScript - no framework, no build tools, no complexity!
 
-## CDN Installation
+## Quick Start (3 Steps)
 
-The easiest way to get started:
+### 1. Include the Script
+
+```html
+<script src="http://siraaj.live/sdk/analytics.js"></script>
+```
+
+### 2. Initialize
+
+```html
+<script>
+  var analytics = new SiraajAnalytics.AnalyticsCore({
+    apiUrl: 'http://localhost:8080',
+    projectId: 'my-website',
+    autoTrack: true,
+    debug: false
+  });
+  
+  analytics.init({
+    apiUrl: 'http://localhost:8080',
+    projectId: 'my-website'
+  });
+</script>
+```
+
+### 3. Done! 🎉
+
+Your site is now tracking page views, clicks, forms, and errors automatically!
+
+## Complete Example
 
 ```html
 <!DOCTYPE html>
@@ -17,11 +45,16 @@ The easiest way to get started:
   
   <!-- Initialize -->
   <script>
-    const analytics = new Analytics({
+    var analytics = new SiraajAnalytics.AnalyticsCore({
       apiUrl: 'http://localhost:8080',
       projectId: 'my-website',
       autoTrack: true,
       debug: false
+    });
+    
+    analytics.init({
+      apiUrl: 'http://localhost:8080',
+      projectId: 'my-website'
     });
   </script>
 </head>
@@ -42,37 +75,82 @@ The easiest way to get started:
 </html>
 ```
 
-## NPM/Module Installation
+## Installation Options
+
+### Option 1: From Your Siraaj Server (Recommended)
+
+Your Siraaj server automatically serves the SDK:
+
+```html
+<script src="http://localhost:8080/sdk/analytics.js"></script>
+```
+
+### Option 2: Download and Self-Host
+
+1. Build the SDK: `cd sdk && pnpm install && pnpm build`
+2. Copy `analytics.js` or `analytics.min.js` to your project
+3. Include it in your HTML:
+
+```html
+<script src="/path/to/analytics.js"></script>
+```
+
+### Option 3: NPM/Module (For Bundlers)
 
 ```bash
 npm install @hefni101/siraaj
 ```
 
-### ES Modules
-
 ```javascript
-import { analytics } from '@hefni101/siraaj';
+import { AnalyticsCore } from '@hefni101/siraaj';
 
-analytics.init({
+const analytics = new AnalyticsCore({
   apiUrl: 'http://localhost:8080',
   projectId: 'my-app',
   autoTrack: true
 });
 
-// Track events
-analytics.track('page_viewed', {
-  path: window.location.pathname
-});
-```
-
-### CommonJS
-
-```javascript
-const { analytics } = require('@hefni101/siraaj');
-
 analytics.init({
   apiUrl: 'http://localhost:8080',
   projectId: 'my-app'
+});
+```
+
+## Configuration
+
+All configuration options:
+
+```javascript
+var analytics = new SiraajAnalytics.AnalyticsCore({
+  // Required
+  apiUrl: 'http://localhost:8080',    // Your Siraaj server URL
+  projectId: 'my-website',            // Your project ID
+  
+  // Optional - Auto-tracking
+  autoTrack: true,                    // Auto-track page views, clicks, forms (default: true)
+  
+  // Optional - Debugging  
+  debug: false,                       // Enable console logging (default: false)
+  
+  // Optional - Performance
+  bufferSize: 10,                     // Events to buffer before sending (default: 10)
+  flushInterval: 30000,               // Auto-flush interval in ms (default: 30000 = 30 seconds)
+  timeout: 10000,                     // Request timeout in ms (default: 10000 = 10 seconds)
+  maxRetries: 3,                      // Max retry attempts for failed requests (default: 3)
+  useBeacon: true,                    // Use sendBeacon for reliability (default: true)
+  
+  // Optional - Privacy
+  sampling: 1.0,                      // Sample rate 0.0 to 1.0 (default: 1.0 = 100%)
+  respectDoNotTrack: true,            // Honor DNT header (default: true)
+  
+  // Optional - Advanced
+  enablePerformanceTracking: false,   // Track Web Vitals (LCP, FID, CLS) (default: false)
+  maxQueueSize: 50                    // Max failed events to queue (default: 50)
+});
+
+analytics.init({
+  apiUrl: 'http://localhost:8080',
+  projectId: 'my-website'
 });
 ```
 

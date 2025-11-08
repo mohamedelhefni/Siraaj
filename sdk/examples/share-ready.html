@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Siraaj Analytics - Share This!</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+        }
+
+        .code-block code {
+            color: #38bdf8;
+        }
+
+        .feature {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+            padding: 10px;
+            background: #f8fafc;
+            border-radius: 8px;
+        }
+
+        .feature .icon {
+            font-size: 24px;
+            margin-right: 15px;
+        }
+
+        .cta-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s;
+        }
+
+        .cta-button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat {
+            text-align: center;
+            padding: 15px;
+            background: #f1f5f9;
+            border-radius: 10px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .alert {
+            background: #10b981;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            display: none;
+        }
+    </style>
+
+    <!-- ⭐ THIS IS ALL YOU NEED TO ADD ANALYTICS! ⭐ -->
+    <script src="../analytics.js"></script>
+    <script>
+        // Initialize Siraaj Analytics
+        var analytics = new SiraajAnalytics.AnalyticsCore({
+            apiUrl: 'http://localhost:8080',  // Your Siraaj server
+            projectId: 'my-awesome-site',      // Your project ID
+            autoTrack: true,                   // Auto-track clicks, forms, errors
+            debug: true                        // See what's happening (disable in production)
+        });
+
+        analytics.init({
+            apiUrl: 'http://localhost:8080',
+            projectId: 'my-awesome-site'
+        });
+    </script>
+    <!-- That's it! Analytics is now tracking your site 🎉 -->
+</head>
+
+<body>
+    <div class="container">
+        <h1>🎯 Siraaj Analytics</h1>
+        <p class="subtitle">The simplest analytics SDK you'll ever use</p>
+
+        <div class="features">
+            <div class="feature">
+                <span class="icon">📦</span>
+                <div>
+                    <strong>Just 3 Lines of Code</strong><br>
+                    <small>Add the script, initialize, and you're done!</small>
+                </div>
+            </div>
+            <div class="feature">
+                <span class="icon">⚡</span>
+                <div>
+                    <strong>Lightweight & Fast</strong><br>
+                    <small>&lt; 5KB gzipped, no impact on performance</small>
+                </div>
+            </div>
+            <div class="feature">
+                <span class="icon">🚀</span>
+                <div>
+                    <strong>Auto-Tracking</strong><br>
+                    <small>Clicks, forms, errors - all tracked automatically</small>
+                </div>
+            </div>
+        </div>
+
+        <h3 style="margin: 30px 0 15px 0;">Add to Your Site:</h3>
+        <div class="code-block">
+            &lt;script src="<code>analytics.js</code>"&gt;&lt;/script&gt;
+            &lt;script&gt;
+            var analytics = new <code>SiraajAnalytics.AnalyticsCore</code>({
+            apiUrl: '<code>YOUR_SERVER_URL</code>',
+            projectId: '<code>your-project</code>',
+            autoTrack: true
+            });
+            analytics.init({
+            apiUrl: '<code>YOUR_SERVER_URL</code>',
+            projectId: '<code>your-project</code>'
+            });
+            &lt;/script&gt;
+        </div>
+
+        <h3 style="margin: 30px 0 15px 0;">Track Custom Events:</h3>
+        <div class="code-block">
+            analytics.<code>track</code>('button_clicked', {
+            button_id: 'signup',
+            location: 'hero'
+            });
+
+            analytics.<code>identify</code>('user-123', {
+            email: 'user@example.com',
+            plan: 'premium'
+            });
+        </div>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value">5KB</div>
+                <div class="stat-label">Total Size</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">0ms</div>
+                <div class="stat-label">Page Delay</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">∞</div>
+                <div class="stat-label">Possibilities</div>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px;">
+            <button class="cta-button" onclick="trackDemo()">
+                Try Demo Event
+            </button>
+            <button class="cta-button" onclick="trackPurchase()">
+                Track Purchase
+            </button>
+        </div>
+
+        <div id="alert" class="alert"></div>
+
+        <div style="margin-top: 30px; padding: 20px; background: #fef3c7; border-radius: 10px;">
+            <strong>💡 Pro Tip:</strong> Share the <code>analytics.js</code> file with your team,
+            host it on your CDN, or serve it from your Siraaj server at
+            <code>/sdk/analytics.js</code>
+        </div>
+    </div>
+
+    <script>
+        function showAlert(message) {
+            var alert = document.getElementById('alert');
+            alert.textContent = '✅ ' + message;
+            alert.style.display = 'block';
+            setTimeout(function () {
+                alert.style.display = 'none';
+            }, 3000);
+        }
+
+        function trackDemo() {
+            analytics.track('demo_button_clicked', {
+                timestamp: new Date().toISOString(),
+                page: window.location.pathname,
+                demo_type: 'interactive'
+            });
+            showAlert('Demo event tracked! Check your Siraaj dashboard.');
+        }
+
+        function trackPurchase() {
+            analytics.track('purchase_completed', {
+                product_id: 'demo-product',
+                price: 99.99,
+                currency: 'USD',
+                quantity: 1
+            });
+            showAlert('Purchase event tracked! 🎉');
+        }
+
+        // Example: Track how long users stay on page
+        var startTime = Date.now();
+        window.addEventListener('beforeunload', function () {
+            var timeOnPage = Math.floor((Date.now() - startTime) / 1000);
+            analytics.track('page_session_end', {
+                duration_seconds: timeOnPage,
+                page: window.location.pathname
+            });
+        });
+
+        // Example: Track scroll depth
+        var maxScroll = 0;
+        window.addEventListener('scroll', function () {
+            var scrollPercent = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
+            if (scrollPercent > maxScroll) {
+                maxScroll = Math.floor(scrollPercent);
+                if (maxScroll === 25 || maxScroll === 50 || maxScroll === 75 || maxScroll === 100) {
+                    analytics.track('scroll_depth', {
+                        depth: maxScroll + '%',
+                        page: window.location.pathname
+                    });
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

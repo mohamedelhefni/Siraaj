@@ -7,7 +7,7 @@ The Siraaj Analytics core SDK is a lightweight, framework-agnostic JavaScript li
 ### CDN
 
 ```html
-<script src="http://localhost:8080/sdk/analytics.js"></script>
+<script src="http://siraaj.live/sdk/analytics.esm.min.js"></script>
 ```
 
 ### NPM
@@ -62,4 +62,3 @@ analytics.identify('user-id', { email: 'user@example.com' });
 ## Next Steps
 
 - [Configuration →](/sdk/configuration)
-- [Framework Integration →](/sdk/overview)

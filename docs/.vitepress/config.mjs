@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'Siraaj Analytics',
   description: 'Fast, Simple, Self-Hosted Analytics',
-  
+
   head: [
     ['link', { rel: 'icon', href: '/favicon.ico' }],
     ['meta', { name: 'theme-color', content: '#3b82f6' }],
@@ -14,7 +14,7 @@ export default defineConfig({
 
   themeConfig: {
     logo: '/logo.svg',
-    
+
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Guide', link: '/guide/introduction' },
@@ -48,39 +48,40 @@ export default defineConfig({
           ]
         }
       ],
-      
+
       '/sdk/': [
         {
-          text: 'Overview',
+          text: 'Getting Started',
           items: [
-            { text: 'Introduction', link: '/sdk/overview' },
-            { text: 'Core SDK', link: '/sdk/core' },
+            { text: 'Overview', link: '/sdk/overview' },
+            { text: 'Vanilla JavaScript', link: '/sdk/vanilla' },
             { text: 'Configuration', link: '/sdk/configuration' },
           ]
         },
         {
-          text: 'Frameworks',
+          text: 'Usage',
           items: [
-            { text: 'Vanilla JavaScript', link: '/sdk/vanilla' },
-            { text: 'React', link: '/sdk/react' },
-            { text: 'Vue', link: '/sdk/vue' },
-            { text: 'Svelte', link: '/sdk/svelte' },
-            { text: 'Next.js', link: '/sdk/nextjs' },
-            { text: 'Nuxt', link: '/sdk/nuxt' },
-            { text: 'Preact', link: '/sdk/preact' },
+            { text: 'Custom Events', link: '/sdk/custom-events' },
+            { text: 'User Identification', link: '/sdk/user-identification' },
+            { text: 'Auto-Tracking', link: '/sdk/auto-tracking' },
           ]
         },
         {
           text: 'Advanced',
           items: [
-            { text: 'Custom Events', link: '/sdk/custom-events' },
-            { text: 'User Identification', link: '/sdk/user-identification' },
-            { text: 'Auto-Tracking', link: '/sdk/auto-tracking' },
+            { text: 'Core API', link: '/sdk/core' },
             { text: 'Performance', link: '/sdk/performance' },
+          ]
+        },
+        {
+          text: 'Framework Integration',
+          collapsed: true,
+          items: [
+
           ]
         }
       ],
-      
+
       '/api/': [
         {
           text: 'API Reference',

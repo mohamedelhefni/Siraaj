@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Siraaj Analytics - Simple Example</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        .code {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+
+        .success {
+            background: #10b981;
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+    </style>
+
+    <!-- Include Siraaj Analytics SDK -->
+    <script src="../analytics.js"></script>
+
+    <!-- Initialize Analytics -->
+    <script>
+        // Create analytics instance
+        var analytics = new SiraajAnalytics.AnalyticsCore({
+            apiUrl: 'http://localhost:8080',
+            projectId: 'demo-website',
+            autoTrack: true,
+            debug: true
+        });
+
+        // Initialize
+        analytics.init({
+            apiUrl: 'http://localhost:8080',
+            projectId: 'demo-website'
+        });
+
+        console.log('✅ Siraaj Analytics initialized!');
+    </script>
+</head>
+
+<body>
+    <h1>🎯 Siraaj Analytics - Simple Example</h1>
+
+    <p>
+        This is a simple example showing how to use Siraaj Analytics SDK.
+        Open the browser console to see events being tracked!
+    </p>
+
+    <div class="code">
+        <strong>How to use:</strong><br>
+        1. Include the script: <code>&lt;script src="analytics.js"&gt;&lt;/script&gt;</code><br>
+        2. Initialize: <code>var analytics = new SiraajAnalytics.AnalyticsCore({...});</code><br>
+        3. Track events: <code>analytics.track('event_name', {...});</code>
+    </div>
+
+    <h2>Try It Out:</h2>
+
+    <button onclick="trackButtonClick()">
+        Track Button Click
+    </button>
+
+    <button onclick="identifyUser()">
+        Identify User
+    </button>
+
+    <button onclick="trackPageView()">
+        Track Page View
+    </button>
+
+    <button onclick="trackCustomEvent()">
+        Track Custom Event
+    </button>
+
+    <div id="message"></div>
+
+    <h2>Example Code:</h2>
+    <div class="code">
+        <pre>
+// Track a button click
+analytics.track('button_clicked', {
+    button_id: 'signup',
+    location: 'homepage'
+});
+
+// Identify a user
+analytics.identify('user-123', {
+    email: 'user@example.com',
+    plan: 'premium'
+});
+
+// Track page view
+analytics.pageView('/demo');
+
+// Track custom event
+analytics.track('video_played', {
+    video_id: 'intro-video',
+    duration: 120
+});
+        </pre>
+    </div>
+
+    <h2>Auto-Tracking Enabled:</h2>
+    <p>
+        With <code>autoTrack: true</code>, the SDK automatically tracks:
+    </p>
+    <ul>
+        <li>✅ Page views (on load)</li>
+        <li>✅ Link clicks</li>
+        <li>✅ Form submissions</li>
+        <li>✅ JavaScript errors</li>
+        <li>✅ Page visibility changes</li>
+    </ul>
+
+    <a href="#test-link">Test Link (Auto-tracked)</a>
+
+    <script>
+        function showMessage(text) {
+            var msg = document.getElementById('message');
+            msg.innerHTML = '<div class="success">✅ ' + text + ' (check console)</div>';
+            setTimeout(function () {
+                msg.innerHTML = '';
+            }, 3000);
+        }
+
+        function trackButtonClick() {
+            analytics.track('button_clicked', {
+                button_id: 'demo-button',
+                location: 'main-section',
+                timestamp: new Date().toISOString()
+            });
+            showMessage('Button click tracked!');
+        }
+
+        function identifyUser() {
+            var userId = 'demo-user-' + Math.random().toString(36).substr(2, 9);
+            analytics.identify(userId, {
+                email: 'demo@example.com',
+                name: 'Demo User',
+                signup_date: new Date().toISOString()
+            });
+            showMessage('User identified: ' + userId);
+        }
+
+        function trackPageView() {
+            analytics.pageView('/demo-page', {
+                title: 'Demo Page',
+                referrer: document.referrer
+            });
+            showMessage('Page view tracked!');
+        }
+
+        function trackCustomEvent() {
+            analytics.track('custom_event', {
+                event_type: 'demo',
+                value: Math.floor(Math.random() * 100),
+                custom_property: 'custom_value'
+            });
+            showMessage('Custom event tracked!');
+        }
+
+        // Track page load time
+        window.addEventListener('load', function () {
+            var loadTime = performance.timing.loadEventEnd - performance.timing.navigationStart;
+            analytics.track('page_load_complete', {
+                load_time_ms: loadTime,
+                page: window.location.pathname
+            });
+        });
+    </script>
+</body>
+
+</html>
