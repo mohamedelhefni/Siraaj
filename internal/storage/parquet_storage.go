@@ -435,7 +435,10 @@ func (ps *ParquetStorage) checkAndMergeFiles() error {
 
 	// Atomic rename
 	if err := os.Rename(tempMergedFile, mergedFile); err != nil {
-		os.Remove(tempMergedFile)
+		removeErr := os.Remove(tempMergedFile)
+		if removeErr != nil {
+			log.Printf("Warning: failed to remove temp merged file after rename failure: %v", removeErr)
+		}
 		return fmt.Errorf("failed to rename merged file: %w", err)
 	}
 
