@@ -2,7 +2,11 @@
 
 Get Siraaj Analytics up and running in 3 minutes.
 
-## Option 1: Docker (Fastest)
+::: info Installation
+Currently, Docker is the recommended installation method. Pre-built binaries are coming soon!
+:::
+
+## Docker Installation
 
 **Prerequisites:** Docker installed
 
@@ -25,27 +29,7 @@ http://localhost:8080/dashboard/
 
 ---
 
-## Option 2: Pre-built Binary
-
-**Prerequisites:** None (standalone binary)
-
-```bash
-# Linux (amd64)
-curl -L https://github.com/mohamedelhefni/siraaj/releases/latest/download/siraaj-linux-amd64 -o siraaj
-chmod +x siraaj
-./siraaj
-
-# macOS (arm64 / M1/M2/M3)
-curl -L https://github.com/mohamedelhefni/siraaj/releases/latest/download/siraaj-darwin-arm64 -o siraaj
-chmod +x siraaj
-./siraaj
-```
-
-Server starts on `http://localhost:8080`
-
----
-
-## Option 3: Build from Source
+## Alternative: Build from Source
 
 **Prerequisites:** Go 1.24+
 

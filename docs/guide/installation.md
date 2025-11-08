@@ -1,8 +1,12 @@
 # Installation
 
-Complete installation guide for Siraaj Analytics with multiple deployment options.
+Complete installation guide for Siraaj Analytics.
 
-## Method 1: Docker (Recommended)
+::: info Installation Methods
+Currently, Docker is the recommended and officially supported installation method. Pre-built binaries for all platforms are coming soon!
+:::
+
+## Docker Installation (Recommended)
 
 Docker provides the easiest and most reliable deployment method.
 
@@ -91,49 +95,22 @@ docker run -d \
 
 ---
 
-## Method 2: Pre-built Binary
+## Pre-built Binaries (Coming Soon)
 
-Download and run standalone binaries (no dependencies required).
+::: warning Coming Soon
+Pre-built binaries for Linux, macOS, and Windows are currently in development and will be available soon! 
 
-### Linux (amd64)
+This will include:
+- Linux (amd64 & arm64)
+- macOS (Intel & Apple Silicon)
+- Windows (amd64)
 
-```bash
-curl -L https://github.com/mohamedelhefni/siraaj/releases/latest/download/siraaj-linux-amd64 -o siraaj
-chmod +x siraaj
-./siraaj
-```
-
-### Linux (arm64)
-
-```bash
-curl -L https://github.com/mohamedelhefni/siraaj/releases/latest/download/siraaj-linux-arm64 -o siraaj
-chmod +x siraaj
-./siraaj
-```
-
-### macOS (Intel)
-
-```bash
-curl -L https://github.com/mohamedelhefni/siraaj/releases/latest/download/siraaj-darwin-amd64 -o siraaj
-chmod +x siraaj
-./siraaj
-```
-
-### macOS (Apple Silicon M1/M2/M3)
-
-```bash
-curl -L https://github.com/mohamedelhefni/siraaj/releases/latest/download/siraaj-darwin-arm64 -o siraaj
-chmod +x siraaj
-./siraaj
-```
-
-### Windows
-
-Download from [GitHub Releases](https://github.com/mohamedelhefni/siraaj/releases/latest) and run `siraaj.exe`.
+Stay tuned for the release! ⭐ [Star us on GitHub](https://github.com/mohamedelhefni/siraaj) to get notified.
+:::
 
 ---
 
-## Method 3: Build from Source
+## Build from Source (Advanced)
 
 Build Siraaj yourself for development or customization.
 
@@ -184,19 +161,6 @@ pnpm dev
 
 Frontend dev server runs on `http://localhost:5173`  
 Backend API runs on `http://localhost:8080`
-
----
-
-## Method 4: Go Install
-
-Install directly using Go:
-
-```bash
-go install github.com/mohamedelhefni/siraaj@latest
-
-# Run (make sure $GOPATH/bin is in your PATH)
-siraaj
-```
 
 ---
 

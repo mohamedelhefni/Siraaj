@@ -61,7 +61,7 @@ Siraaj is a **lightweight, privacy-focused analytics platform** built with Go an
 
 ## 🏃 Quick Start
 
-### Option 1: Docker (Recommended)
+### Docker (Recommended)
 
 ```bash
 docker run -d \
@@ -71,16 +71,9 @@ docker run -d \
   mohamedelhefni/siraaj:latest
 ```
 
-### Option 2: Binary
+**Pre-built binaries for Linux, macOS, and Windows are coming soon!** ⭐
 
-```bash
-# Download and run
-curl -L https://github.com/mohamedelhefni/siraaj/releases/latest/download/siraaj-linux-amd64 -o siraaj
-chmod +x siraaj
-./siraaj
-```
-
-### Option 3: From Source
+### Build from Source
 
 ```bash
 git clone https://github.com/mohamedelhefni/siraaj.git
