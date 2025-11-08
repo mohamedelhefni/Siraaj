@@ -23,7 +23,10 @@ import (
 )
 
 //go:embed all:ui/dashboard
-var uiFiles embed.FS
+var dashboardFiles embed.FS
+
+//go:embed ui/landing/index.html
+var landingPage string
 
 // initDatabase initializes the database connection and runs migrations
 func initDatabase(dbPath string) (*sql.DB, error) {
@@ -251,7 +254,7 @@ func main() {
 	})
 
 	// Serve dashboard (SvelteKit app) with optional BasicAuth
-	dashboardFS, err := fs.Sub(uiFiles, "ui/dashboard")
+	dashboardFS, err := fs.Sub(dashboardFiles, "ui/dashboard")
 	if err != nil {
 		log.Printf("Warning: Could not load dashboard: %v", err)
 	} else {
@@ -260,8 +263,17 @@ func main() {
 		mux.Handle("/dashboard/", middleware.BasicAuth(dashboardHandler))
 	}
 
-	// Serve UI (must be last as it's a catch-all)
-	mux.Handle("/", http.FileServer(http.FS(uiFiles)))
+	// Serve landing page at root
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if _, err := w.Write([]byte(landingPage)); err != nil {
+			log.Printf("Error serving landing page: %v", err)
+		}
+	})
 
 	port := os.Getenv("PORT")
 	if port == "" {
